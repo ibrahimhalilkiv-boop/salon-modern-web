@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v2';
+const CACHE_NAME = 'salon-modern-shell-pwa-v3';
 const APP_SHELL = [
   './salon-modern.html',
   './salon_brand_logo.jpg',
@@ -15,11 +15,13 @@ const APP_SHELL = [
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js',
   './salon-web-push.js',
-  './pwa-stability-2.3.20.js'
+  './pwa-stability-2.3.20.js',
+  './pwa-recovery-2.3.21.js'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
+  self.skipWaiting();
 });
 
 self.addEventListener('message', event => {
@@ -54,6 +56,8 @@ self.addEventListener('activate', event => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+      .then(clients => Promise.all(clients.map(client => client.postMessage({ type: 'SALON_SHELL_UPDATED', cache: CACHE_NAME }))))
   );
 });
 

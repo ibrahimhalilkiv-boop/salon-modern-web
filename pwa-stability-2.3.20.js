@@ -41,7 +41,7 @@
 
   function showConnectionProblem(error) {
     setState(AUTH.TEMPORARY_NETWORK_ERROR);
-    if (window.currentUser) {
+    if (typeof currentUser !== 'undefined' && currentUser) {
       document.getElementById('auth')?.classList.add('hidden');
       document.getElementById('app')?.classList.remove('hidden');
       window.showAppToast?.('Bağlantı bekleniyor', 'Oturumunuz korunuyor. İnternet gelince yeniden denenecek.');
@@ -71,7 +71,7 @@
 
   async function localSignOut() {
     try { await window.salonDb.auth.signOut({ scope: 'local' }); } catch (_) {}
-    window.currentUser = null;
+    currentUser = null;
   }
 
   async function loadProfile(user, requestId) {
@@ -87,7 +87,7 @@
       window.remoteError?.('Bu kullanıcı hesabı aktif değil.');
       return false;
     }
-    window.currentUser = window.profileToUser(result.data);
+    currentUser = window.profileToUser(result.data);
     return true;
   }
 
