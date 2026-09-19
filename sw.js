@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v1';
+const CACHE_NAME = 'salon-modern-shell-pwa-v2';
 const APP_SHELL = [
   './salon-modern.html',
   './salon_brand_logo.jpg',
@@ -14,12 +14,16 @@ const APP_SHELL = [
   './salon-performance-2.3.14.js',
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js',
-  './salon-web-push.js'
+  './salon-web-push.js',
+  './pwa-stability-2.3.20.js'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
+});
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('push', event => {
@@ -71,13 +75,23 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+  const isCodeOrManifest = /\.(?:html?|js|css|webmanifest)$/i.test(requestUrl.pathname);
+  if (isCodeOrManifest) {
+    event.respondWith(fetch(event.request).then(response => {
       if (response.ok && requestUrl.origin === self.location.origin) {
         const copy = response.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
       }
       return response;
-    }))
-  );
+    }).catch(() => caches.match(event.request)));
+    return;
+  }
+
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+    if (response.ok && requestUrl.origin === self.location.origin) {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+    }
+    return response;
+  })));
 });
