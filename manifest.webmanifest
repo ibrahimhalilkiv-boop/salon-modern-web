@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "Salon Modern",
+  "short_name": "Salon Modern",
+  "description": "Salon Modern randevu ve salon yönetimi",
+  "lang": "tr-TR",
+  "start_url": "./salon-modern.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8f6f1",
+  "theme_color": "#0d2925",
+  "icons": [
+    {
+      "src": "salon_brand_logo.jpg",
+      "sizes": "500x500",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
