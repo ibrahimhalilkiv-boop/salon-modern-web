@@ -54,6 +54,7 @@ document.querySelectorAll('.auth small').forEach(function(node){if(/^v\d+\.\d+\.
     staff=remoteProfiles.filter(function(profile){return profile.active}).map(function(profile){return [profile.full_name,profile.role==='manager'?'Yönetici':'Çalışan',Number(profile.commission_pct),avatarFor(profile.full_name)]});
     appts=(results[2].data||[]).map(remoteAppointment);
     calendarDebug('day-query-complete',{requestId:requestId,returnedRows:appts.length,calendarEvents:appts.length,rangeStart:start,rangeEnd:end});
+    if(typeof renderHomeSummary==='function')renderHomeSummary();
     if(typeof renderCalendar==='function')renderCalendar();
     if(typeof render==='function')render();
   }
