@@ -34,6 +34,36 @@
     return status === 401 || /invalid.*(jwt|token|refresh)|refresh.*token.*not found|jwt.*expired/.test(message);
   }
 
+  function isIrrecoverableRefresh(error) {
+    var status = Number(error && (error.status || error.statusCode));
+    var message = String(error && error.message || '').toLowerCase();
+    return status === 400 || status === 401 ||
+      /refresh.*token.*(not found|invalid|expired|revoked)|invalid.*refresh.*token/.test(message);
+  }
+
+  async function getVerifiedUser() {
+    var userResult = await window.salonDb.auth.getUser();
+    if (!userResult.error && userResult.data && userResult.data.user) return userResult.data.user;
+    if (!userResult.error || !isInvalidSession(userResult.error)) throw userResult.error || new Error('Oturum kullanıcısı bulunamadı.');
+
+    // A short-lived access token may expire while the remembered device session is still valid.
+    // Refresh once before deciding that the user must sign in again.
+    var refreshResult = await window.salonDb.auth.refreshSession();
+    if (refreshResult.error || !refreshResult.data || !refreshResult.data.session) {
+      var refreshError = refreshResult.error || new Error('Yenileme oturumu bulunamadı.');
+      refreshError.salonIrrecoverableSession = isIrrecoverableRefresh(refreshError);
+      throw refreshError;
+    }
+
+    userResult = await window.salonDb.auth.getUser();
+    if (userResult.error || !userResult.data || !userResult.data.user) {
+      var verificationError = userResult.error || new Error('Yenilenen oturum doğrulanamadı.');
+      verificationError.salonIrrecoverableSession = isInvalidSession(verificationError);
+      throw verificationError;
+    }
+    return userResult.data.user;
+  }
+
   function showInitializing() {
     document.getElementById('auth')?.classList.add('hidden');
     document.getElementById('app')?.classList.add('hidden');
@@ -94,15 +124,9 @@
   window.loadRemoteSession = async function () {
     var requestId = ++authRequest;
     try {
-      var userResult = await window.salonDb.auth.getUser();
+      var verifiedUser = await getVerifiedUser();
       if (requestId !== authRequest) return;
-      if (userResult.error) throw userResult.error;
-      if (!userResult.data || !userResult.data.user) {
-        setState(AUTH.UNAUTHENTICATED);
-        window.setRemoteAuth(false);
-        return;
-      }
-      if (!(await loadProfile(userResult.data.user, requestId))) return;
+      if (!(await loadProfile(verifiedUser, requestId))) return;
       await window.reloadRemoteData();
       if (requestId !== authRequest) return;
       window.subscribeSalon();
@@ -114,7 +138,7 @@
     } catch (error) {
       if (requestId !== authRequest) return;
       if (isTemporary(error)) return showConnectionProblem(error);
-      if (isInvalidSession(error)) await localSignOut();
+      if (error && error.salonIrrecoverableSession) await localSignOut();
       setState(AUTH.UNAUTHENTICATED);
       window.setRemoteAuth(false);
       window.remoteError?.('Oturum doğrulanamadı. Lütfen yeniden giriş yapın.');
@@ -141,7 +165,7 @@
     } catch (error) {
       if (requestId !== authRequest) return;
       if (isTemporary(error)) return showConnectionProblem(error);
-      if (isInvalidSession(error)) await localSignOut();
+      if (error && error.salonIrrecoverableSession) await localSignOut();
       setState(AUTH.UNAUTHENTICATED);
       window.setRemoteAuth(false);
       window.remoteError?.('Oturum açılamadı. Lütfen yeniden giriş yapın.');
