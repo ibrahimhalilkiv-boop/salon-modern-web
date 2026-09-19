@@ -11,9 +11,56 @@
   var authRequest = 0;
   var retryTimer = null;
   var updateRequested = false;
+  var startupPromise = null;
+  var sessionLoadPromise = null;
+  var startupCount = 0;
+  var loadCount = 0;
+  var LAST_PAGE_KEY = 'salonModernLastPageV1';
+  var TRACE_KEY = 'salonModernAuthTraceV1';
 
   window.SalonAuthState = AUTH;
   window.getSalonAuthState = function () { return authState; };
+
+  function trace(stage, details) {
+    var entry = Object.assign({ time: new Date().toISOString(), stage: stage }, details || {});
+    console.info('[Salon auth]', entry);
+    try {
+      var history = JSON.parse(sessionStorage.getItem(TRACE_KEY) || '[]');
+      history.push(entry);
+      sessionStorage.setItem(TRACE_KEY, JSON.stringify(history.slice(-100)));
+    } catch (_) {}
+  }
+
+  function storedAuthSnapshot() {
+    var snapshot = { keyCount: 0, hasStoredSession: false, hasAccessToken: false, hasRefreshToken: false };
+    try {
+      Object.keys(localStorage).filter(function (key) {
+        return /^sb-.*-auth-token$/i.test(key);
+      }).forEach(function (key) {
+        snapshot.keyCount++;
+        try {
+          var parsed = JSON.parse(localStorage.getItem(key) || 'null');
+          var session = parsed && (parsed.currentSession || parsed.session || parsed);
+          snapshot.hasAccessToken = snapshot.hasAccessToken || Boolean(session && session.access_token);
+          snapshot.hasRefreshToken = snapshot.hasRefreshToken || Boolean(session && session.refresh_token);
+        } catch (_) {}
+      });
+    } catch (_) {}
+    snapshot.hasStoredSession = snapshot.hasAccessToken && snapshot.hasRefreshToken;
+    return snapshot;
+  }
+
+  function readStoredSession() {
+    try {
+      var keys = Object.keys(localStorage).filter(function (key) { return /^sb-.*-auth-token$/i.test(key); });
+      for (var index = 0; index < keys.length; index++) {
+        var parsed = JSON.parse(localStorage.getItem(keys[index]) || 'null');
+        var session = parsed && (parsed.currentSession || parsed.session || parsed);
+        if (session && session.access_token && session.refresh_token) return session;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   function setState(next) {
     authState = next;
@@ -35,10 +82,23 @@
   }
 
   function isIrrecoverableRefresh(error) {
-    var status = Number(error && (error.status || error.statusCode));
     var message = String(error && error.message || '').toLowerCase();
-    return status === 400 || status === 401 ||
-      /refresh.*token.*(not found|invalid|expired|revoked)|invalid.*refresh.*token/.test(message);
+    var code = String(error && error.code || '').toLowerCase();
+    return /refresh.*token.*(not found|invalid|expired|revoked)|invalid.*refresh.*token|session.*not.*found/.test(message) ||
+      /refresh_token_(not_found|invalid|expired|revoked)|session_not_found/.test(code);
+  }
+
+  async function recoverStoredSession() {
+    var stored = readStoredSession();
+    if (!stored) return null;
+    trace('stored-session-recovery-start', storedAuthSnapshot());
+    var result = await window.salonDb.auth.setSession({
+      access_token: stored.access_token,
+      refresh_token: stored.refresh_token
+    });
+    if (result.error) throw result.error;
+    trace('stored-session-recovery-complete', { hasSession: Boolean(result.data && result.data.session) });
+    return result.data && result.data.session;
   }
 
   async function getVerifiedUser() {
@@ -100,6 +160,7 @@
   }
 
   async function localSignOut() {
+    trace('confirmed-invalid-session-local-signout');
     try { await window.salonDb.auth.signOut({ scope: 'local' }); } catch (_) {}
     currentUser = null;
   }
@@ -110,7 +171,12 @@
       .eq('id', user.id).maybeSingle();
     if (requestId !== authRequest) return false;
     if (result.error) throw result.error;
-    if (!result.data || !result.data.active) {
+    if (!result.data) {
+      var missingProfile = new Error('Kullanıcı profili geçici olarak alınamadı.');
+      missingProfile.salonDataLoadError = true;
+      throw missingProfile;
+    }
+    if (result.data.active === false) {
       await localSignOut();
       setState(AUTH.UNAUTHENTICATED);
       window.setRemoteAuth(false);
@@ -121,40 +187,63 @@
     return true;
   }
 
-  window.loadRemoteSession = async function () {
+  async function runLoadRemoteSession() {
     var requestId = ++authRequest;
+    var verifiedSession = false;
+    loadCount++;
+    trace('loadRemoteSession-start', Object.assign({ count: loadCount, requestId: requestId }, storedAuthSnapshot()));
     try {
       var verifiedUser = await getVerifiedUser();
+      verifiedSession = true;
+      trace('getUser-complete', { requestId: requestId, hasUser: Boolean(verifiedUser), userId: verifiedUser && verifiedUser.id });
       if (requestId !== authRequest) return;
       if (!(await loadProfile(verifiedUser, requestId))) return;
+      trace('profile-complete', { requestId: requestId, role: currentUser && currentUser.role });
       await window.reloadRemoteData();
+      trace('reloadRemoteData-complete', { requestId: requestId });
       if (requestId !== authRequest) return;
       window.subscribeSalon();
+      trace('realtime-subscribe-requested', { requestId: requestId });
       window.enterApp();
-      window.showPage('home');
+      var savedPage = sessionStorage.getItem(LAST_PAGE_KEY) || 'home';
+      window.showPage(document.getElementById(savedPage) ? savedPage : 'home');
       hideConnectionProblem();
       setState(AUTH.AUTHENTICATED);
+      trace('authenticated', { requestId: requestId, page: savedPage });
       window.showAppToast?.('Canlı bağlantı açık', 'Randevu ve bildirimler anlık eşitlenir.');
     } catch (error) {
       if (requestId !== authRequest) return;
-      if (isTemporary(error)) return showConnectionProblem(error);
+      trace('loadRemoteSession-error', { requestId: requestId, message: String(error && error.message || ''), temporary: isTemporary(error), verifiedSession: verifiedSession });
+      if (isTemporary(error) || verifiedSession || error && error.salonDataLoadError) return showConnectionProblem(error);
       if (error && error.salonIrrecoverableSession) await localSignOut();
+      if (storedAuthSnapshot().hasStoredSession && !(error && error.salonIrrecoverableSession)) return showConnectionProblem(error);
       setState(AUTH.UNAUTHENTICATED);
       window.setRemoteAuth(false);
       window.remoteError?.('Oturum doğrulanamadı. Lütfen yeniden giriş yapın.');
     }
+  }
+
+  window.loadRemoteSession = function () {
+    if (sessionLoadPromise) return sessionLoadPromise;
+    sessionLoadPromise = runLoadRemoteSession().finally(function () { sessionLoadPromise = null; });
+    return sessionLoadPromise;
   };
 
-  window.startRemoteApp = async function () {
+  async function runStartRemoteApp() {
     var requestId = ++authRequest;
+    startupCount++;
     clearTimeout(retryTimer);
     setState(AUTH.INITIALIZING);
     showInitializing();
+    trace('startRemoteApp-start', Object.assign({ count: startupCount, requestId: requestId }, storedAuthSnapshot()));
     try {
       var sessionResult = await window.salonDb.auth.getSession();
+      trace('getSession-complete', Object.assign({ requestId: requestId, hasSession: Boolean(sessionResult.data && sessionResult.data.session), hasError: Boolean(sessionResult.error) }, storedAuthSnapshot()));
       if (requestId !== authRequest) return;
       if (sessionResult.error) throw sessionResult.error;
-      if (sessionResult.data && sessionResult.data.session) {
+      var session = sessionResult.data && sessionResult.data.session;
+      if (!session && storedAuthSnapshot().hasStoredSession) session = await recoverStoredSession();
+      if (session) {
         authRequest--;
         await window.loadRemoteSession();
         return;
@@ -164,13 +253,27 @@
       window.setRemoteAuth(false);
     } catch (error) {
       if (requestId !== authRequest) return;
+      trace('startRemoteApp-error', { requestId: requestId, message: String(error && error.message || ''), temporary: isTemporary(error) });
       if (isTemporary(error)) return showConnectionProblem(error);
       if (error && error.salonIrrecoverableSession) await localSignOut();
+      if (storedAuthSnapshot().hasStoredSession && !(error && error.salonIrrecoverableSession)) return showConnectionProblem(error);
       setState(AUTH.UNAUTHENTICATED);
       window.setRemoteAuth(false);
       window.remoteError?.('Oturum açılamadı. Lütfen yeniden giriş yapın.');
     }
+  }
+
+  window.startRemoteApp = function () {
+    if (startupPromise) return startupPromise;
+    startupPromise = runStartRemoteApp().finally(function () { startupPromise = null; });
+    return startupPromise;
   };
+
+  window.addEventListener('beforeunload', function () {
+    var active = document.querySelector('.page.active');
+    if (active && active.id) sessionStorage.setItem(LAST_PAGE_KEY, active.id);
+    trace('beforeunload', Object.assign({ page: active && active.id || '' }, storedAuthSnapshot()));
+  });
 
   window.addEventListener('online', function () {
     if (authState !== AUTH.TEMPORARY_NETWORK_ERROR) return;
