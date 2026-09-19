@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-v2.3.19';
+const CACHE_NAME = 'salon-modern-shell-pwa-v1';
 const APP_SHELL = [
   './salon-modern.html',
   './salon_brand_logo.jpg',
@@ -13,12 +13,36 @@ const APP_SHELL = [
   './salon-ui-2.3.12.js',
   './salon-performance-2.3.14.js',
   './salon-debt-visibility-2.3.15.js',
-  './salon-ui-fixes-2.3.16.js'
+  './salon-ui-fixes-2.3.16.js',
+  './salon-web-push.js'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
   self.skipWaiting();
+});
+
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) { data = { body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'Salon Modern', {
+    body: data.body || 'Yeni bir bildiriminiz var.', icon: './salon-icon-192.png', badge: './salon-icon-192.png',
+    tag: data.tag || ('salon-' + (data.notificationId || Date.now())), renotify: false, data
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || './salon-modern.html', self.registration.scope).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+    for (const client of clients) {
+      if (new URL(client.url).origin === new URL(target).origin) {
+        client.postMessage({ type: 'SALON_NOTIFICATION_OPEN', data: event.notification.data || {} });
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow(target);
+  }));
 });
 
 self.addEventListener('activate', event => {
