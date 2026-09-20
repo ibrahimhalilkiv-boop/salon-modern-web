@@ -32,6 +32,16 @@
     if(typeof currentUser!=='undefined'&&currentUser&&currentUser.id)return currentUser.id;
     return window.currentUser&&window.currentUser.id?window.currentUser.id:null;
   }
+  function cancellationWhatsAppUrl(item){
+    if(!item||typeof window.renderSavedTemplate!=='function'||typeof window.appointmentTemplateValues!=='function'||typeof window.whatsappPhone!=='function')return '';
+    var clients=typeof remoteClients!=='undefined'&&Array.isArray(remoteClients)?remoteClients:(window.remoteClients||[]);
+    var client=clients.find(function(row){return String(row.id)===String(item.clientId||item.client_id)||String(row.full_name||'').toLocaleLowerCase('tr-TR')===String(item.customer||item.client_name||'').toLocaleLowerCase('tr-TR')});
+    var phone=item.clientPhone||item.client_phone||item.phone||(client&&client.phone)||'',normalized=window.whatsappPhone(phone);
+    if(!normalized)return '';
+    var customer=item.customer||item.client_name||'',date=item.scheduled_at?String(item.scheduled_at).slice(0,10):(typeof window.appointmentDate==='function'?window.appointmentDate(item):item.date),time=item.time||(item.scheduled_at?timeText(item.scheduled_at):''),staff=item.staff||employeeName(item);
+    var message=window.renderSavedTemplate('appointment_cancelled',window.appointmentTemplateValues(customer,date,time,staff,item.amount||0,item.service_name||item.operation||''));
+    return message?'https://wa.me/'+normalized+'?text='+encodeURIComponent(message):'';
+  }
 
   function ensureUi(){
     if(document.getElementById('appointmentManagement'))return;
@@ -72,12 +82,12 @@
   }
   function showConfirmation(id,nextStatus){
     var item=rows.find(function(row){return String(row.id)===String(id)})||currentAppointments().find(function(row){return String(row.id)===String(id)});if(!item){if(typeof window.showAppToast==='function')window.showAppToast('Randevu bulunamadı','Takvimi yenileyip tekrar deneyin.');return}
-    var cancelling=nextStatus==='cancelled',modal=document.getElementById('appointmentStatusModal');document.getElementById('appointmentStatusTitle').textContent=cancelling?'Randevu iptal edilsin mi?':'İptal geri alınsın mı?';document.getElementById('appointmentStatusBody').innerHTML='<strong>'+esc(item.client_name||item.customer||'Müşteri')+'</strong><br>'+esc(item.scheduled_at?dateText(item.scheduled_at):(typeof window.friendlyDate==='function'?window.friendlyDate(window.appointmentDate(item)):window.appointmentDate(item)))+' · '+esc(item.scheduled_at?timeText(item.scheduled_at):item.time)+'<br><br>'+(cancelling?'Kayıt silinmeyecek. Takvim ve cirodan çıkarılacak; Meta iptal mesajı kuyruğa alınacak.':'Randevu yeniden aktif olacak. Saat doluysa işlem engellenecek.');var confirm=document.getElementById('appointmentStatusConfirm');confirm.textContent=cancelling?'İptali onayla':'Yeniden etkinleştir';confirm.onclick=function(){applyStatus(id,nextStatus)};modal.classList.add('show');
+    var cancelling=nextStatus==='cancelled',modal=document.getElementById('appointmentStatusModal');document.getElementById('appointmentStatusTitle').textContent=cancelling?'Randevu iptal edilsin mi?':'İptal geri alınsın mı?';document.getElementById('appointmentStatusBody').innerHTML='<strong>'+esc(item.client_name||item.customer||'Müşteri')+'</strong><br>'+esc(item.scheduled_at?dateText(item.scheduled_at):(typeof window.friendlyDate==='function'?window.friendlyDate(window.appointmentDate(item)):window.appointmentDate(item)))+' · '+esc(item.scheduled_at?timeText(item.scheduled_at):item.time)+'<br><br>'+(cancelling?'Kayıt silinmeyecek. Takvim ve cirodan çıkarılacak; iptal mesajı için WhatsApp açılacak.':'Randevu yeniden aktif olacak. Saat doluysa işlem engellenecek.');var confirm=document.getElementById('appointmentStatusConfirm');confirm.textContent=cancelling?'İptali onayla':'Yeniden etkinleştir';confirm.onclick=function(){var whatsappUrl=cancelling?cancellationWhatsAppUrl(item):'',whatsappWindow=whatsappUrl?window.open('about:blank','_blank'):null;if(whatsappWindow)whatsappWindow.opener=null;applyStatus(id,nextStatus,whatsappUrl,whatsappWindow)};modal.classList.add('show');
   }
-  async function applyStatus(id,nextStatus){
+  async function applyStatus(id,nextStatus,whatsappUrl,whatsappWindow){
     var button=document.getElementById('appointmentStatusConfirm');button.disabled=true;button.textContent='Kaydediliyor…';
-    try{var values={status:nextStatus},actorId=currentUserId();if(actorId)values.updated_by=actorId;var result=await window.salonDb.from('appointments').update(values).eq('id',id).select('id,status,updated_by').single();if(result.error)throw result.error;document.getElementById('appointmentStatusModal').classList.remove('show');await window.reloadRemoteData();await load();if(typeof window.showAppToast==='function')window.showAppToast(nextStatus==='cancelled'?'Randevu iptal edildi':'Randevu yeniden aktif',nextStatus==='cancelled'?'Kayıt korundu ve iptal mesajı kuyruğa alındı.':'Randevu takvime geri alındı.');}
-    catch(error){if(typeof window.showAppToast==='function')window.showAppToast('İşlem tamamlanamadı',error.message||'Tekrar deneyin.');}
+    try{var values={status:nextStatus},actorId=currentUserId();if(actorId)values.updated_by=actorId;var result=await window.salonDb.from('appointments').update(values).eq('id',id).select('id,status,updated_by').single();if(result.error)throw result.error;document.getElementById('appointmentStatusModal').classList.remove('show');if(whatsappWindow&&whatsappUrl)whatsappWindow.location.href=whatsappUrl;else if(nextStatus==='cancelled'&&!whatsappUrl&&typeof window.showAppToast==='function')window.showAppToast('Telefon numarası yok','Randevu iptal edildi; WhatsApp açılamadı.');await window.reloadRemoteData();await load();if(typeof window.showAppToast==='function')window.showAppToast(nextStatus==='cancelled'?'Randevu iptal edildi':'Randevu yeniden aktif',nextStatus==='cancelled'?'Kayıt korundu; iptal mesajı WhatsApp’ta hazırlandı.':'Randevu takvime geri alındı.');}
+    catch(error){if(whatsappWindow)whatsappWindow.close();if(typeof window.showAppToast==='function')window.showAppToast('İşlem tamamlanamadı',error.message||'Tekrar deneyin.');}
     finally{button.disabled=false}
   }
   function edit(id){var item=currentAppointments().find(function(row){return String(row.id)===String(id)});if(!item){if(typeof window.showAppToast==='function')window.showAppToast('Randevu açılamadı','İptal edilen randevuyu önce yeniden etkinleştirin.');return}window.openAppointmentModal('',id)}
