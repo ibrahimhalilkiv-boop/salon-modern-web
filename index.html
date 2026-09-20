@@ -1039,10 +1039,10 @@ saveAppointment=async function(event){
     var clientId=await ensureRemoteClient(customer,phone),recurrenceGroup=interval?salonUuidV4():null,rows=dates.map(function(day){var row={client_id:clientId,client_name:customer,client_phone:phone||null,service_id:service.id,service_name:service.name,amount:amount,employee_id:employee.id,scheduled_at:remoteSchedule(day,time),duration_minutes:30,note:''};if(!originalId){row.created_by=currentUser.id;row.tariff_price_snapshot=Number(service.price);if(recurrenceGroup){row.recurrence_group_id=recurrenceGroup;row.recurrence_interval_weeks=interval}}return row}),result=originalId?await salonDb.from('appointments').update(rows[0]).eq('id',originalId).select('id,scheduled_at,created_by'):await salonDb.from('appointments').insert(rows).select('id,scheduled_at,created_by');
     if(result.error)throw result.error;
     if(onDebt){var debtRows=(result.data||[]).map(function(saved,index){return {appointment_id:saved.id,client_id:clientId,client_name:customer,amount:amount,debt_date:dates[index],status:'open'}}),debtResult=existingDebt?await salonDb.from('customer_debts').update({client_id:clientId,client_name:customer,amount:amount,debt_date:date}).eq('id',existingDebt.id):await salonDb.from('customer_debts').insert(debtRows);if(debtResult.error){if(!originalId)await salonDb.from('appointments').delete().in('id',(result.data||[]).map(function(saved){return saved.id}));throw debtResult.error}}
-    /* Yeni randevu başarıyla kaydedildikten (ve varsa borç işlemi bittikten)
-       sonra mevcut yönetilebilir şablonla WhatsApp'ı aç. Güncellemeler mevcut
-       ayrı kurallarını korur. */
-    if(!originalId&&phone){
+    /* Yalnız peşin/normal yeni randevu başarıyla kaydedildikten sonra mevcut
+       yönetilebilir şablonla WhatsApp'ı aç. Borçlu kayıtlar ve güncellemeler
+       mevcut ayrı kurallarını korur. */
+    if(!originalId&&!onDebt&&phone){
       var savedWhatsAppUrl=whatsappAppointmentUrl(customer,phone,date,time,employee.full_name||employee.name||staffName,amount);
       setTimeout(function(){window.open(savedWhatsAppUrl,'_blank','noopener')},20);
     }
