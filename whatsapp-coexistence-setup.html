@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Salon Modern · WhatsApp Coexistence Kurulumu</title>
+  <style>
+    :root{color-scheme:light;--ink:#172022;--cream:#f7f5ef;--paper:#fffdf9;--gold:#b88746;--muted:#6e7778;--red:#a9514d;--green:#2f765e}
+    *{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{width:min(620px,100%);margin:auto;padding:24px}.card{background:var(--paper);border-radius:22px;padding:22px;box-shadow:0 8px 28px #17202212}
+    h1{margin:0 0 8px;font-size:25px}.muted{color:var(--muted)}button{width:100%;border:0;border-radius:13px;padding:15px;background:var(--ink);color:#fff;font:700 16px inherit;margin-top:18px}
+    button:disabled{opacity:.55}.status{margin-top:18px;padding:14px;border-radius:13px;background:#f0ece3}.ok{background:#e8f3ed;color:var(--green)}.error{background:#f9e9e7;color:var(--red)}code{word-break:break-word}
+  </style>
+  <script src="supabase-2.49.1.js"></script>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h1>WhatsApp Business + Cloud API</h1>
+      <p class="muted">Bu sayfa mevcut WhatsApp Business numaranızı silmeden resmi Meta Coexistence akışını başlatır.</p>
+      <div id="status" class="status">Yönetici oturumu kontrol ediliyor…</div>
+      <button id="start" type="button" disabled>Coexistence kurulumunu başlat</button>
+    </div>
+  </main>
+  <script>
+    const APP_ID='2889204104766417';
+    const CONFIG_ID='2514808572339515';
+    const GRAPH_VERSION='v23.0';
+    const db=window.supabase.createClient('https://oxuwwjsakhcqimjsfris.supabase.co','sb_publishable_8prafGqYcxU0YQp6iqWGXA_rT20Q4AH',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+    const statusEl=document.getElementById('status');
+    const startButton=document.getElementById('start');
+    let managerReady=false;
+
+    function setStatus(text,kind=''){
+      statusEl.textContent=text;
+      statusEl.className='status'+(kind?' '+kind:'');
+    }
+
+    window.addEventListener('message',(event)=>{
+      if(event.origin!=='https://www.facebook.com'&&event.origin!=='https://web.facebook.com')return;
+      let data=event.data;
+      if(typeof data==='string'){try{data=JSON.parse(data)}catch{return}}
+      if(data?.type!=='WA_EMBEDDED_SIGNUP')return;
+      if(data.event==='FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'||data.event==='FINISH'){
+        setStatus('Meta Coexistence adımı tamamlandı. Bu pencereyi kapatmadan durum doğrulaması yapılabilir.','ok');
+        startButton.disabled=true;
+      }else if(data.event==='CANCEL'){
+        setStatus('Kurulum iptal edildi. Mevcut WhatsApp hesabınızda değişiklik yapılmadı.','error');
+        startButton.disabled=false;
+      }else if(data.event==='ERROR'){
+        setStatus('Meta kurulumu tamamlayamadı. Mevcut WhatsApp hesabınız korunuyor.','error');
+        startButton.disabled=false;
+      }
+    });
+
+    window.fbAsyncInit=function(){
+      FB.init({appId:APP_ID,cookie:true,xfbml:false,version:GRAPH_VERSION});
+      if(managerReady)startButton.disabled=false;
+    };
+    (function(d,s,id){
+      if(d.getElementById(id))return;
+      const js=d.createElement(s);js.id=id;js.src='https://connect.facebook.net/tr_TR/sdk.js';
+      d.head.appendChild(js);
+    })(document,'script','facebook-jssdk');
+
+    async function verifyManager(){
+      const {data:{session}}=await db.auth.getSession();
+      if(!session){setStatus('Önce Salon Modern uygulamasında yönetici hesabıyla giriş yapın.','error');return}
+      const {data:profile,error}=await db.from('profiles').select('role,active').eq('id',session.user.id).maybeSingle();
+      if(error||!profile||profile.role!=='manager'||profile.active!==true){setStatus('Bu işlem yalnızca aktif yönetici hesabıyla yapılabilir.','error');return}
+      managerReady=true;
+      setStatus('Hazır. Devam ettiğinizde Meta, telefondaki WhatsApp Business uygulamasında doğrulama isteyebilir.');
+      if(window.FB)startButton.disabled=false;
+    }
+
+    startButton.addEventListener('click',()=>{
+      if(!managerReady||!window.FB)return;
+      startButton.disabled=true;
+      setStatus('Meta Coexistence penceresi açılıyor…');
+      FB.login((response)=>{
+        if(response?.authResponse?.code){
+          setStatus('Meta yetkilendirmesi alındı. Coexistence durumunu doğrulayın; kod tarayıcıda saklanmadı.','ok');
+        }else{
+          setStatus('Yetkilendirme tamamlanmadı. Tekrar deneyebilirsiniz.','error');
+          startButton.disabled=false;
+        }
+      },{
+        config_id:CONFIG_ID,
+        response_type:'code',
+        override_default_response_type:true,
+        extras:{setup:{},featureType:'whatsapp_business_app_onboarding',sessionInfoVersion:'3'}
+      });
+    });
+
+    verifyManager().catch(()=>setStatus('Oturum kontrolü yapılamadı. Salon Modern uygulamasını açıp tekrar deneyin.','error'));
+  </script>
+</body>
+</html>
