@@ -10,6 +10,7 @@
     main{width:min(620px,100%);margin:auto;padding:24px}.card{background:var(--paper);border-radius:22px;padding:22px;box-shadow:0 8px 28px #17202212}
     h1{margin:0 0 8px;font-size:25px}.muted{color:var(--muted)}button{width:100%;border:0;border-radius:13px;padding:15px;background:var(--ink);color:#fff;font:700 16px inherit;margin-top:18px}
     button:disabled{opacity:.55}.status{margin-top:18px;padding:14px;border-radius:13px;background:#f0ece3}.ok{background:#e8f3ed;color:var(--green)}.error{background:#f9e9e7;color:var(--red)}code{word-break:break-word}
+    .login{display:none;margin-top:18px;padding-top:18px;border-top:1px solid #e7e2d8}.login.show{display:block}.field{display:block;margin-top:12px;font-weight:650}.field input{width:100%;margin-top:6px;padding:13px;border:1px solid #d8d3c9;border-radius:12px;background:#fff;font:inherit}.login button{margin-top:14px}.login-error{display:none;margin-top:10px;color:var(--red)}
   </style>
   <script src="supabase-2.49.1.js"></script>
 </head>
@@ -19,6 +20,13 @@
       <h1>WhatsApp Business + Cloud API</h1>
       <p class="muted">Bu sayfa mevcut WhatsApp Business numaranızı silmeden resmi Meta Coexistence akışını başlatır.</p>
       <div id="status" class="status">Yönetici oturumu kontrol ediliyor…</div>
+      <form id="login" class="login">
+        <strong>Yönetici girişi</strong>
+        <label class="field">Kullanıcı adı<input id="username" autocomplete="username" placeholder="halil.kiv" required></label>
+        <label class="field">Şifre<input id="password" type="password" autocomplete="current-password" required></label>
+        <div id="loginError" class="login-error">Kullanıcı adı veya şifre hatalı.</div>
+        <button id="loginButton" type="submit">Giriş yap</button>
+      </form>
       <button id="start" type="button" disabled>Coexistence kurulumunu başlat</button>
     </div>
   </main>
@@ -29,6 +37,9 @@
     const db=window.supabase.createClient('https://oxuwwjsakhcqimjsfris.supabase.co','sb_publishable_8prafGqYcxU0YQp6iqWGXA_rT20Q4AH',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
     const statusEl=document.getElementById('status');
     const startButton=document.getElementById('start');
+    const loginForm=document.getElementById('login');
+    const loginError=document.getElementById('loginError');
+    const loginButton=document.getElementById('loginButton');
     let managerReady=false;
 
     function setStatus(text,kind=''){
@@ -63,15 +74,49 @@
       d.head.appendChild(js);
     })(document,'script','facebook-jssdk');
 
+    function normalizeUsername(value){
+      return String(value||'').trim().toLocaleLowerCase('tr-TR')
+        .replace(/@salon-modern\.local$/,'').replace(/\s+/g,'')
+        .replace(/[çÇ]/g,'c').replace(/[ğĞ]/g,'g').replace(/[ıİ]/g,'i')
+        .replace(/[öÖ]/g,'o').replace(/[şŞ]/g,'s').replace(/[üÜ]/g,'u');
+    }
+
     async function verifyManager(){
       const {data:{session}}=await db.auth.getSession();
-      if(!session){setStatus('Önce Salon Modern uygulamasında yönetici hesabıyla giriş yapın.','error');return}
+      if(!session){managerReady=false;startButton.disabled=true;loginForm.classList.add('show');setStatus('Devam etmek için yönetici hesabınızla giriş yapın.','error');return false}
       const {data:profile,error}=await db.from('profiles').select('role,active').eq('id',session.user.id).maybeSingle();
-      if(error||!profile||profile.role!=='manager'||profile.active!==true){setStatus('Bu işlem yalnızca aktif yönetici hesabıyla yapılabilir.','error');return}
+      if(error||!profile||profile.role!=='manager'||profile.active!==true){managerReady=false;startButton.disabled=true;loginForm.classList.add('show');setStatus('Bu işlem yalnızca aktif yönetici hesabıyla yapılabilir.','error');return false}
       managerReady=true;
+      loginForm.classList.remove('show');
       setStatus('Hazır. Devam ettiğinizde Meta, telefondaki WhatsApp Business uygulamasında doğrulama isteyebilir.');
       if(window.FB)startButton.disabled=false;
+      return true;
     }
+
+    loginForm.addEventListener('submit',async(event)=>{
+      event.preventDefault();
+      loginError.style.display='none';
+      loginButton.disabled=true;
+      loginButton.textContent='Giriş yapılıyor…';
+      const username=normalizeUsername(document.getElementById('username').value);
+      const password=document.getElementById('password').value;
+      try{
+        const {error}=await db.auth.signInWithPassword({email:username+'@salon-modern.local',password});
+        if(error)throw error;
+        if(!(await verifyManager()))throw new Error('manager_required');
+        document.getElementById('password').value='';
+      }catch(error){
+        if(error?.message!=='manager_required'){
+          loginError.textContent='Kullanıcı adı veya şifre hatalı.';
+          loginError.style.display='block';
+        }
+      }finally{
+        loginButton.disabled=false;
+        loginButton.textContent='Giriş yap';
+      }
+    });
+
+    db.auth.onAuthStateChange(()=>{setTimeout(()=>verifyManager().catch(()=>{}),0)});
 
     startButton.addEventListener('click',()=>{
       if(!managerReady||!window.FB)return;
