@@ -33,6 +33,11 @@
 
 (function () {
   'use strict';
+  var previousSetRemoteAuth = window.setRemoteAuth;
+  window.setRemoteAuth = function () {
+    document.documentElement.dataset.authState = 'UNAUTHENTICATED';
+    return previousSetRemoteAuth.apply(this, arguments);
+  };
   function isActiveAppointment(item) { return item && String(item.status || 'confirmed').toLowerCase() !== 'cancelled'; }
   function activeAppointments() { return Array.isArray(window.appts) ? window.appts.filter(isActiveAppointment) : []; }
   window.visibleAppointments = function () {
