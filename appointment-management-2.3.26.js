@@ -24,6 +24,14 @@
   function serviceName(item){return item.service_name||'İşlem bilgisi yok'}
   function employeeName(item){var profile=(window.remoteProfiles||[]).find(function(person){return String(person.id)===String(item.employee_id)});return profile?profile.full_name:'Çalışan'}
   function amountText(value){return typeof window.formatTry==='function'?window.formatTry(Number(value||0)):(Number(value||0).toLocaleString('tr-TR')+' TL')}
+  function currentAppointments(){
+    if(typeof appts!=='undefined'&&Array.isArray(appts))return appts;
+    return Array.isArray(window.appts)?window.appts:[];
+  }
+  function currentUserId(){
+    if(typeof currentUser!=='undefined'&&currentUser&&currentUser.id)return currentUser.id;
+    return window.currentUser&&window.currentUser.id?window.currentUser.id:null;
+  }
 
   function ensureUi(){
     if(document.getElementById('appointmentManagement'))return;
@@ -63,23 +71,23 @@
     document.getElementById('appointmentManagementList').innerHTML=filtered.map(function(item){var cancelled=item.status==='cancelled';return '<article class="managed-appointment '+(cancelled?'cancelled':'')+'"><div class="managed-appointment-head"><div><strong>'+esc(item.client_name||'İsimsiz müşteri')+'</strong><div class="managed-appointment-meta">'+esc(dateText(item.scheduled_at))+' · '+esc(timeText(item.scheduled_at))+'<br>'+esc(employeeName(item))+' · '+esc(serviceName(item))+' · '+esc(amountText(item.amount))+'</div></div><span class="status-pill '+(cancelled?'cancelled':'')+'">'+statusLabel(item.status)+'</span></div><div class="managed-appointment-actions">'+(cancelled?'<button type="button" class="restore" onclick="SalonAppointmentManagement.askRestore(\''+esc(item.id)+'\')">İptali geri al</button>':'<button type="button" class="edit" onclick="SalonAppointmentManagement.edit(\''+esc(item.id)+'\')">Düzenle</button><button type="button" class="cancel" onclick="SalonAppointmentManagement.askCancel(\''+esc(item.id)+'\')">Randevuyu iptal et</button>')+'</div></article>'}).join('')||'<div class="empty">Bu aralıkta randevu bulunamadı.</div>';
   }
   function showConfirmation(id,nextStatus){
-    var item=rows.find(function(row){return String(row.id)===String(id)})||(window.appts||[]).find(function(row){return String(row.id)===String(id)});if(!item)return;
+    var item=rows.find(function(row){return String(row.id)===String(id)})||currentAppointments().find(function(row){return String(row.id)===String(id)});if(!item){if(typeof window.showAppToast==='function')window.showAppToast('Randevu bulunamadı','Takvimi yenileyip tekrar deneyin.');return}
     var cancelling=nextStatus==='cancelled',modal=document.getElementById('appointmentStatusModal');document.getElementById('appointmentStatusTitle').textContent=cancelling?'Randevu iptal edilsin mi?':'İptal geri alınsın mı?';document.getElementById('appointmentStatusBody').innerHTML='<strong>'+esc(item.client_name||item.customer||'Müşteri')+'</strong><br>'+esc(item.scheduled_at?dateText(item.scheduled_at):(typeof window.friendlyDate==='function'?window.friendlyDate(window.appointmentDate(item)):window.appointmentDate(item)))+' · '+esc(item.scheduled_at?timeText(item.scheduled_at):item.time)+'<br><br>'+(cancelling?'Kayıt silinmeyecek. Takvim ve cirodan çıkarılacak; Meta iptal mesajı kuyruğa alınacak.':'Randevu yeniden aktif olacak. Saat doluysa işlem engellenecek.');var confirm=document.getElementById('appointmentStatusConfirm');confirm.textContent=cancelling?'İptali onayla':'Yeniden etkinleştir';confirm.onclick=function(){applyStatus(id,nextStatus)};modal.classList.add('show');
   }
   async function applyStatus(id,nextStatus){
     var button=document.getElementById('appointmentStatusConfirm');button.disabled=true;button.textContent='Kaydediliyor…';
-    try{var values={status:nextStatus};if(window.currentUser&&window.currentUser.id)values.updated_by=window.currentUser.id;var result=await window.salonDb.from('appointments').update(values).eq('id',id).select('id,status,updated_by').single();if(result.error)throw result.error;document.getElementById('appointmentStatusModal').classList.remove('show');await window.reloadRemoteData();await load();if(typeof window.showAppToast==='function')window.showAppToast(nextStatus==='cancelled'?'Randevu iptal edildi':'Randevu yeniden aktif',nextStatus==='cancelled'?'Kayıt korundu ve iptal mesajı kuyruğa alındı.':'Randevu takvime geri alındı.');}
+    try{var values={status:nextStatus},actorId=currentUserId();if(actorId)values.updated_by=actorId;var result=await window.salonDb.from('appointments').update(values).eq('id',id).select('id,status,updated_by').single();if(result.error)throw result.error;document.getElementById('appointmentStatusModal').classList.remove('show');await window.reloadRemoteData();await load();if(typeof window.showAppToast==='function')window.showAppToast(nextStatus==='cancelled'?'Randevu iptal edildi':'Randevu yeniden aktif',nextStatus==='cancelled'?'Kayıt korundu ve iptal mesajı kuyruğa alındı.':'Randevu takvime geri alındı.');}
     catch(error){if(typeof window.showAppToast==='function')window.showAppToast('İşlem tamamlanamadı',error.message||'Tekrar deneyin.');}
     finally{button.disabled=false}
   }
-  function edit(id){var item=(window.appts||[]).find(function(row){return String(row.id)===String(id)});if(!item){if(typeof window.showAppToast==='function')window.showAppToast('Randevu açılamadı','İptal edilen randevuyu önce yeniden etkinleştirin.');return}window.openAppointmentModal('',id)}
+  function edit(id){var item=currentAppointments().find(function(row){return String(row.id)===String(id)});if(!item){if(typeof window.showAppToast==='function')window.showAppToast('Randevu açılamadı','İptal edilen randevuyu önce yeniden etkinleştirin.');return}window.openAppointmentModal('',id)}
 
   var previousReload=window.reloadRemoteData;
   window.reloadRemoteData=async function(){var result=await previousReload.apply(this,arguments);if(Array.isArray(window.appts)){window.appts=window.appts.filter(function(item){return item.status!=='cancelled'});if(typeof window.render==='function')window.render();if(typeof window.renderCalendar==='function')window.renderCalendar();if(typeof window.renderStatistics==='function')window.renderStatistics()}if(document.getElementById('appointmentManagement')?.classList.contains('active'))await load();return result};
   var previousShowPage=window.showPage;
   window.showPage=function(id){ensureUi();var result=previousShowPage.apply(this,arguments);if(id==='appointmentManagement')load();return result};
   window.deleteAppointment=function(id){showConfirmation(id,'cancelled')};
-  window.installDirectAppointmentDelete=function(id){var sheet=document.querySelector('#appointmentModal .sheet');if(!sheet)return;document.getElementById('directAppointmentDelete')?.remove();if(!id)return;var item=(window.appts||[]).find(function(row){return String(row.id)===String(id)});if(typeof window.canManageOwnAppointment==='function'&&!window.canManageOwnAppointment(item))return;var button=document.createElement('button');button.type='button';button.id='directAppointmentDelete';button.className='save';button.textContent='Randevuyu iptal et';button.style.cssText='margin-top:12px;background:#a9514d';button.onclick=function(){window.closeAppointmentModal();showConfirmation(id,'cancelled')};var back=sheet.querySelector('button.back');if(back)sheet.insertBefore(button,back);else sheet.appendChild(button)};
+  window.installDirectAppointmentDelete=function(){document.getElementById('directAppointmentDelete')?.remove()};
   window.SalonAppointmentManagement={load:load,edit:edit,askCancel:function(id){showConfirmation(id,'cancelled')},askRestore:function(id){showConfirmation(id,'confirmed')}};
   ensureUi();
 })();

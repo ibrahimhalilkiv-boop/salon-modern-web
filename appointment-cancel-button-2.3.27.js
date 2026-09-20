@@ -21,6 +21,7 @@
   function ensureButton() {
     var sheet = document.querySelector('#appointmentModal .sheet');
     if (!sheet) return null;
+    document.getElementById('directAppointmentDelete')?.remove();
     var button = document.getElementById(BUTTON_ID);
     if (!button) {
       button = document.createElement('button');
@@ -47,6 +48,7 @@
   }
 
   function syncButton() {
+    document.getElementById('directAppointmentDelete')?.remove();
     var button = ensureButton();
     if (!button) return;
     var visible = document.getElementById('appointmentModal')?.classList.contains('show') && canCancel(editingItem());
