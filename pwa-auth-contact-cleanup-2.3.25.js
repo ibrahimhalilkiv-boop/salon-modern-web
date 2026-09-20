@@ -38,15 +38,27 @@
     document.documentElement.dataset.authState = 'UNAUTHENTICATED';
     return previousSetRemoteAuth.apply(this, arguments);
   };
+  var previousLogout = window.logout;
+  window.logout = async function () {
+    document.documentElement.dataset.authState = 'INITIALIZING';
+    document.getElementById('app')?.classList.add('hidden');
+    document.getElementById('auth')?.classList.add('hidden');
+    try {
+      return await previousLogout.apply(this, arguments);
+    } finally {
+      if (typeof currentUser === 'undefined' || !currentUser) window.setRemoteAuth(false);
+      else document.getElementById('app')?.classList.remove('hidden');
+    }
+  };
   function isActiveAppointment(item) { return item && String(item.status || 'confirmed').toLowerCase() !== 'cancelled'; }
-  function activeAppointments() { return Array.isArray(window.appts) ? window.appts.filter(isActiveAppointment) : []; }
+  function activeAppointments() { return typeof appts !== 'undefined' && Array.isArray(appts) ? appts.filter(isActiveAppointment) : []; }
   window.visibleAppointments = function () {
     var rows = activeAppointments();
-    return window.currentUser && window.currentUser.role === 'yonetici' ? rows : rows.filter(function (item) { return item.staff === (window.currentUser && window.currentUser.name); });
+    return typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'yonetici' ? rows : rows.filter(function (item) { return item.staff === (typeof currentUser !== 'undefined' && currentUser && currentUser.name); });
   };
   window.calendarAppointmentsForMember = function () {
     var rows = activeAppointments();
-    return window.teamCalendarMember ? rows.filter(function (item) { return item.staff === window.teamCalendarMember; }) : rows;
+    return typeof teamCalendarMember !== 'undefined' && teamCalendarMember ? rows.filter(function (item) { return item.staff === teamCalendarMember; }) : rows;
   };
   if (typeof window.remoteAppointment === 'function') {
     var previousRemoteAppointment = window.remoteAppointment;
@@ -81,7 +93,7 @@
   var previousReloadRemoteData = window.reloadRemoteData;
   window.reloadRemoteData = async function () {
     var result = await previousReloadRemoteData.apply(this, arguments);
-    if (Array.isArray(window.appts)) window.appts = window.appts.filter(isActiveAppointment);
+    if (typeof appts !== 'undefined' && Array.isArray(appts)) appts = appts.filter(isActiveAppointment);
     if (typeof window.render === 'function') window.render();
     if (typeof window.renderCalendar === 'function') window.renderCalendar();
     if (typeof window.renderStatistics === 'function') window.renderStatistics();

@@ -56,8 +56,8 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', function (event) {
       if (!event.data || event.data.type !== 'SALON_SHELL_UPDATED') return;
-      if (sessionStorage.getItem('salonShellReloadedV3') === '1') return;
-      sessionStorage.setItem('salonShellReloadedV3', '1');
+      if (sessionStorage.getItem('salonShellReloadedV16') === '1') return;
+      sessionStorage.setItem('salonShellReloadedV16', '1');
       location.reload();
     });
   }
