@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v17';
+const CACHE_NAME = 'salon-modern-shell-pwa-v18';
 const APP_SHELL = [
   './salon-modern.html',
   './manifest.webmanifest',
@@ -22,7 +22,8 @@ const APP_SHELL = [
   './pwa-device-session-2.3.22.js',
   './pwa-back-navigation-2.3.23.js',
   './pwa-desktop-layout-2.3.24.js',
-  './pwa-auth-contact-cleanup-2.3.25.js'
+  './pwa-auth-contact-cleanup-2.3.25.js',
+  './appointment-cancel-button-2.3.27.js'
 ];
 
 self.addEventListener('install', event => {
