@@ -6,18 +6,19 @@
   function closeSuggestions(){var panel=document.getElementById('typedCustomerSuggestions');if(panel){panel.classList.remove('show');panel.style.pointerEvents='none'}}
   function elements(){var modal=document.getElementById('appointmentModal'),form=modal&&modal.querySelector('form.sheet'),save=form&&form.querySelector('button.save:not(#permanentAppointmentDelete):not(#permanentAppointmentCancel):not(#directAppointmentDelete)');return {modal:modal,form:form,save:save}}
   function customerKey(value){return String(value||'').trim().toLocaleLowerCase('tr').replace(/[ç]/g,'c').replace(/[ğ]/g,'g').replace(/[ıi]/g,'i').replace(/[ö]/g,'o').replace(/[ş]/g,'s').replace(/[ü]/g,'u').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
-  function fillCustomer(client){if(!client)return;var input=document.getElementById('appointmentCustomer'),phone=document.getElementById('appointmentPhone');if(input)input.value=client.full_name||'';if(phone)phone.value=String(client.phone||'').trim();if(typeof window.applyCustomerHistory==='function')window.applyCustomerHistory(client);closeSuggestions()}
+  function clientList(){try{return Array.isArray(remoteClients)?remoteClients:[]}catch(error){return []}}
+  function fillCustomer(client){if(!client)return;var input=document.getElementById('appointmentCustomer'),phone=document.getElementById('appointmentPhone');if(input)input.value=String(client.full_name||'');if(phone)phone.value=String(client.phone||'').trim();try{if(typeof applyCustomerHistory==='function')applyCustomerHistory(client)}catch(error){}closeSuggestions()}
+  function renderCustomerPicker(){
+    var input=document.getElementById('appointmentCustomer'),panel=document.getElementById('typedCustomerSuggestions');if(!input||!panel)return;
+    var term=customerKey(input.value);if(!term){panel.innerHTML='';panel.classList.remove('show');panel.style.pointerEvents='none';return}
+    var matches=clientList().filter(function(client){return customerKey(client.full_name).includes(term)}).slice(0,8);
+    panel.innerHTML=matches.map(function(client){var name=String(client.full_name||''),phone=String(client.phone||'');return '<button type="button" data-salon-client-id="'+String(client.id).replace(/"/g,'&quot;')+'"><strong>'+name.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</strong><small style="display:block">'+phone.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</small></button>'}).join('');
+    panel.classList.toggle('show',matches.length>0);panel.style.pointerEvents=matches.length?'auto':'none';
+  }
   function bindCustomerPicker(){
-    var input=document.getElementById('appointmentCustomer'),panel=document.getElementById('typedCustomerSuggestions');if(!input)return;
-    input.oninput=function(){if(typeof window.filterCustomers==='function')window.filterCustomers()};
-    if(!panel)return;
-    function pick(event){
-      var button=event.target&&event.target.closest&&event.target.closest('button[data-id]');if(!button)return;
-      event.preventDefault();event.stopPropagation();
-      var list=Array.isArray(window.remoteClients)?window.remoteClients:(typeof remoteClients!=='undefined'?remoteClients:[]);
-      var client=list.find(function(item){return String(item.id)===String(button.dataset.id)});
-      fillCustomer(client);
-    }
+    var input=document.getElementById('appointmentCustomer'),panel=document.getElementById('typedCustomerSuggestions');if(!input||!panel)return;
+    input.removeAttribute('list');input.oninput=renderCustomerPicker;input.onfocus=renderCustomerPicker;
+    function pick(event){var button=event.target&&event.target.closest&&event.target.closest('button[data-salon-client-id]');if(!button)return;event.preventDefault();event.stopImmediatePropagation();var client=clientList().find(function(item){return String(item.id)===String(button.getAttribute('data-salon-client-id'))});fillCustomer(client)}
     panel.onpointerdown=pick;panel.ontouchstart=pick;panel.onmousedown=pick;panel.onclick=pick;
   }
   async function saveNow(event){
