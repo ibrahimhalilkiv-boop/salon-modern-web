@@ -7,7 +7,7 @@ function toast(a,b){if(typeof showAppToast==='function')showAppToast(a,b)}
 async function token(){var result=await salonDb.auth.getSession();return result.data?.session?.access_token||''}
 async function server(action){var response=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+await token()},body:JSON.stringify({action:action})}),data=await response.json().catch(function(){return {}});if(!response.ok)throw new Error(data.error||'Bildirim sunucusuna ulaşılamadı.');return data}
 async function key(){var response=await fetch(API+'?action=public-key',{cache:'no-store'}),data=await response.json();if(!data.publicKey){if(currentUser?.role==='yonetici')data=await server('bootstrap-vapid');else throw new Error('Web Push anahtarı henüz yönetici tarafından hazırlanmadı.')}return data.publicKey}
-async function save(sub,active){var raw=sub.toJSON(),keys=raw.keys||{},result=await salonDb.from('web_push_subscriptions').upsert({user_id:currentUser.id,endpoint:raw.endpoint,p256dh:keys.p256dh,auth_secret:keys.auth,user_agent:navigator.userAgent,device_label:(navigator.platform||'PWA cihazı').slice(0,120),active:active!==false,last_seen_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:'endpoint'}).select('id').single();if(result.error)throw result.error}
+async function save(sub,active){var raw=sub.toJSON(),keys=raw.keys||{},result=await salonDb.rpc('claim_web_push_subscription',{p_endpoint:raw.endpoint,p_p256dh:keys.p256dh,p_auth_secret:keys.auth,p_user_agent:navigator.userAgent,p_device_label:(navigator.platform||'PWA cihazı').slice(0,120),p_active:active!==false});if(result.error)throw new Error('Bildirim cihazı sunucuya kaydedilemedi: '+result.error.message)}
 async function existing(){if(!supported())return null;subscription=await (await navigator.serviceWorker.ready).pushManager.getSubscription();return subscription}
 async function subscribeCurrent(){var registration=await navigator.serviceWorker.ready,sub=await registration.pushManager.getSubscription();if(!sub)sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decode(await key())});subscription=sub;await save(sub,true);return sub}
 function text(){if(!supported())return 'Bu cihazda Web Push desteklenmiyor';if(Notification.permission==='denied')return 'Tarayıcı ayarlarından engellenmiş';if(Notification.permission==='granted'&&subscription)return '✓ Açık';return Notification.permission==='granted'?'İzin açık, cihaz bağlanmamış':'Kapalı'}
@@ -21,8 +21,13 @@ function isOneHourReminder(data){return data?.kind==='appointment_reminder'||dat
 function openReminderWhatsApp(data){
   var id=data?.appointmentId||data?.appointment_id||data?.id;if(!id)return false;
   var item=(typeof appts!=='undefined'&&Array.isArray(appts))?appts.find(function(row){return String(row.id)===String(id)}):null;
-  if(!item||typeof sendAppointmentReminderWhatsApp!=='function')return false;
-  sendAppointmentReminderWhatsApp(item.id);return true
+  if(!item||typeof whatsappReminderUrl!=='function')return false;
+  var client=(typeof remoteClients!=='undefined'&&Array.isArray(remoteClients))?remoteClients.find(function(row){return String(row.id)===String(item.clientId)||String(row.full_name||'').toLocaleLowerCase('tr')===String(item.customer||'').toLocaleLowerCase('tr')}):null;
+  var rawPhone=item.phone||client?.phone||'',phone=typeof whatsappPhone==='function'?whatsappPhone(rawPhone):String(rawPhone).replace(/\D/g,'');
+  if(!/^90\d{10}$/.test(phone)){toast('Telefon numarası bulunamadı','Müşterinin telefon numarasını kontrol edin.');return true}
+  var url=whatsappReminderUrl(item.customer,phone,typeof appointmentDate==='function'?appointmentDate(item):data?.appointmentDate,item.time,item.staff,item.amount);
+  var clean=new URL(location.href);['date','appointment','kind'].forEach(function(key){clean.searchParams.delete(key)});history.replaceState(history.state,'',clean.href);
+  location.assign(url);return true
 }
 async function route(data){
   if(!data)return;
