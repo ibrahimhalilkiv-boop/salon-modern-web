@@ -301,7 +301,7 @@
       var fallback=setTimeout(function(){
         updateRequested=false;
         if(button){button.disabled=false;button.textContent='Güncelle'}
-        banner.querySelector('span').textContent='Güncelleme hazır. Tekrar deneyin.';
+        banner.querySelector('span').textContent='Güncelleme hazır. Sayfayı yenileyin.';
       },8000);
       var onControllerChange=function(){
         clearTimeout(fallback);
