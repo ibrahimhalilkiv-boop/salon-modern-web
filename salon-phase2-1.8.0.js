@@ -7,6 +7,7 @@ var phase2LoadedAt=0;
 var phase2Unmatched=[];
 var phase2SelectedUnmatchedId=null;
 var phase2HistoryCache={};
+var phase2TodaySnapshot=[];
 var phase2PreviousShowPage=showPage;
 var phase2PreviousSimplifyNavigation=simplifyNavigation;
 var phase2PreviousReloadRemoteData=reloadRemoteData;
@@ -58,7 +59,11 @@ async function phase2LoadIntelligence(force){
   phase2LoadedAt=Date.now();return phase2Rows();
 }
 
-function phase2TodayAppointments(){return appts.filter(function(item){return appointmentDate(item)===phase2Today()&&item.status!=='cancelled'})}
+function phase2TodayAppointments(){
+  var live=appts.filter(function(item){return appointmentDate(item)===phase2Today()&&item.status!=='cancelled'});
+  if(live.length)phase2TodaySnapshot=live.slice();
+  return live.length?live:phase2TodaySnapshot.slice();
+}
 function phase2FreeSlots(date){return window.SalonSmartTest&&SalonSmartTest.freeSlots?SalonSmartTest.freeSlots(date):[]}
 function phase2Actionable(includeApproaching){
   var allowed=includeApproaching?['approaching','due','overdue','risk']:['due','overdue','risk'];
@@ -277,6 +282,8 @@ reloadRemoteData=async function(){
   var sequence=++phase2ReloadSequence;
   phase2HistoryCache={};var result=await phase2PreviousReloadRemoteData();
   if(sequence!==phase2ReloadSequence)return result;
+  var refreshedToday=appts.filter(function(item){return appointmentDate(item)===phase2Today()&&item.status!=='cancelled'});
+  if(refreshedToday.length)phase2TodaySnapshot=refreshedToday.slice();
   phase2LoadedAt=0;await phase2LoadIntelligence(true);
   if(sequence!==phase2ReloadSequence)return result;
   if(document.getElementById('home')?.classList.contains('active'))phase2RenderHome();
