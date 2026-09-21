@@ -69,37 +69,10 @@
     };
   }
   function removeDateShortcuts() { document.querySelectorAll('#appointmentModal .date-quick').forEach(function (node) { node.remove(); }); }
-  function installCancellationButton(id) {
-    var sheet = document.querySelector('#appointmentModal .sheet');
-    if (!sheet) return;
-    document.getElementById('directAppointmentDelete')?.remove();
-    if (!id) return;
-    var item = activeAppointments().find(function (row) { return String(row.id) === String(id); });
-    if (!item) return;
-    if (typeof window.canManageOwnAppointment === 'function' && !window.canManageOwnAppointment(item)) return;
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.id = 'directAppointmentDelete';
-    button.className = 'save';
-    button.textContent = 'Randevuyu iptal et';
-    button.style.cssText = 'margin-top:12px;background:#a9514d;color:#fff';
-    button.onclick = function () {
-      window.closeAppointmentModal();
-      if (window.SalonAppointmentManagement && typeof window.SalonAppointmentManagement.askCancel === 'function') {
-        window.SalonAppointmentManagement.askCancel(id);
-      } else if (typeof window.deleteAppointment === 'function') {
-        window.deleteAppointment(id);
-      }
-    };
-    var cancel = sheet.querySelector('button.back');
-    if (cancel) sheet.insertBefore(button, cancel); else sheet.appendChild(button);
-  }
   var previousOpenAppointmentModal = window.openAppointmentModal;
   window.openAppointmentModal = function () {
     var result = previousOpenAppointmentModal.apply(this, arguments);
     removeDateShortcuts();
-    var id = arguments.length > 1 ? arguments[1] : null;
-    installCancellationButton(id);
     return result;
   };
   window.appointmentClick = function (id) {
