@@ -842,6 +842,13 @@ function applyCustomerHistory(client){
   var customer=document.getElementById('appointmentCustomer'),phone=document.getElementById('appointmentPhone');
   if(customer)customer.value=client.full_name||customer.value;
   if(phone)phone.value=String(client.phone||'').trim();
+  var last=lastAppointmentForClient(client);
+  if(last){
+    var operation=document.getElementById('appointmentOperation'),staffSelect=document.getElementById('appointmentStaff'),amount=document.getElementById('appointmentAmount');
+    if(operation&&last.operation){renderServiceOptions(last.operation);operation.value=last.operation}
+    if(staffSelect&&last.staff&&Array.from(staffSelect.options).some(function(option){return option.value===last.staff}))staffSelect.value=last.staff;
+    if(amount&&last.operation){var service=serviceByName(last.operation);amount.value=Number(service?.price||last.amount||0)}
+  }
 }
 function renderCustomers(){
   var holder=document.getElementById('customerList');if(!holder)return;
