@@ -1030,8 +1030,9 @@ filterCustomers=function(){
       input.blur();
       return false;
     }
-    button.onpointerdown=choose;
-    button.onclick=function(event){if(event)event.preventDefault();return false};
+    button.addEventListener('touchstart',choose,{passive:false});
+    button.addEventListener('mousedown',choose);
+    button.onclick=choose;
   });panel.style.pointerEvents=matches.length?'auto':'none';panel.classList.toggle('show',Boolean(matches.length));
 };
 function whatsappAppointmentUrl(customer,phone,date,time,staffName,amount){var d=new Date(date+'T12:00:00'),dateText=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long'}).replace(/^([^,]+),\s*(.+)$/,'$2 $1'),message='Merhaba '+customer+',\n\nSalon Modern randevu bilgileriniz:\n\n📅 Tarih: '+dateText+'\n🕒 Saat: '+time+'\n👤 Çalışan: '+staffName+'\nÜcret: '+Number(amount||0).toLocaleString('tr-TR')+' TL\n\nSizi bekliyoruz.';return 'https://wa.me/'+whatsappPhone(phone)+'?text='+encodeURIComponent(message)}
