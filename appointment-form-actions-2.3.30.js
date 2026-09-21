@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  var saving=false;
+  var saving=false,saveWatchdog=null;
   function editingId(){return typeof editingAppointmentId!=='undefined'?editingAppointmentId:null}
   function appointment(){var id=editingId();return id&&Array.isArray(window.appts)?window.appts.find(function(item){return String(item.id)===String(id)})||null:null}
   function closeSuggestions(){var panel=document.getElementById('typedCustomerSuggestions');if(panel){panel.classList.remove('show');panel.style.pointerEvents='none'}}
@@ -8,6 +8,11 @@
   async function saveNow(event){
     event&&event.preventDefault();event&&event.stopPropagation();var parts=elements(),form=parts.form,button=parts.save;if(!form||saving)return false;
     if(form.reportValidity&&!form.reportValidity())return false;saving=true;var label=button&&button.textContent||'Randevuyu kaydet';if(button){button.disabled=true;button.textContent='Kaydediliyor…'}closeSuggestions();
+    saveWatchdog=setTimeout(function(){
+      if(!saving)return;saving=false;
+      if(button&&document.body.contains(button)){button.disabled=false;button.textContent=label}
+      window.showAppToast&&window.showAppToast('Kayıt beklenenden uzun sürdü','Ekran serbest bırakıldı. İnternet bağlantısını kontrol edip tekrar deneyebilirsiniz.');
+    },12000);
     try{
       if(typeof window.saveAppointment!=='function')throw new Error('Randevu kayıt işlevi yüklenemedi.');
       var task=Promise.resolve(window.saveAppointment({preventDefault:function(){},stopPropagation:function(){},target:form,currentTarget:form,submitter:button}));
@@ -20,9 +25,9 @@
       }
     }
     catch(error){console.error('[appointment-actions] save',error);window.showAppToast&&window.showAppToast('Randevu kaydedilemedi',error&&error.message||'Tekrar deneyin.')}
-    finally{saving=false;if(button&&document.body.contains(button)){button.disabled=false;button.textContent=label}}return false;
+    finally{if(saveWatchdog){clearTimeout(saveWatchdog);saveWatchdog=null}saving=false;if(button&&document.body.contains(button)){button.disabled=false;button.textContent=label}}return false;
   }
-  function cancelNow(event){event&&event.preventDefault();event&&event.stopPropagation();closeSuggestions();if(typeof window.closeAppointmentModal==='function')window.closeAppointmentModal();else document.getElementById('appointmentModal')?.classList.remove('show');return false}
+  function cancelNow(event){event&&event.preventDefault();event&&event.stopPropagation();if(saveWatchdog){clearTimeout(saveWatchdog);saveWatchdog=null}saving=false;var parts=elements();if(parts.save){parts.save.disabled=false;parts.save.textContent='Randevuyu kaydet'}closeSuggestions();if(typeof window.closeAppointmentModal==='function')window.closeAppointmentModal();else document.getElementById('appointmentModal')?.classList.remove('show');return false}
   function deleteNow(event){event&&event.preventDefault();event&&event.stopPropagation();closeSuggestions();var id=editingId();if(id&&typeof window.requestAppointmentDeletion==='function')window.requestAppointmentDeletion(id);else window.showAppToast&&window.showAppToast('Silme açılamadı','Randevuyu takvimden yeniden açın.');return false}
   function shareNow(event){event&&event.preventDefault();event&&event.stopPropagation();closeSuggestions();var item=appointment();if(item&&typeof window.shareAppointmentWhatsApp==='function')window.shareAppointmentWhatsApp(item.id);return false}
   function bind(){
