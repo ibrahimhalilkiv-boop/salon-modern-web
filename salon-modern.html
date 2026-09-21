@@ -1054,11 +1054,11 @@ saveAppointment=async function(event){
     /* Yalnız peşin/normal yeni randevu başarıyla kaydedildikten sonra mevcut
        yönetilebilir şablonla WhatsApp'ı aç. Borçlu kayıtlar ve güncellemeler
        mevcut ayrı kurallarını korur. */
-    if(!originalId&&!onDebt&&phone){
-      var savedWhatsAppUrl=whatsappAppointmentUrl(customer,phone,date,time,employee.full_name||employee.name||staffName,amount);
-      setTimeout(function(){window.open(savedWhatsAppUrl,'_blank','noopener')},20);
-    }
-    editingAppointmentId=null;closeAppointmentModal();await reloadRemoteData();if(onDebt)await loadV151Supplement();teamCalendarDate=date;teamCalendarMode='day';showPage('calendar');renderCalendar();showAppToast(originalId?'Randevu güncellendi':'Randevu kaydedildi',onDebt?'Randevu ve borç kaydı güncellendi.':(rows.length>1?rows.length+' randevu eklendi.':'Takvim ve ciro güncellendi.'));
+    var savedWhatsAppUrl=!originalId&&!onDebt&&phone?whatsappAppointmentUrl(customer,phone,date,time,employee.full_name||employee.name||staffName,amount):'';
+    editingAppointmentId=null;closeAppointmentModal();teamCalendarDate=date;teamCalendarMode='day';showPage('calendar');renderCalendar();showAppToast(originalId?'Randevu güncellendi':'Randevu kaydedildi',onDebt?'Randevu ve borç kaydı güncellendi.':(rows.length>1?rows.length+' randevu eklendi.':'Takvim ve ciro güncellendi.'));
+    Promise.resolve(reloadRemoteData()).then(function(){if(onDebt)return loadV151Supplement()}).catch(function(error){console.warn('[appointment-save] refresh failed',error)});
+    if(savedWhatsAppUrl){window.location.href=savedWhatsAppUrl}
+    return true;
   }catch(error){showAppToast('Randevu kaydedilemedi',error.message||'Tekrar deneyin.')}
 };
 async function loadV151Supplement(){
