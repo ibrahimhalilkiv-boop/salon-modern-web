@@ -272,8 +272,13 @@ simplifyNavigation=function(){
   document.querySelector("[onclick=\"drawerPage('calendar')\"]")?.classList.remove('hidden');
   ['drawerRecoveryCenter','drawerEmployeePerformance'].forEach(function(id){document.getElementById(id)?.classList.toggle('hidden',!phase2IsManager())});
 };
+var phase2ReloadSequence=0;
 reloadRemoteData=async function(){
-  phase2HistoryCache={};var result=await phase2PreviousReloadRemoteData();phase2LoadedAt=0;await phase2LoadIntelligence(true);
+  var sequence=++phase2ReloadSequence;
+  phase2HistoryCache={};var result=await phase2PreviousReloadRemoteData();
+  if(sequence!==phase2ReloadSequence)return result;
+  phase2LoadedAt=0;await phase2LoadIntelligence(true);
+  if(sequence!==phase2ReloadSequence)return result;
   if(document.getElementById('home')?.classList.contains('active'))phase2RenderHome();
   if(document.getElementById('customerDetail')?.classList.contains('active'))phase2RenderCustomerDetail();return result;
 };
