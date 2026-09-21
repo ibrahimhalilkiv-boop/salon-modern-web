@@ -19,7 +19,7 @@ assert.match(actions, /back\.onclick=runBack/, 'Vazgeç düğmesi doğrudan çal
 assert.match(actions, /share\.onclick=runShare/, 'WhatsApp düğmesi doğrudan çalışmalı');
 assert.match(actions, /closeAppointmentModal/, 'Vazgeç düğmesi doğrudan modalı kapatmalı');
 assert.match(actions, /requestAppointmentDeletion|permanentAppointmentDelete/, 'Sil düğmesi güvenli silme katmanında kalmalı');
-assert.match(worker, /salon-modern-shell-pwa-v26/, 'Yeni PWA cache sürümü kullanılmalı');
+assert.match(worker, /salon-modern-shell-pwa-v27/, 'Yeni PWA cache sürümü kullanılmalı');
 assert.match(worker, /appointment-form-actions-2\.3\.30\.js/, 'Yeni form katmanı offline kabuğuna eklenmeli');
 
 console.log('PASS appointment debt verification and form actions');
