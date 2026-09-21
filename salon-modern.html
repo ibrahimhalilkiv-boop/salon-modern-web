@@ -1021,17 +1021,6 @@ filterCustomers=function(){
   panel.innerHTML=matches.map(function(client){return '<button type="button" data-id="'+safe(client.id)+'"><strong>'+safe(client.full_name)+'</strong><small style="display:block;color:var(--muted)">'+safe(client.phone||'')+'</small></button>'}).join('');
   Array.from(panel.querySelectorAll('button')).forEach(function(button){button.onclick=function(){var client=remoteClients.find(function(item){return String(item.id)===String(button.dataset.id)});input.value=client.full_name;panel.classList.remove('show');applyCustomerHistory(client)}});panel.classList.toggle('show',Boolean(matches.length));
 };
-function syncAppointmentCustomerFromName(){
-  var input=document.getElementById('appointmentCustomer');if(!input)return;
-  var client=clientForName(input.value);if(client)applyCustomerHistory(client);
-}
-(function(){
-  var input=document.getElementById('appointmentCustomer');if(!input||input.dataset.autoHistoryInput==='1')return;
-  input.dataset.autoHistoryInput='1';
-  var timer=null;
-  input.addEventListener('input',function(){clearTimeout(timer);timer=setTimeout(syncAppointmentCustomerFromName,120)});
-  input.addEventListener('blur',syncAppointmentCustomerFromName);
-})();
 function whatsappAppointmentUrl(customer,phone,date,time,staffName,amount){var d=new Date(date+'T12:00:00'),dateText=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long'}).replace(/^([^,]+),\s*(.+)$/,'$2 $1'),message='Merhaba '+customer+',\n\nSalon Modern randevu bilgileriniz:\n\n📅 Tarih: '+dateText+'\n🕒 Saat: '+time+'\n👤 Çalışan: '+staffName+'\nÜcret: '+Number(amount||0).toLocaleString('tr-TR')+' TL\n\nSizi bekliyoruz.';return 'https://wa.me/'+whatsappPhone(phone)+'?text='+encodeURIComponent(message)}
 function whatsappReminderUrl(customer,phone,date,time,staffName){var d=new Date(date+'T12:00:00'),dateText=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long'}).replace(/^([^,]+),\s*(.+)$/,'$2 $1'),message='Merhaba '+customer+',\n\nSalon Modern randevunuzu hatırlatmak isteriz.\n\n📅 Tarih: '+dateText+'\n🕒 Saat: '+time+'\n👤 Çalışan: '+staffName+'\n\nSizi bekliyoruz.';return 'https://wa.me/'+whatsappPhone(phone)+'?text='+encodeURIComponent(message)}
 var nativeReminderIdsKey='salonModernNativeReminderIdsV2';
