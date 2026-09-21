@@ -129,6 +129,6 @@
         if (warning) { warning.classList.remove('show'); warning.style.display = 'none'; }
       }
       modalWasOpen = isOpen;
-    }).observe(modal, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
+    }).observe(modal, { attributes: true, attributeFilter: ['class'] });
   }
 })();

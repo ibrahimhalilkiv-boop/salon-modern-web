@@ -18,7 +18,7 @@ assert.match(actions, /closeAppointmentModal/, 'Vazgeç düğmesi doğrudan moda
 assert.match(actions, /requestAppointmentDeletion|permanentAppointmentDelete/, 'Sil düğmesi güvenli silme katmanında kalmalı');
 assert.match(actions, /Promise\.race\(\[task/, 'Kayıt isteği tarayıcıyı süresiz kilitlememeli');
 assert.match(actions, /Takvim arka planda doğrulanıyor/, 'Zaman aşımında kullanıcıya arka plan doğrulaması bildirilmeli');
-assert.match(worker, /salon-modern-shell-pwa-v32/, 'Yeni PWA cache sürümü kullanılmalı');
+assert.match(worker, /salon-modern-shell-pwa-v33/, 'Yeni PWA cache sürümü kullanılmalı');
 assert.match(worker, /appointment-form-actions-2\.3\.30\.js/, 'Yeni form katmanı offline kabuğuna eklenmeli');
 
 console.log('PASS appointment debt verification and form actions');
@@ -29,3 +29,5 @@ assert.match(actions, /back\.onclick=cancelNow/, 'Vazgeç düğmesi doğrudan cl
 assert.match(actions, /saveWatchdog=setTimeout/, 'Kaydet işlemi takılı kalırsa arayüz serbest bırakılmalı');
 
 assert.doesNotMatch(actions, /subtree:true/, 'Randevu modalı alt ağacında MutationObserver döngüsü olmamalı');
+
+for (const file of ['appointment-debt-warning-2.3.28.js','appointment-cancel-button-2.3.27.js']) { const source=fs.readFileSync(file,'utf8'); assert.doesNotMatch(source,/subtree:\s*true/,file+' randevu modalında recursive observer kullanmamalı'); }
