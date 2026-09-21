@@ -5,6 +5,21 @@
   function appointment(){var id=editingId();return id&&Array.isArray(window.appts)?window.appts.find(function(item){return String(item.id)===String(id)})||null:null}
   function closeSuggestions(){var panel=document.getElementById('typedCustomerSuggestions');if(panel){panel.classList.remove('show');panel.style.pointerEvents='none'}}
   function elements(){var modal=document.getElementById('appointmentModal'),form=modal&&modal.querySelector('form.sheet'),save=form&&form.querySelector('button.save:not(#permanentAppointmentDelete):not(#permanentAppointmentCancel):not(#directAppointmentDelete)');return {modal:modal,form:form,save:save}}
+  function customerKey(value){return String(value||'').trim().toLocaleLowerCase('tr').replace(/[ç]/g,'c').replace(/[ğ]/g,'g').replace(/[ıi]/g,'i').replace(/[ö]/g,'o').replace(/[ş]/g,'s').replace(/[ü]/g,'u').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
+  function fillCustomer(client){if(!client)return;var input=document.getElementById('appointmentCustomer'),phone=document.getElementById('appointmentPhone');if(input)input.value=client.full_name||'';if(phone)phone.value=String(client.phone||'').trim();if(typeof window.applyCustomerHistory==='function')window.applyCustomerHistory(client);closeSuggestions()}
+  function bindCustomerPicker(){
+    var input=document.getElementById('appointmentCustomer'),panel=document.getElementById('typedCustomerSuggestions');if(!input)return;
+    input.oninput=function(){if(typeof window.filterCustomers==='function')window.filterCustomers()};
+    if(!panel)return;
+    function pick(event){
+      var button=event.target&&event.target.closest&&event.target.closest('button[data-id]');if(!button)return;
+      event.preventDefault();event.stopPropagation();
+      var list=Array.isArray(window.remoteClients)?window.remoteClients:(typeof remoteClients!=='undefined'?remoteClients:[]);
+      var client=list.find(function(item){return String(item.id)===String(button.dataset.id)});
+      fillCustomer(client);
+    }
+    panel.onpointerdown=pick;panel.ontouchstart=pick;panel.onmousedown=pick;panel.onclick=pick;
+  }
   async function saveNow(event){
     event&&event.preventDefault();event&&event.stopPropagation();var parts=elements(),form=parts.form,button=parts.save;if(!form||saving)return false;
     if(form.reportValidity&&!form.reportValidity())return false;saving=true;var label=button&&button.textContent||'Randevuyu kaydet';if(button){button.disabled=true;button.textContent='Kaydediliyor…'}closeSuggestions();
@@ -36,7 +51,7 @@
     var back=Array.from(form.querySelectorAll('button.back')).find(function(button){return button.textContent.trim()==='Vazgeç'});if(back){back.type='button';back.onclick=cancelNow;back.ontouchend=null;back.dataset.appointmentAction='back'}
     var remove=document.getElementById('permanentAppointmentDelete');if(remove){remove.type='button';remove.onclick=deleteNow;remove.ontouchend=null;remove.dataset.appointmentAction='delete'}
     var share=document.getElementById('shareAppointmentWhatsapp');if(share){share.type='button';share.onclick=shareNow;share.ontouchend=null;share.dataset.appointmentAction='share'}
-    closeSuggestions();
+    closeSuggestions();bindCustomerPicker();
   }
   var style=document.createElement('style');style.id='appointmentFormActionStyle231';style.textContent='#appointmentModal.show{pointer-events:auto!important}#appointmentModal form.sheet{position:relative!important;z-index:1!important;pointer-events:auto!important}#appointmentModal form.sheet>button{position:relative!important;z-index:1305!important;pointer-events:auto!important;touch-action:manipulation!important;-webkit-tap-highlight-color:transparent}#appointmentModal .customer-suggestions:not(.show){display:none!important;pointer-events:none!important}';document.head.appendChild(style);
   window.bindAppointmentFormActions=bind;window.runAppointmentFormSave=saveNow;
