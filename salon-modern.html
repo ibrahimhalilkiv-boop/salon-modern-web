@@ -839,9 +839,9 @@ function appointmentsForClient(client){return appts.filter(function(item){return
 function lastAppointmentForClient(client){return appointmentsForClient(client)[0]}
 function applyCustomerHistory(client){
   if(!client)return;
-  var phone=document.getElementById('appointmentPhone'),last=lastAppointmentForClient(client);
-  if(phone)phone.value=client.phone||'';
-  if(last){renderServiceOptions(last.operation);document.getElementById('appointmentOperation').value=last.operation;document.getElementById('appointmentAmount').value=appointmentRevenue(last)}
+  var customer=document.getElementById('appointmentCustomer'),phone=document.getElementById('appointmentPhone');
+  if(customer)customer.value=client.full_name||customer.value;
+  if(phone)phone.value=String(client.phone||'').trim();
 }
 function renderCustomers(){
   var holder=document.getElementById('customerList');if(!holder)return;
@@ -1031,7 +1031,7 @@ filterCustomers=function(){
       return false;
     }
     button.onpointerdown=choose;
-    button.onclick=choose;
+    button.onclick=function(event){if(event)event.preventDefault();return false};
   });panel.style.pointerEvents=matches.length?'auto':'none';panel.classList.toggle('show',Boolean(matches.length));
 };
 function whatsappAppointmentUrl(customer,phone,date,time,staffName,amount){var d=new Date(date+'T12:00:00'),dateText=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long'}).replace(/^([^,]+),\s*(.+)$/,'$2 $1'),message='Merhaba '+customer+',\n\nSalon Modern randevu bilgileriniz:\n\n📅 Tarih: '+dateText+'\n🕒 Saat: '+time+'\n👤 Çalışan: '+staffName+'\nÜcret: '+Number(amount||0).toLocaleString('tr-TR')+' TL\n\nSizi bekliyoruz.';return 'https://wa.me/'+whatsappPhone(phone)+'?text='+encodeURIComponent(message)}
