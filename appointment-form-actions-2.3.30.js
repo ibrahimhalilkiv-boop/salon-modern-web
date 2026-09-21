@@ -41,5 +41,14 @@
   var style=document.createElement('style');style.id='appointmentFormActionStyle231';style.textContent='#appointmentModal.show{pointer-events:auto!important}#appointmentModal form.sheet{position:relative!important;z-index:1!important;pointer-events:auto!important}#appointmentModal form.sheet>button{position:relative!important;z-index:1305!important;pointer-events:auto!important;touch-action:manipulation!important;-webkit-tap-highlight-color:transparent}#appointmentModal .customer-suggestions:not(.show){display:none!important;pointer-events:none!important}';document.head.appendChild(style);
   window.bindAppointmentFormActions=bind;window.runAppointmentFormSave=saveNow;
   var previousOpen=window.openAppointmentModal;if(typeof previousOpen==='function')window.openAppointmentModal=function(){var result=previousOpen.apply(this,arguments);bind();setTimeout(bind,0);return result};
-  bind();var modal=document.getElementById('appointmentModal');if(modal)new MutationObserver(function(){setTimeout(bind,0)}).observe(modal,{attributes:true,attributeFilter:['class'],childList:true,subtree:true});
+  bind();
+  var modal=document.getElementById('appointmentModal');
+  if(modal){
+    var wasOpen=modal.classList.contains('show');
+    new MutationObserver(function(){
+      var isOpen=modal.classList.contains('show');
+      if(isOpen&&!wasOpen)setTimeout(bind,0);
+      wasOpen=isOpen;
+    }).observe(modal,{attributes:true,attributeFilter:['class']});
+  }
 })();
