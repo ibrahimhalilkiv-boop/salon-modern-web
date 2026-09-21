@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  var saving=false,lastTouchAt=0;
+  var saving=false;
   function editingId(){return typeof editingAppointmentId!=='undefined'?editingAppointmentId:null}
   function appointment(){var id=editingId();return id&&Array.isArray(window.appts)?window.appts.find(function(item){return String(item.id)===String(id)})||null:null}
   function closeSuggestions(){var panel=document.getElementById('typedCustomerSuggestions');if(panel){panel.classList.remove('show');panel.style.pointerEvents='none'}}
@@ -25,14 +25,12 @@
   function cancelNow(event){event&&event.preventDefault();event&&event.stopPropagation();closeSuggestions();if(typeof window.closeAppointmentModal==='function')window.closeAppointmentModal();else document.getElementById('appointmentModal')?.classList.remove('show');return false}
   function deleteNow(event){event&&event.preventDefault();event&&event.stopPropagation();closeSuggestions();var id=editingId();if(id&&typeof window.requestAppointmentDeletion==='function')window.requestAppointmentDeletion(id);else window.showAppToast&&window.showAppToast('Silme açılamadı','Randevuyu takvimden yeniden açın.');return false}
   function shareNow(event){event&&event.preventDefault();event&&event.stopPropagation();closeSuggestions();var item=appointment();if(item&&typeof window.shareAppointmentWhatsApp==='function')window.shareAppointmentWhatsApp(item.id);return false}
-  function touch(handler){return function(event){lastTouchAt=Date.now();return handler(event)}}
-  function click(handler){return function(event){if(Date.now()-lastTouchAt<650){event.preventDefault();return false}return handler(event)}}
   function bind(){
     var parts=elements(),form=parts.form,save=parts.save;if(!form)return;form.style.position='relative';form.style.zIndex='1';form.onsubmit=saveNow;
-    if(save){save.type='button';save.disabled=false;save.onclick=click(saveNow);save.ontouchend=touch(saveNow);save.dataset.appointmentAction='save'}
-    var back=Array.from(form.querySelectorAll('button.back')).find(function(button){return button.textContent.trim()==='Vazgeç'});if(back){back.type='button';back.onclick=click(cancelNow);back.ontouchend=touch(cancelNow);back.dataset.appointmentAction='back'}
-    var remove=document.getElementById('permanentAppointmentDelete');if(remove){remove.type='button';remove.onclick=click(deleteNow);remove.ontouchend=touch(deleteNow);remove.dataset.appointmentAction='delete'}
-    var share=document.getElementById('shareAppointmentWhatsapp');if(share){share.type='button';share.onclick=click(shareNow);share.ontouchend=touch(shareNow);share.dataset.appointmentAction='share'}
+    if(save){save.type='button';save.disabled=false;save.onclick=saveNow;save.ontouchend=null;save.dataset.appointmentAction='save'}
+    var back=Array.from(form.querySelectorAll('button.back')).find(function(button){return button.textContent.trim()==='Vazgeç'});if(back){back.type='button';back.onclick=cancelNow;back.ontouchend=null;back.dataset.appointmentAction='back'}
+    var remove=document.getElementById('permanentAppointmentDelete');if(remove){remove.type='button';remove.onclick=deleteNow;remove.ontouchend=null;remove.dataset.appointmentAction='delete'}
+    var share=document.getElementById('shareAppointmentWhatsapp');if(share){share.type='button';share.onclick=shareNow;share.ontouchend=null;share.dataset.appointmentAction='share'}
     closeSuggestions();
   }
   var style=document.createElement('style');style.id='appointmentFormActionStyle231';style.textContent='#appointmentModal.show{pointer-events:auto!important}#appointmentModal form.sheet{position:relative!important;z-index:1!important;pointer-events:auto!important}#appointmentModal form.sheet>button{position:relative!important;z-index:1305!important;pointer-events:auto!important;touch-action:manipulation!important;-webkit-tap-highlight-color:transparent}#appointmentModal .customer-suggestions:not(.show){display:none!important;pointer-events:none!important}';document.head.appendChild(style);
