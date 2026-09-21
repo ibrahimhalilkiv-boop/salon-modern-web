@@ -295,7 +295,19 @@
     banner.innerHTML = '<span>Yeni sürüm hazır.</span><button type="button" style="min-height:42px;padding:8px 16px;border:0;border-radius:10px;font-weight:700">Güncelle</button>';
     banner.querySelector('button').addEventListener('click', function () {
       if (formIsBusy() && !window.confirm('Açık formdaki değişiklikler kaybolabilir. Yine de güncellensin mi?')) return;
+      var button=banner.querySelector('button');
       updateRequested = true;
+      if(button){button.disabled=true;button.textContent='Güncelleniyor…'}
+      var fallback=setTimeout(function(){
+        updateRequested=false;
+        if(button){button.disabled=false;button.textContent='Güncelle'}
+        banner.querySelector('span').textContent='Güncelleme hazır. Tekrar deneyin.';
+      },8000);
+      var onControllerChange=function(){
+        clearTimeout(fallback);
+        navigator.serviceWorker.removeEventListener('controllerchange',onControllerChange);
+      };
+      navigator.serviceWorker.addEventListener('controllerchange',onControllerChange);
       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
     });
     document.body.appendChild(banner);
