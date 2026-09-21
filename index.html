@@ -1042,6 +1042,19 @@ filterCustomers=function(){
     button.onclick=choose;
   });panel.style.pointerEvents=matches.length?'auto':'none';panel.classList.toggle('show',Boolean(matches.length));
 };
+window.filterCustomers=filterCustomers;
+window.applyCustomerHistory=applyCustomerHistory;
+(function bindReliableAppointmentCustomerPicker(){
+  var input=document.getElementById('appointmentCustomer');if(!input||input.dataset.reliablePickerBound==='1')return;
+  input.dataset.reliablePickerBound='1';
+  function exactMatch(){
+    var client=clientForName(input.value);
+    if(client)applyCustomerHistory(client);
+  }
+  input.addEventListener('input',function(){window.filterCustomers()});
+  input.addEventListener('change',exactMatch);
+  input.addEventListener('blur',function(){setTimeout(exactMatch,0)});
+})();
 function whatsappAppointmentUrl(customer,phone,date,time,staffName,amount){var d=new Date(date+'T12:00:00'),dateText=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long'}).replace(/^([^,]+),\s*(.+)$/,'$2 $1'),message='Merhaba '+customer+',\n\nSalon Modern randevu bilgileriniz:\n\n📅 Tarih: '+dateText+'\n🕒 Saat: '+time+'\n👤 Çalışan: '+staffName+'\nÜcret: '+Number(amount||0).toLocaleString('tr-TR')+' TL\n\nSizi bekliyoruz.';return 'https://wa.me/'+whatsappPhone(phone)+'?text='+encodeURIComponent(message)}
 function whatsappReminderUrl(customer,phone,date,time,staffName){var d=new Date(date+'T12:00:00'),dateText=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long'}).replace(/^([^,]+),\s*(.+)$/,'$2 $1'),message='Merhaba '+customer+',\n\nSalon Modern randevunuzu hatırlatmak isteriz.\n\n📅 Tarih: '+dateText+'\n🕒 Saat: '+time+'\n👤 Çalışan: '+staffName+'\n\nSizi bekliyoruz.';return 'https://wa.me/'+whatsappPhone(phone)+'?text='+encodeURIComponent(message)}
 var nativeReminderIdsKey='salonModernNativeReminderIdsV2';
