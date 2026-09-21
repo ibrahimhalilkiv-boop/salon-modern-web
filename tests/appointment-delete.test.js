@@ -46,6 +46,8 @@ vm.runInThisContext(fs.readFileSync('appointment-management-2.3.26.js', 'utf8'))
 
 (async () => {
   const managementSource = fs.readFileSync('appointment-management-2.3.26.js', 'utf8');
+  assert.match(managementSource, /Promise\.race\(\[Promise\.resolve\(request\)/, 'Silme isteği tarayıcıyı süresiz kilitlememeli');
+  assert.match(managementSource, /function finishUi\(\)/, 'Silme sonrası arayüz tek merkezden kapatılmalı');
   const buttonSource = fs.readFileSync('appointment-cancel-button-2.3.27.js', 'utf8');
   const authCleanupSource = fs.readFileSync('pwa-auth-contact-cleanup-2.3.25.js', 'utf8');
   assert.equal(managementSource.includes('Randevu Yönetimi'), false, 'Eski yönetim ekranı geri gelmemeli');

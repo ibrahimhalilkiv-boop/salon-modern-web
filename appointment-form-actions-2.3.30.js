@@ -8,7 +8,17 @@
   async function saveNow(event){
     event&&event.preventDefault();event&&event.stopPropagation();var parts=elements(),form=parts.form,button=parts.save;if(!form||saving)return false;
     if(form.reportValidity&&!form.reportValidity())return false;saving=true;var label=button&&button.textContent||'Randevuyu kaydet';if(button){button.disabled=true;button.textContent='Kaydediliyor…'}closeSuggestions();
-    try{if(typeof window.saveAppointment!=='function')throw new Error('Randevu kayıt işlevi yüklenemedi.');await window.saveAppointment({preventDefault:function(){},stopPropagation:function(){},target:form,currentTarget:form,submitter:button})}
+    try{
+      if(typeof window.saveAppointment!=='function')throw new Error('Randevu kayıt işlevi yüklenemedi.');
+      var task=Promise.resolve(window.saveAppointment({preventDefault:function(){},stopPropagation:function(){},target:form,currentTarget:form,submitter:button}));
+      var outcome=await Promise.race([task.then(function(){return 'done'}),new Promise(function(resolve){setTimeout(function(){resolve('timeout')},10000)})]);
+      if(outcome==='timeout'){
+        window.closeAppointmentModal&&window.closeAppointmentModal();
+        if(typeof window.showPage==='function')window.showPage('calendar');
+        window.showAppToast&&window.showAppToast('İşlem sunucuya gönderildi','Takvim arka planda doğrulanıyor. Ekran kilitlenmedi.');
+        task.catch(function(error){console.warn('[appointment-actions] late save failed',error)}).finally(function(){Promise.resolve(window.reloadRemoteData&&window.reloadRemoteData()).catch(function(error){console.warn('[appointment-actions] refresh failed',error)})});
+      }
+    }
     catch(error){console.error('[appointment-actions] save',error);window.showAppToast&&window.showAppToast('Randevu kaydedilemedi',error&&error.message||'Tekrar deneyin.')}
     finally{saving=false;if(button&&document.body.contains(button)){button.disabled=false;button.textContent=label}}return false;
   }

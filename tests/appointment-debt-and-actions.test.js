@@ -19,7 +19,9 @@ assert.match(actions, /back\.ontouchend=touch\(cancelNow\)/, 'Vazgeç düğmesi 
 assert.match(actions, /share\.ontouchend=touch\(shareNow\)/, 'WhatsApp düğmesi mobil dokunmada çalışmalı');
 assert.match(actions, /closeAppointmentModal/, 'Vazgeç düğmesi doğrudan modalı kapatmalı');
 assert.match(actions, /requestAppointmentDeletion|permanentAppointmentDelete/, 'Sil düğmesi güvenli silme katmanında kalmalı');
-assert.match(worker, /salon-modern-shell-pwa-v28/, 'Yeni PWA cache sürümü kullanılmalı');
+assert.match(actions, /Promise\.race\(\[task/, 'Kayıt isteği tarayıcıyı süresiz kilitlememeli');
+assert.match(actions, /Takvim arka planda doğrulanıyor/, 'Zaman aşımında kullanıcıya arka plan doğrulaması bildirilmeli');
+assert.match(worker, /salon-modern-shell-pwa-v29/, 'Yeni PWA cache sürümü kullanılmalı');
 assert.match(worker, /appointment-form-actions-2\.3\.30\.js/, 'Yeni form katmanı offline kabuğuna eklenmeli');
 
 console.log('PASS appointment debt verification and form actions');
