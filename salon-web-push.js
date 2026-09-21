@@ -17,7 +17,26 @@ async function enable(){try{if(!supported())throw new Error('Bu tarayıcı Web P
 async function disable(){try{var sub=await existing();if(sub&&currentUser)await salonDb.from('web_push_subscriptions').update({active:false,updated_at:new Date().toISOString()}).eq('endpoint',sub.endpoint).eq('user_id',currentUser.id);if(sub)await sub.unsubscribe();subscription=null;render();toast('Bildirimler kapatıldı','Bu cihaz artık bildirim almayacak.')}catch(error){toast('Bildirim kapatılamadı',error.message||String(error))}}
 async function test(){try{if(!subscription)throw new Error('Önce bildirimleri açın.');var result=await server('test');toast('Test bildirimi',result.dispatched?.sent?'Gönderildi.':'Birkaç saniye içinde gelmeli.')}catch(error){toast('Test gönderilemedi',error.message||String(error))}}
 function install(){if(document.getElementById('pushSettings'))return;var app=document.getElementById('app'),nav=app?.querySelector('.nav');if(!app)return;var page=document.createElement('section');page.id='pushSettings';page.className='page';page.innerHTML='<div class="content"><button class="back" onclick="showPage(\'home\')">‹ Ana sayfa</button><h1 class="page-title">Bildirim Ayarları</h1><div class="total"><small>Randevu bildirimleri</small><strong id="webPushStatus">Kontrol ediliyor…</strong><small>Yeni randevu, güncelleme ve 1 saatlik hatırlatma</small></div><button id="webPushEnable" class="fab" onclick="SalonWebPush.enable()">Randevu bildirimlerini aç</button><button id="webPushTest" class="fab" onclick="SalonWebPush.test()">Test bildirimi gönder</button><button id="webPushDisable" class="fab danger" onclick="SalonWebPush.disable()">Bu cihazda kapat</button><div class="security">Her telefon bildirim sistemine bir kez bağlanmalıdır. İzin yalnız bu düğmeye bastığınızda istenir. iPhone/iPad’de önce Salon Modern’i ana ekrana ekleyin.</div></div>';if(nav)app.insertBefore(page,nav);else app.appendChild(page);var homeContent=document.querySelector('#home .content');if(homeContent&&!document.getElementById('webPushPrompt')){var prompt=document.createElement('div');prompt.id='webPushPrompt';prompt.className='total';prompt.style.cssText='border:2px solid #bd8a3e;box-shadow:0 8px 24px rgba(0,0,0,.12)';prompt.innerHTML='<small>ÖNEMLİ · BİLDİRİMLER KAPALI</small><strong>Randevu bildirimlerini bu telefonda açın</strong><small>Atanan randevular ve 1 saat önceki hatırlatmalar, uygulama kapalıyken de gelir.</small><button type="button" class="fab" onclick="SalonWebPush.enable()">Şimdi bildirimleri aç</button>';homeContent.insertBefore(prompt,homeContent.firstChild)}var drawer=document.querySelector('.drawer');if(drawer){var button=document.createElement('button');button.className='menu-item';button.innerHTML='🔔 &nbsp; Bildirim Ayarları';button.onclick=function(){drawerPage('pushSettings')};var sep=drawer.querySelector('.drawer-separator');drawer.insertBefore(button,sep||null)}render()}
-function route(data){if(!data)return;if(data.appointmentDate)teamCalendarDate=data.appointmentDate;showPage('calendar');if(typeof reloadRemoteData==='function')reloadRemoteData()}
+function isOneHourReminder(data){var value=String(data?.type||data?.kind||data?.event||data?.tag||data?.title||'').toLocaleLowerCase('tr');return value.includes('reminder')||value.includes('hatırlat')||value.includes('1 saat')}
+function openReminderWhatsApp(data){
+  var id=data?.appointmentId||data?.appointment_id||data?.id;if(!id)return false;
+  var item=(typeof appts!=='undefined'&&Array.isArray(appts))?appts.find(function(row){return String(row.id)===String(id)}):null;
+  if(!item||typeof sendAppointmentReminderWhatsApp!=='function')return false;
+  sendAppointmentReminderWhatsApp(item.id);return true
+}
+async function route(data){
+  if(!data)return;
+  if(data.appointmentDate)teamCalendarDate=data.appointmentDate;
+  showPage('calendar');
+  if(isOneHourReminder(data)){
+    if(openReminderWhatsApp(data))return;
+    if(typeof reloadRemoteData==='function'){try{await reloadRemoteData()}catch(error){console.warn('[push-reminder] refresh failed',error)}}
+    if(openReminderWhatsApp(data))return;
+    if(typeof showAppToast==='function')showAppToast('Hatırlatma açıldı','Randevu bulunduğunda WhatsApp mesajını randevu üzerinden açabilirsiniz.');
+    return
+  }
+  if(typeof reloadRemoteData==='function')reloadRemoteData()
+}
 window.addEventListener('online',function(){toast('Bağlantı geri geldi','Veriler güncelleniyor.');if(currentUser&&typeof reloadRemoteData==='function')reloadRemoteData()});
 window.addEventListener('focus',function(){if(currentUser)sync()});
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&currentUser)sync()});
