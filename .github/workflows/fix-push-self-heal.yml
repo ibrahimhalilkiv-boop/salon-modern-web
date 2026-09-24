@@ -1,0 +1,43 @@
+name: Fix push subscription self-healing
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-push-self-heal.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Web Push lifecycle
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('salon-web-push.js')
+          s=p.read_text(encoding='utf-8')
+          old="async function sync(){try{var sub=await existing();if(currentUser&&Notification.permission==='granted'){if(!sub)sub=await subscribeCurrent();else await save(sub,true)}}catch(error){console.warn('Web Push eşitleme:',error);toast('Bildirim bağlantısı kurulamadı',error.message||'Bu cihaz sunucuya kaydedilemedi.')}render()}"
+          new="""async function sync(){try{var sub=await existing();if(currentUser&&Notification.permission==='granted'){if(!sub)sub=await subscribeCurrent();else{var raw=sub.toJSON(),endpoint=raw.endpoint||'';var check=await salonDb.from('web_push_subscriptions').select('id,active,user_id').eq('endpoint',endpoint).maybeSingle();if(check.error)throw check.error;if(check.data&&check.data.user_id===currentUser.id&&check.data.active===false){try{await sub.unsubscribe()}catch(_){}subscription=null;sub=await subscribeCurrent()}else await save(sub,true)}}}catch(error){console.warn('Web Push eşitleme:',error);toast('Bildirim bağlantısı kurulamadı',error.message||'Bu cihaz sunucuya kaydedilemedi.')}render()}"""
+          if old not in s: raise SystemExit('sync target not found')
+          s=s.replace(old,new,1)
+          marker="window.SalonWebPush={enable:enable,disable:disable,test:test,sync:sync,render:render};"
+          addition="""if(salonDb?.auth?.onAuthStateChange)salonDb.auth.onAuthStateChange(function(event,session){if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION')&&session?.user)setTimeout(sync,0)});
+setInterval(function(){if(!document.hidden&&currentUser&&Notification.permission==='granted')sync()},5*60*1000);
+"""
+          if marker not in s: raise SystemExit('export marker not found')
+          s=s.replace(marker,addition+marker,1)
+          p.write_text(s,encoding='utf-8')
+
+          sw=Path('sw.js')
+          w=sw.read_text(encoding='utf-8')
+          if "salon-modern-shell-pwa-v50" not in w: raise SystemExit('unexpected cache version')
+          sw.write_text(w.replace('salon-modern-shell-pwa-v50','salon-modern-shell-pwa-v51',1),encoding='utf-8')
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add salon-web-push.js sw.js
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: keep authenticated push devices registered"
+          git push
