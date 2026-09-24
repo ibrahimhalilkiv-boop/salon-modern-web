@@ -8,6 +8,7 @@ assert.match(primaryMigration, /row_number\(\) over/, 'Mevcut gruplara determini
 assert.match(primaryMigration, /where is_primary/, 'Her grupta birden fazla ana kişi veritabanında engellenmeli');
 
 const debtList = { innerHTML: '' };
+const debtDetailContent = { innerHTML: '', querySelector() { return { insertAdjacentElement(position, element) { global.debtDetailRelationButton = element; } }; }, prepend(element) { global.debtDetailRelationButton = element; } };
 const head = { appendChild() {} };
 global.window = global;
 global.currentUser = { id: 'manager-1', role: 'yonetici' };
@@ -26,7 +27,7 @@ global.appts = [
   { id: 'a2', operation: 'Sakal tıraşı' },
 ];
 global.document = {
-  getElementById(id) { return id === 'debtList' ? debtList : null; },
+  getElementById(id) { if (id === 'debtList') return debtList; if (id === 'debtDetailContent') return debtDetailContent; if (id === 'debtDetailRelationAction') return global.debtDetailRelationButton || null; return null; },
   createElement() { return { textContent: '', innerHTML: '', classList: { add() {}, remove() {} } }; },
   head,
   body: { appendChild() {} },
@@ -75,5 +76,8 @@ vm.runInThisContext(fs.readFileSync('debt-account-groups-2.3.29.js', 'utf8'));
   assert.doesNotMatch(debtList.innerHTML, /975\.00 TL/);
   assert.equal(global.remoteDebts[0].client_id, 'ahmet-id');
   assert.equal(global.remoteDebts[1].client_id, 'mehmet-id');
+  global.selectedDebtCustomerKey = 'id:ahmet-id';
+  global.renderDebtDetail();
+  assert.equal(global.debtDetailRelationButton.textContent, 'İlişkili borçları görüntüle');
   console.log('PASS debt account group total and customer_id isolation');
 })().catch(error => { console.error(error); process.exitCode = 1; });
