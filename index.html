@@ -846,7 +846,7 @@ function applyCustomerHistory(client){
   if(last){
     var operation=document.getElementById('appointmentOperation'),staffSelect=document.getElementById('appointmentStaff'),amount=document.getElementById('appointmentAmount');
     if(operation&&last.operation){renderServiceOptions(last.operation);operation.value=last.operation}
-    if(staffSelect&&last.staff&&Array.from(staffSelect.options).some(function(option){return option.value===last.staff}))staffSelect.value=last.staff;
+    /* Customer history must never overwrite the employee chosen from the calendar slot. */
     if(amount&&last.operation){var service=serviceByName(last.operation);amount.value=Number(service?.price||last.amount||0)}
   }
 }
