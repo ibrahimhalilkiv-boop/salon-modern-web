@@ -18,7 +18,7 @@ assert.match(actions, /closeAppointmentModal/, 'Vazgeç düğmesi doğrudan moda
 assert.match(actions, /requestAppointmentDeletion|permanentAppointmentDelete/, 'Sil düğmesi güvenli silme katmanında kalmalı');
 assert.match(actions, /Promise\.race\(\[task/, 'Kayıt isteği tarayıcıyı süresiz kilitlememeli');
 assert.match(actions, /Takvim arka planda doğrulanıyor/, 'Zaman aşımında kullanıcıya arka plan doğrulaması bildirilmeli');
-assert.match(worker, /salon-modern-shell-pwa-v49/, 'Yeni PWA cache sürümü kullanılmalı');
+assert.match(worker, /salon-modern-shell-pwa-v53/, 'Güncel PWA cache sürümü kullanılmalı');
 assert.match(worker, /appointment-form-actions-2\.3\.30\.js/, 'Yeni form katmanı offline kabuğuna eklenmeli');
 
 console.log('PASS appointment debt verification and form actions');
@@ -32,6 +32,6 @@ assert.doesNotMatch(actions, /subtree:true/, 'Randevu modalı alt ağacında Mut
 
 for (const file of ['appointment-debt-warning-2.3.28.js','appointment-cancel-button-2.3.27.js']) { const source=fs.readFileSync(file,'utf8'); assert.doesNotMatch(source,/subtree:\s*true/,file+' randevu modalında recursive observer kullanmamalı'); }
 
-const html=fs.readFileSync('salon-modern.html','utf8');assert.match(html,/button\.onpointerdown=choose/,'Müşteri seçimi mobil blur öncesinde işlenmeli');assert.match(html,/applyCustomerHistory\(client\)/,'Seçilen müşterinin telefon ve geçmiş bilgileri doldurulmalı');
+const html=fs.readFileSync('salon-modern.html','utf8');assert.match(actions,/panel\.onpointerdown=pick/,'Müşteri seçimi mobil blur öncesinde işlenmeli');assert.match(actions,/applyCustomerHistory\(client\)/,'Seçilen müşterinin telefon ve geçmiş bilgileri doldurulmalı');
 
 const customerHtml=fs.readFileSync('salon-modern.html','utf8');const historyFn=customerHtml.match(/function applyCustomerHistory\(client\)\{[\s\S]*?\n\}/)?.[0]||'';assert.match(historyFn,/client\.phone/,'Müşteri seçimi telefonu doldurmalı');assert.match(historyFn,/lastAppointmentForClient/,'Müşteri seçimi son randevuyu bulmalı');assert.match(historyFn,/appointmentOperation/,'Son hizmet otomatik seçilmeli');assert.match(historyFn,/appointmentStaff/,'Son hizmeti veren çalışan otomatik seçilmeli');

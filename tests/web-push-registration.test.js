@@ -12,6 +12,6 @@ assert.match(push, /rpc\('claim_web_push_subscription'/, 'Aynı cihaz mevcut kul
 assert.match(push, /Bildirim cihazı sunucuya kaydedilemedi/, 'Sunucu kayıt hatası kullanıcıdan gizlenmemeli');
 assert.match(push, /location\.assign\(url\)/, 'Hatırlatma tıklaması Android popup engeline takılmamalı');
 assert.match(push, /\^90\\d\{10\}\$/, 'WhatsApp yalnız geçerli normalize Türkiye numarasıyla açılmalı');
-assert.match(worker, /salon-modern-shell-pwa-v52/, 'Yeni bildirim kodu eski PWA önbelleğinden ayrılmalı');
+assert.match(worker, /salon-modern-shell-pwa-v53/, 'Yeni bildirim kodu eski PWA önbelleğinden ayrılmalı');
 assert.match(worker, /self\.addEventListener\('push'/, 'Service Worker push olayını göstermeli');
 console.log('PASS web push registration and reminder delivery client');
