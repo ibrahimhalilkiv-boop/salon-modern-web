@@ -1,0 +1,32 @@
+name: Preserve selected appointment staff
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/fix-selected-appointment-staff.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve calendar-selected employee
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          old = "if(staffSelect&&last.staff&&Array.from(staffSelect.options).some(function(option){return option.value===last.staff}))staffSelect.value=last.staff;"
+          if old not in s:
+              raise SystemExit('Target staff-history assignment not found; no change made.')
+          s = s.replace(old, "/* Customer history must never overwrite the employee chosen from the calendar slot. */", 1)
+          p.write_text(s, encoding='utf-8')
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: keep calendar-selected employee on customer autofill"
+          git push
