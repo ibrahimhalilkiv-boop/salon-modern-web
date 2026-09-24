@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-var API='https://oxuwwjsakhcqimjsfris.supabase.co/functions/v1/web-push-dispatch',subscription=null;
+var API='https://oxuwwjsakhcqimjsfris.supabase.co/functions/v1/web-push-dispatch',subscription=null,syncBusy=false;
 function supported(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window}
 function decode(value){var raw=atob((value+'='.repeat((4-value.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/')),out=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
 function toast(a,b){if(typeof showAppToast==='function')showAppToast(a,b)}
@@ -12,7 +12,7 @@ async function existing(){if(!supported())return null;subscription=await (await 
 async function subscribeCurrent(){var registration=await navigator.serviceWorker.ready,sub=await registration.pushManager.getSubscription();if(!sub)sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decode(await key())});subscription=sub;await save(sub,true);return sub}
 function text(){if(!supported())return 'Bu cihazda Web Push desteklenmiyor';if(Notification.permission==='denied')return 'Tarayıcı ayarlarından engellenmiş';if(Notification.permission==='granted'&&subscription)return '✓ Açık';return Notification.permission==='granted'?'İzin açık, cihaz bağlanmamış':'Kapalı'}
 function render(){var status=document.getElementById('webPushStatus');if(status)status.textContent=text();var on=document.getElementById('webPushEnable'),off=document.getElementById('webPushDisable'),test=document.getElementById('webPushTest'),prompt=document.getElementById('webPushPrompt');if(on)on.disabled=!supported()||Notification.permission==='denied';if(off)off.disabled=!subscription;if(test)test.disabled=!subscription;if(prompt)prompt.hidden=Boolean(subscription)||!supported()||Notification.permission==='denied'}
-async function sync(){try{var sub=await existing();if(currentUser&&Notification.permission==='granted'){if(!sub)sub=await subscribeCurrent();else await save(sub,true)}}catch(error){console.warn('Web Push eşitleme:',error);toast('Bildirim bağlantısı kurulamadı',error.message||'Bu cihaz sunucuya kaydedilemedi.')}render()}
+async function sync(){if(syncBusy)return;syncBusy=true;try{if(!supported())return;var sessionResult=await salonDb.auth.getSession(),session=sessionResult.data?.session;if(!session?.user)return;var sub=await existing();if(Notification.permission==='granted'){if(!sub)sub=await subscribeCurrent();else await save(sub,true)}}catch(error){console.warn('Web Push eşitleme:',error);toast('Bildirim bağlantısı kurulamadı',error.message||'Bu cihaz sunucuya kaydedilemedi.')}finally{syncBusy=false;render()}}
 async function enable(){try{if(!supported())throw new Error('Bu tarayıcı Web Push bildirimlerini desteklemiyor.');var permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();if(permission!=='granted')throw new Error(permission==='denied'?'Bildirim izni tarayıcı ayarlarından engellenmiş.':'Bildirim izni verilmedi.');await subscribeCurrent();render();var check=await server('test');toast('Bildirimler açıldı',check.dispatched?.sent?'Test bildirimi gönderildi.':'Bu cihaz artık randevu bildirimlerini alacak.')}catch(error){toast('Bildirimler açılamadı',error.message||String(error));render()}}
 async function disable(){try{var sub=await existing();if(sub&&currentUser)await salonDb.from('web_push_subscriptions').update({active:false,updated_at:new Date().toISOString()}).eq('endpoint',sub.endpoint).eq('user_id',currentUser.id);if(sub)await sub.unsubscribe();subscription=null;render();toast('Bildirimler kapatıldı','Bu cihaz artık bildirim almayacak.')}catch(error){toast('Bildirim kapatılamadı',error.message||String(error))}}
 async function test(){try{if(!subscription)throw new Error('Önce bildirimleri açın.');var result=await server('test');toast('Test bildirimi',result.dispatched?.sent?'Gönderildi.':'Birkaç saniye içinde gelmeli.')}catch(error){toast('Test gönderilemedi',error.message||String(error))}}
@@ -42,12 +42,14 @@ async function route(data){
   }
   if(typeof reloadRemoteData==='function')reloadRemoteData()
 }
-window.addEventListener('online',function(){toast('Bağlantı geri geldi','Veriler güncelleniyor.');if(currentUser&&typeof reloadRemoteData==='function')reloadRemoteData()});
-window.addEventListener('focus',function(){if(currentUser)sync()});
-document.addEventListener('visibilitychange',function(){if(!document.hidden&&currentUser)sync()});
+window.addEventListener('online',function(){toast('Bağlantı geri geldi','Veriler güncelleniyor.');if(currentUser&&typeof reloadRemoteData==='function')reloadRemoteData();sync()});
+window.addEventListener('focus',function(){sync()});
+document.addEventListener('visibilitychange',function(){if(!document.hidden)sync()});
 window.addEventListener('offline',function(){toast('İnternet bağlantısı yok','Canlı veriler güncellenemiyor.')});
 if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('message',function(event){if(event.data?.type==='SALON_NOTIFICATION_OPEN')route(event.data.data)});
 var enter=window.enterApp;window.enterApp=function(){var result=enter.apply(this,arguments);install();sync();var p=new URLSearchParams(location.search);if(p.get('date'))setTimeout(function(){route({appointmentDate:p.get('date'),appointmentId:p.get('appointment'),kind:p.get('kind')||''})},0);return result};
 var leave=window.logout;window.logout=async function(){try{var sub=await existing();if(sub&&currentUser)await salonDb.from('web_push_subscriptions').update({active:false,updated_at:new Date().toISOString()}).eq('endpoint',sub.endpoint).eq('user_id',currentUser.id)}catch(_){}return leave.apply(this,arguments)};
+if(salonDb?.auth?.onAuthStateChange)salonDb.auth.onAuthStateChange(function(event,session){if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION')&&session?.user)setTimeout(sync,0)});
+setInterval(function(){if(!document.hidden&&Notification.permission==='granted')sync()},5*60*1000);
 window.SalonWebPush={enable:enable,disable:disable,test:test,sync:sync,render:render};
 })();
