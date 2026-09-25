@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v54';
+const CACHE_NAME = 'salon-modern-shell-pwa-v55';
 const APP_SHELL = [
   './salon-modern.html',
   './manifest.webmanifest',
@@ -27,6 +27,11 @@ const APP_SHELL = [
   './appointment-debt-warning-2.3.28.js',
   './debt-account-groups-2.3.29.js'
   ,'./appointment-form-actions-2.3.30.js'
+  ,'./booking-requests-admin-2.4.0.js'
+  ,'./randevu/'
+  ,'./randevu/booking.css'
+  ,'./randevu/booking.js'
+  ,'./randevu/durum/'
 ];
 
 self.addEventListener('install', event => {
@@ -81,10 +86,19 @@ self.addEventListener('fetch', event => {
       fetch(event.request)
         .then(response => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put('./salon-modern.html', copy));
+          const fallbackKey = requestUrl.pathname.includes('/randevu/durum')
+            ? './randevu/durum/'
+            : requestUrl.pathname.includes('/randevu')
+              ? './randevu/'
+              : './salon-modern.html';
+          caches.open(CACHE_NAME).then(cache => cache.put(fallbackKey, copy));
           return response;
         })
-        .catch(() => caches.match('./salon-modern.html'))
+        .catch(() => requestUrl.pathname.includes('/randevu/durum')
+          ? caches.match('./randevu/durum/')
+          : requestUrl.pathname.includes('/randevu')
+            ? caches.match('./randevu/')
+            : caches.match('./salon-modern.html'))
     );
     return;
   }

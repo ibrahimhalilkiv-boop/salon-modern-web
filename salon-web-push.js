@@ -31,6 +31,11 @@ function openReminderWhatsApp(data){
 }
 async function route(data){
   if(!data)return;
+  if(data.kind==='booking_request'||data.type==='booking_request'){
+    showPage('bookingRequests');
+    if(window.SalonBookingRequests)window.SalonBookingRequests.load();
+    return
+  }
   if(data.appointmentDate)teamCalendarDate=data.appointmentDate;
   showPage('calendar');
   if(isOneHourReminder(data)){

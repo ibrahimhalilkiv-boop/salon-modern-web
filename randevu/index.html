@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Salon Modern | Online Randevu</title>
+  <meta name="description" content="Salon Modern'den online randevu talebi oluşturun. Size uygun hizmeti, çalışanı, tarihi ve saati seçin.">
+  <link rel="canonical" href="https://salonmodern.com.tr/randevu">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Salon Modern | Online Randevu">
+  <meta property="og:description" content="Salon Modern'den online randevu talebi oluşturun. Size uygun hizmeti, çalışanı, tarihi ve saati seçin.">
+  <meta property="og:url" content="https://salonmodern.com.tr/randevu">
+  <meta property="og:image" content="https://salonmodern.com.tr/salon_brand_logo.jpg">
+  <meta name="theme-color" content="#101917">
+  <link rel="icon" href="../salon-icon-192.png">
+  <link rel="stylesheet" href="booking.css">
+</head>
+<body>
+  <main class="booking-shell">
+    <header class="hero">
+      <img src="../salon-icon-192.png" alt="" width="62" height="62">
+      <p class="eyebrow">SALON MODERN</p>
+      <h1>Online Randevu</h1>
+      <p>Size uygun zamanı seçin, randevu talebinizi oluşturun. Talebiniz Salon Modern tarafından onaylandığında size bilgi verilecektir.</p>
+    </header>
+
+    <section class="card" id="bookingCard">
+      <div class="steps" aria-label="Randevu adımları">
+        <span class="active">1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+      </div>
+      <form id="bookingForm" novalidate>
+        <section class="step active" data-step="1">
+          <small>1 / 5</small><h2>Hizmet seçin</h2>
+          <div id="services" class="choice-grid"><p class="loading">Hizmetler yükleniyor…</p></div>
+        </section>
+        <section class="step" data-step="2">
+          <small>2 / 5</small><h2>Çalışan tercihi</h2>
+          <div id="employees" class="choice-grid"></div>
+        </section>
+        <section class="step" data-step="3">
+          <small>3 / 5</small><h2>Tarih seçin</h2>
+          <label>Tarih<input id="bookingDate" type="date" required></label>
+        </section>
+        <section class="step" data-step="4">
+          <small>4 / 5</small><h2>Müsait saat</h2>
+          <div id="slots" class="slot-grid"><p class="muted">Tarih seçiminizden sonra saatler gösterilecek.</p></div>
+          <p id="pendingHint" class="hint" hidden>Aynı saat için bekleyen başka talepler olabilir. Kesin müsaitlik onay sırasında tekrar kontrol edilir.</p>
+        </section>
+        <section class="step" data-step="5">
+          <small>5 / 5</small><h2>Bilgileriniz</h2>
+          <label>Ad Soyad<input id="customerName" autocomplete="name" maxlength="120" required placeholder="Adınız ve soyadınız"></label>
+          <label>Telefon<input id="customerPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="17" required placeholder="05XX XXX XX XX"></label>
+          <label>Not <em>isteğe bağlı</em><textarea id="customerNote" maxlength="500" rows="3" placeholder="Eklemek istediğiniz bir not varsa"></textarea></label>
+          <div id="summary" class="summary"></div>
+        </section>
+        <p id="formError" class="error" role="alert"></p>
+        <div class="form-actions">
+          <button type="button" id="backButton" class="secondary" hidden>Geri</button>
+          <button type="button" id="nextButton">Devam et</button>
+          <button type="submit" id="submitButton" hidden>Talebi gönder</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card success" id="successCard" hidden>
+      <div class="success-mark">✓</div>
+      <h2>Randevu talebiniz alındı</h2>
+      <p>Tarih ve saat Salon Modern tarafından onaylandıktan sonra randevunuz kesinleşecektir.</p>
+      <p>Talep numaranız: <strong id="requestNumber"></strong></p>
+      <a id="statusLink" class="button-link" href="durum/">Talep durumunu görüntüle</a>
+    </section>
+
+    <footer><a href="durum/">Mevcut talebimin durumunu kontrol et</a></footer>
+  </main>
+  <script src="booking.js"></script>
+</body>
+</html>
