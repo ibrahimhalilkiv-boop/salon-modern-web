@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 const allowedOrigins = new Set([
   'https://salonmodern.com.tr',
@@ -132,14 +133,13 @@ async function createRequest(req: Request) {
   if (new Date(startAt).getTime() > max) return reply(req, { error: 'En fazla 90 gün sonrası seçilebilir.' }, 400)
 
   const ip = (req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown').split(',')[0].trim()
-  const rateLimitSalt = Deno.env.get('BOOKING_RATE_LIMIT_SALT')
-  if (!rateLimitSalt) throw new Error('BOOKING_RATE_LIMIT_SALT ayarlanmamış.')
+  const rateLimitSalt = Deno.env.get('BOOKING_RATE_LIMIT_SALT') || SERVICE_ROLE_KEY
   const ipHash = await sha256(`${ip}:${rateLimitSalt}`)
   const since = new Date(Date.now() - 30 * 60000).toISOString()
   const [phoneCount, ipCount, service] = await Promise.all([
-    db.from('booking_requests').select('id', { count: 'exact', head: true }).eq('customer_phone', customerPhone).gte('created_at', since),
-    db.from('booking_requests').select('id', { count: 'exact', head: true }).eq('request_ip_hash', ipHash).gte('created_at', since),
-    db.from('services').select('id,duration_minutes').eq('id', serviceId).eq('active', true).maybeSingle(),
+    db.from('online_booking_requests').select('id', { count: 'exact', head: true }).eq('phone_normalized', customerPhone).gte('created_at', since),
+    db.from('online_booking_requests').select('id', { count: 'exact', head: true }).eq('request_ip_hash', ipHash).gte('created_at', since),
+    db.from('services').select('id,name,price,duration_minutes').eq('id', serviceId).eq('active', true).maybeSingle(),
   ])
   if ((phoneCount.count || 0) >= 3 || (ipCount.count || 0) >= 10) return reply(req, { error: 'Çok fazla talep gönderildi. Lütfen daha sonra deneyin.' }, 429)
   if (!service.data) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
@@ -157,11 +157,12 @@ async function createRequest(req: Request) {
   const chosen = (availabilityBody.slots || []).find((item: { time: string, employeeIds: string[] }) => item.time === time)
   if (!chosen || (employeeId && !chosen.employeeIds.includes(employeeId))) return reply(req, { error: 'Seçilen saat artık müsait değil.' }, 409)
 
-  const client = await db.rpc('find_client_id_by_phone', { p_phone: customerPhone })
-  const inserted = await db.from('booking_requests').insert({
-    client_id: client.data || null, customer_name: customerName, customer_phone: customerPhone,
-    service_id: serviceId, requested_employee_id: employeeId, requested_date: requestedDate,
-    requested_start_at: startAt, duration_minutes: Number(service.data.duration_minutes || 60), note, request_ip_hash: ipHash,
+  if (!employeeId) return reply(req, { error: 'Bir çalışan seçin.' }, 400)
+  const inserted = await db.from('online_booking_requests').insert({
+    client_name: customerName, phone: customerPhone, phone_normalized: customerPhone,
+    service_id: serviceId, service_name: service.data.name, amount: service.data.price,
+    employee_id: employeeId, scheduled_at: startAt,
+    duration_minutes: Number(service.data.duration_minutes || 30), note, request_ip_hash: ipHash,
   }).select('id,public_token').single()
   if (inserted.error) throw inserted.error
 
@@ -175,18 +176,25 @@ async function createRequest(req: Request) {
 
 async function publicStatus(req: Request, token: string) {
   if (!/^[0-9a-f-]{36}$/i.test(token)) return reply(req, { error: 'Geçersiz takip kodu.' }, 400)
-  const row = await db.from('booking_requests').select('status,requested_date,requested_start_at').eq('public_token', token).maybeSingle()
+  const row = await db.from('online_booking_requests').select('status,scheduled_at').eq('public_token', token).maybeSingle()
   if (!row.data) return reply(req, { error: 'Talep bulunamadı.' }, 404)
-  return reply(req, row.data)
+  return reply(req, { status: row.data.status, requested_date: row.data.scheduled_at, requested_start_at: row.data.scheduled_at })
 }
 
 async function adminList(req: Request) {
   const actor = await manager(req)
   if (!actor) return reply(req, { error: 'Yönetici oturumu gerekli.' }, 401)
-  const rows = await db.from('booking_requests').select('*,services(name,price),requested_profile:profiles!booking_requests_requested_employee_id_fkey(full_name),assigned_profile:profiles!booking_requests_assigned_employee_id_fkey(full_name)')
+  const rows = await db.from('online_booking_requests').select('*,services(name,price),requested_profile:profiles!online_booking_requests_employee_id_fkey(full_name)')
     .order('created_at', { ascending: false }).limit(250)
   if (rows.error) throw rows.error
-  return reply(req, { requests: rows.data })
+  return reply(req, { requests: (rows.data || []).map((row) => ({
+    ...row,
+    customer_name: row.client_name,
+    customer_phone: row.phone_normalized,
+    requested_employee_id: row.employee_id,
+    requested_start_at: row.scheduled_at,
+    assigned_profile: row.requested_profile,
+  })) })
 }
 
 async function adminAction(req: Request, action: string) {
@@ -196,12 +204,16 @@ async function adminAction(req: Request, action: string) {
   const requestId = clean(body.requestId, 80)
   if (!requestId) return reply(req, { error: 'Talep kimliği gerekli.' }, 400)
   if (action === 'approve') {
-    const result = await db.rpc('approve_booking_request', { p_request_id: requestId, p_employee_id: body.employeeId, p_actor_id: actor.id })
+    const userDb = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('authorization') || '' } } })
+    const result = await userDb.rpc('approve_online_booking_request', { p_request_id: requestId })
     if (result.error) return reply(req, { error: result.error.message }, 409)
-    return reply(req, { approved: true, result: result.data?.[0] || null })
+    return reply(req, { approved: true, result: result.data || null })
   }
-  const result = await db.rpc('reject_booking_request', { p_request_id: requestId, p_actor_id: actor.id, p_reason: clean(body.reason, 300) || null })
+  const userDb = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('authorization') || '' } } })
+  const result = await userDb.rpc('reject_online_booking_request', { p_request_id: requestId })
   if (result.error) return reply(req, { error: result.error.message }, 409)
+  const reason = clean(body.reason, 300) || null
+  if (reason) await db.from('online_booking_requests').update({ rejection_reason: reason }).eq('id', requestId).eq('status', 'rejected')
   return reply(req, { rejected: true })
 }
 

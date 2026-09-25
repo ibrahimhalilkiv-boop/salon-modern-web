@@ -9,21 +9,17 @@ const adminJs = fs.readFileSync('booking-requests-admin-2.4.0.js', 'utf8');
 const shell = fs.readFileSync('sw.js', 'utf8');
 const index = fs.readFileSync('index.html', 'utf8');
 
-assert.match(migration, /create table if not exists public\.booking_requests/, 'Talep tablosu ayrı olmalı');
-assert.match(migration, /status in \('pending','approved','rejected','cancelled'\)/, 'Durumlar kontrollü olmalı');
-assert.match(migration, /alter table public\.booking_requests enable row level security/, 'RLS açık olmalı');
-assert.match(migration, /revoke all on table public\.booking_requests from public, anon, authenticated/, 'Public tablo erişimi kapalı olmalı');
+assert.doesNotMatch(migration, /create table/i, 'Canlıdaki mevcut talep tablosu tekrar oluşturulmamalı');
+assert.match(migration, /alter table public\.online_booking_requests/, 'Mevcut online talep tablosu genişletilmeli');
+assert.match(migration, /public_token uuid not null default gen_random_uuid/, 'Tahmin edilemeyen takip kodu olmalı');
+assert.match(migration, /alter table public\.online_booking_requests enable row level security/, 'RLS açık kalmalı');
+assert.match(migration, /revoke all on table public\.online_booking_requests from anon/, 'Public tablo erişimi kapalı olmalı');
 assert.doesNotMatch(migration, /grant insert[^;]+anon/i, 'Anon doğrudan talep tablosuna yazamamalı');
-assert.match(migration, /for update/, 'Onay RPC içinde talep güncellenmeli');
-assert.match(migration, /where id = p_request_id for update/, 'Eşzamanlı onay satır kilidi kullanmalı');
-assert.match(migration, /Bu saat artık müsait değil/, 'Onayda müsaitlik tekrar doğrulanmalı');
-assert.match(migration, /insert into public\.appointments/, 'Yalnız onay RPC gerçek randevu oluşturmalı');
-assert.match(migration, /grant execute on function public\.approve_booking_request[^;]+service_role/, 'Onay RPC yalnız sunucudan çağrılmalı');
-assert.match(migration, /find_client_id_by_phone/, 'Mevcut müşteri telefonla server-side eşleştirilmeli');
 
 assert.match(edge, /BOOKING_RATE_LIMIT_SALT/, 'Rate limit IP verisi hashlenmeli');
 assert.doesNotMatch(edge, /BOOKING_RATE_LIMIT_SALT'\) \|\| SUPABASE_URL/, 'IP hash için tahmin edilebilir fallback kullanılmamalı');
-assert.match(edge, /customer_phone[^\n]+gte\('created_at', since\)/, 'Telefon bazlı rate limit olmalı');
+assert.match(edge, /phone_normalized[^\n]+gte\('created_at', since\)/, 'Telefon bazlı rate limit olmalı');
+assert.match(edge, /online_booking_requests/, 'Tek talep veri kaynağı kullanılmalı');
 assert.match(edge, /request_ip_hash[^\n]+gte\('created_at', since\)/, 'IP bazlı rate limit olmalı');
 assert.match(edge, /db\.auth\.getUser\(token\)/, 'Yönetici işlemi JWT ile doğrulanmalı');
 assert.match(edge, /eq\('role', 'manager'\)/, 'Yönetici rolü server-side kontrol edilmeli');
