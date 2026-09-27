@@ -100,7 +100,7 @@ function phase2SummaryMetrics(){
 }
 function phase2OccupancyCards(){
   var appointments=phase2TodayAppointments();
-  return remoteProfiles.filter(function(profile){return profile.active&&(phase2IsManager()||String(profile.id)===String(currentUser.id))}).map(function(profile){
+  return remoteProfiles.filter(function(profile){return profile.active&&profile.username!=='salon.modern'&&(phase2IsManager()||String(profile.id)===String(currentUser.id))}).map(function(profile){
     var count=appointments.filter(function(item){return String(item.employeeId)===String(profile.id)}).length;
     return '<div class="phase2-occupancy"><strong>'+safe(profile.full_name.split(' ')[0])+'</strong><span>'+count+' randevu</span></div>';
   }).join('');
@@ -179,7 +179,7 @@ function phase2Periods(){
 function phase2RenderEmployeePerformance(){
   var holder=document.getElementById('employeePerformanceContent');if(!holder)return;if(!phase2IsManager()){holder.innerHTML='<div class="empty">Bu bölüm yalnızca yöneticilere açıktır.</div>';return}
   var p=phase2Periods(),now=Date.now();
-  holder.innerHTML=remoteProfiles.filter(function(profile){return profile.active}).map(function(profile){
+  holder.innerHTML=remoteProfiles.filter(function(profile){return profile.active&&profile.username!=='salon.modern'}).map(function(profile){
     var own=appts.filter(function(item){return String(item.employeeId)===String(profile.id)&&item.status!=='cancelled'}),past=own.filter(function(item){return Date.parse(remoteSchedule(appointmentDate(item),item.time))<=now&&item.status!=='no_show'}),customerCounts={};past.forEach(function(item){if(item.clientId)customerCounts[item.clientId]=(customerCounts[item.clientId]||0)+1});
     var unique=Object.keys(customerCounts),repeat=unique.filter(function(id){return customerCounts[id]>1}).length,monthItems=own.filter(function(item){return appointmentDate(item).startsWith(p.month)}),bookedMinutes=monthItems.reduce(function(sum,item){return sum+Number(item.duration||30)},0),elapsedDays=Math.max(1,new Date().getDate()),occupancy=Math.min(100,Math.round(bookedMinutes/(elapsedDays*16*60)*100));
     var busy={};own.forEach(function(item){var key=appointmentDate(item)+' '+item.time.slice(0,2)+':00';busy[key]=(busy[key]||0)+1});var busiest=Object.keys(busy).sort(function(a,b){return busy[b]-busy[a]})[0]||'Yeterli veri yok';

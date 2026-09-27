@@ -11,6 +11,8 @@ const index = fs.readFileSync('salon-modern.html', 'utf8');
 const notificationMigration = fs.readFileSync('supabase/migrations/20260927090000_allow_booking_request_notifications.sql', 'utf8');
 const scheduleAdmin = fs.readFileSync('booking-schedule-admin-2.4.1.js', 'utf8');
 const scheduleControls = fs.readFileSync('booking-schedule-controls-2.4.3.js', 'utf8');
+const phase2 = fs.readFileSync('salon-phase2-1.8.0.js', 'utf8');
+const assistant = fs.readFileSync('salon-assistant-2.0.0.js', 'utf8');
 
 assert.doesNotMatch(migration, /create table/i, 'Canlıdaki mevcut talep tablosu tekrar oluşturulmamalı');
 assert.match(migration, /alter table public\.online_booking_requests/, 'Mevcut online talep tablosu genişletilmeli');
@@ -52,7 +54,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v69/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v70/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -79,5 +81,7 @@ assert.match(scheduleAdmin, /getDay\(\)===0/, 'Yönetim takvimi de pazar günün
 assert.match(scheduleAdmin, /half=time\.slice\(3\)===['"]00['"]\|\|time\.slice\(3\)===['"]30['"]/, 'Yönetim takviminde saat ve yarım saat başlangıçları seçilebilmeli');
 assert.match(scheduleAdmin, /for\(var minute=display\.start;minute<display\.end;minute\+=15\)/, 'Kapanış saati yalnız bitiş sınırı olmalı');
 assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=69/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
+assert.match(phase2, /profile\.active&&profile\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı günlük çalışan özetine katılmamalı');
+assert.match(assistant, /p\.active&&p\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı asistan çalışan sonuçlarına katılmamalı');
 
 console.log('customer booking request tests: PASS');
