@@ -1420,17 +1420,23 @@ var rememberControl=document.getElementById('loginRemember');if(rememberControl)
 document.getElementById('setupForm')?.classList.add('hidden');document.getElementById('loginForm')?.classList.add('hidden');document.getElementById('auth')?.classList.add('hidden');
 function installCalendarDaySwipe(){
   var area=document.getElementById('calendarContent');if(!area||area.dataset.daySwipe==='1')return;
-  area.dataset.daySwipe='1';var startX=0,startY=0,blocked=false;
+  area.dataset.daySwipe='1';area.style.touchAction='pan-y';var startX=0,startY=0,blocked=false,horizontal=false;
   area.addEventListener('touchstart',function(event){
     var touch=event.touches&&event.touches[0];if(!touch)return;
-    blocked=!!event.target.closest('button,input,select,textarea,a,.modal');startX=touch.clientX;startY=touch.clientY;
+    blocked=!!event.target.closest('input,select,textarea,a,.modal');horizontal=false;startX=touch.clientX;startY=touch.clientY;
   },{passive:true});
-  area.addEventListener('touchend',function(event){
-    if(blocked||teamCalendarMode==='month')return;var touch=event.changedTouches&&event.changedTouches[0];if(!touch)return;
+  area.addEventListener('touchmove',function(event){
+    if(blocked)return;var touch=event.touches&&event.touches[0];if(!touch)return;
     var dx=touch.clientX-startX,dy=touch.clientY-startY;
-    if(Math.abs(dx)<55||Math.abs(dx)<=Math.abs(dy)*1.35)return;
+    if(!horizontal&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.25)horizontal=true;
+    if(horizontal)event.preventDefault();
+  },{passive:false});
+  area.addEventListener('touchend',function(event){
+    if(blocked)return;var touch=event.changedTouches&&event.changedTouches[0];if(!touch)return;
+    var dx=touch.clientX-startX,dy=touch.clientY-startY;
+    if(Math.abs(dx)<38||Math.abs(dx)<=Math.abs(dy)*1.25)return;
     area.dataset.swipedUntil=String(Date.now()+500);
-    moveTeamCalendar(dx<0?1:-1);
+    if(teamCalendarMode==='month')moveTeamMonth(dx<0?1:-1);else moveTeamCalendar(dx<0?1:-1);
   },{passive:true});
   area.addEventListener('click',function(event){if(Number(area.dataset.swipedUntil||0)>Date.now()){event.preventDefault();event.stopPropagation()}},true);
 }
