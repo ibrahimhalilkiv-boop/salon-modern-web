@@ -8,6 +8,7 @@ const publicJs = fs.readFileSync('randevu/booking.js', 'utf8');
 const adminJs = fs.readFileSync('booking-requests-admin-2.4.0.js', 'utf8');
 const shell = fs.readFileSync('sw.js', 'utf8');
 const index = fs.readFileSync('index.html', 'utf8');
+const notificationMigration = fs.readFileSync('supabase/migrations/20260927090000_allow_booking_request_notifications.sql', 'utf8');
 
 assert.doesNotMatch(migration, /create table/i, 'Canlıdaki mevcut talep tablosu tekrar oluşturulmamalı');
 assert.match(migration, /alter table public\.online_booking_requests/, 'Mevcut online talep tablosu genişletilmeli');
@@ -26,6 +27,8 @@ assert.match(edge, /eq\('role', 'manager'\)/, 'Yönetici rolü server-side kontr
 assert.match(edge, /action === 'availability'/, 'Public müsaitlik endpointi olmalı');
 assert.match(edge, /action === 'status'/, 'Güvenli tokenlı durum endpointi olmalı');
 assert.match(edge, /kind: 'booking_request'/, 'Yönetici bildirimi mevcut notifications yapısına yazılmalı');
+assert.match(edge, /notification insert failed/, 'Bildirim hatası sessizce yutulmamalı');
+assert.match(notificationMigration, /'booking_request'::text/, 'Bildirim türü veritabanı kısıtında izinli olmalı');
 
 assert.match(publicHtml, /Salon Modern \| Online Randevu/, 'SEO başlığı bulunmalı');
 assert.match(publicHtml, /og:title/, 'Open Graph bilgisi bulunmalı');

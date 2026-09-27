@@ -167,10 +167,17 @@ async function createRequest(req: Request) {
   if (inserted.error) throw inserted.error
 
   const managers = await db.from('profiles').select('id').eq('active', true).eq('role', 'manager')
-  if (managers.data?.length) await db.from('notifications').insert(managers.data.map((item) => ({
-    recipient_id: item.id, kind: 'booking_request', title: 'YENİ RANDEVU TALEBİ',
-    body: `${customerName}\n${requestedDate} • ${time}`,
-  })))
+  if (managers.error) throw managers.error
+  if (managers.data?.length) {
+    const notified = await db.from('notifications').insert(managers.data.map((item) => ({
+      recipient_id: item.id, kind: 'booking_request', title: 'YENİ RANDEVU TALEBİ',
+      body: `${customerName}\n${requestedDate} • ${time}`,
+    })))
+    if (notified.error) {
+      console.error('[customer-booking-request] notification insert failed', notified.error)
+      return reply(req, { requestNumber: inserted.data.id.slice(0, 8).toUpperCase(), statusToken: inserted.data.public_token, notificationWarning: true }, 201)
+    }
+  }
   return reply(req, { requestNumber: inserted.data.id.slice(0, 8).toUpperCase(), statusToken: inserted.data.public_token }, 201)
 }
 
