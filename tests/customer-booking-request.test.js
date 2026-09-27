@@ -49,7 +49,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v59/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v61/, 'PWA cache sürümü yükseltilmeli');
 assert.match(shell, /\.\/randevu\//, 'Public sayfa çevrimdışı shell ayrımında tanınmalı');
 assert.match(publicHtml, /\.\.\/salon-modern\.html/, 'Randevu sayfasında personel girişi bulunmalı');
 assert.doesNotMatch(publicJs, /dakika<\/small>/, 'Hizmet kartında süre yazmamalı');
@@ -62,5 +62,7 @@ assert.match(scheduleControls, /online_booking_enabled/, 'Online randevu kalıc�
 assert.match(scheduleControls, /default_open_time/, 'Genel açılış saati düzenlenebilmeli');
 assert.match(scheduleControls, /grid-template-rows/, 'Takvim satırları seçili saat aralığına göre ekrana sığmalı');
 assert.match(edge, /neq\('username', 'salon\.modern'\)/, 'Yalnız yönetim hesabı çalışan seçeneklerine girmemeli');
+assert.match(edge, /getUTCDay\(\) === 0/, 'Özel ayar yoksa pazar günü kapalı olmalı');
+assert.match(scheduleAdmin, /getDay\(\)===0/, 'Yönetim takvimi de pazar gününü varsayılan kapalı saymalı');
 
 console.log('customer booking request tests: PASS');

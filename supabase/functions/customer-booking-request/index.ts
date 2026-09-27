@@ -75,7 +75,8 @@ async function bookingSchedule(date: string) {
   const defaultClose = timeMinutes(settings.data?.default_close_time, 19 * 60)
   const open = timeMinutes(override.data?.open_time, defaultOpen)
   const close = timeMinutes(override.data?.close_time, defaultClose)
-  const closed = settings.data?.online_booking_enabled === false || override.data?.is_closed === true || close <= open
+  const sunday = new Date(`${date}T12:00:00+03:00`).getUTCDay() === 0
+  const closed = settings.data?.online_booking_enabled === false || (override.data ? override.data.is_closed === true : sunday) || close <= open
   return { closed, open, close, openTime: minuteLabel(open), closeTime: minuteLabel(close), overridden: Boolean(override.data) }
 }
 
