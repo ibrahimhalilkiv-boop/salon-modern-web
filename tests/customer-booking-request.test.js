@@ -52,7 +52,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v68/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v69/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -76,5 +76,8 @@ assert.match(scheduleControls, /grid-template-rows/, 'Takvim satırları seçili
 assert.match(edge, /neq\('username', 'salon\.modern'\)/, 'Yalnız yönetim hesabı çalışan seçeneklerine girmemeli');
 assert.match(edge, /getUTCDay\(\) === 0/, 'Özel ayar yoksa pazar günü kapalı olmalı');
 assert.match(scheduleAdmin, /getDay\(\)===0/, 'Yönetim takvimi de pazar gününü varsayılan kapalı saymalı');
+assert.match(scheduleAdmin, /half=time\.slice\(3\)===['"]00['"]\|\|time\.slice\(3\)===['"]30['"]/, 'Yönetim takviminde saat ve yarım saat başlangıçları seçilebilmeli');
+assert.match(scheduleAdmin, /for\(var minute=display\.start;minute<display\.end;minute\+=15\)/, 'Kapanış saati yalnız bitiş sınırı olmalı');
+assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=69/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
 
 console.log('customer booking request tests: PASS');

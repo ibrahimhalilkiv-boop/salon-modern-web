@@ -36,6 +36,8 @@ assert.match(html, /appointmentHasOpenDebt\(item\)\?'appointment-debt-name'/, 'T
 assert.match(html, /select\('appointment_id'\)\.eq\('status','open'\)\.gt\('amount',0\)/, 'Takvim için açık borç randevu kimlikleri ayrı ve hafif sorgulanmalı');
 assert.match(html, /profile\.active&&profile\.username!==['"]salon\.modern['"]/, 'Yalnız yönetim hesabı çalışan özetine ve takvime katılmamalı');
 assert.match(fs.readFileSync('salon-debt-visibility-2.3.15.js', 'utf8'), /remoteOpenDebtAppointmentIds\.has\(appointmentId\)/, 'Son yüklenen borç görünürlük katmanı canlı indeksi kullanmalı');
+const scheduleAdmin = fs.readFileSync('booking-schedule-admin-2.4.1.js', 'utf8');
+assert.match(scheduleAdmin, /appointmentHasOpenDebt===['"]function['"]&&appointmentHasOpenDebt\(item\)\?['"]appointment-debt-name['"]/, 'Son yüklenen takvim katmanı borç rengini korumalı');
 
 const ui = fs.readFileSync('salon-ui-2.3.12.js', 'utf8');
 assert.match(ui, /\.appointment-debt-name\{color:#b42318!important\}/, 'Borçlu randevu müşteri adı kırmızı olmalı');
