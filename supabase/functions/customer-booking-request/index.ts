@@ -76,8 +76,9 @@ async function bookingSchedule(date: string) {
   const open = timeMinutes(override.data?.open_time, defaultOpen)
   const close = timeMinutes(override.data?.close_time, defaultClose)
   const sunday = new Date(`${date}T12:00:00+03:00`).getUTCDay() === 0
-  const closed = settings.data?.online_booking_enabled === false || (override.data ? override.data.is_closed === true : sunday) || close <= open
-  return { closed, open, close, openTime: minuteLabel(open), closeTime: minuteLabel(close), overridden: Boolean(override.data) }
+  const onlineBookingEnabled = settings.data?.online_booking_enabled !== false
+  const closed = !onlineBookingEnabled || (override.data ? override.data.is_closed === true : sunday) || close <= open
+  return { closed, onlineBookingEnabled, open, close, openTime: minuteLabel(open), closeTime: minuteLabel(close), overridden: Boolean(override.data) }
 }
 
 async function manager(req: Request) {
@@ -91,13 +92,16 @@ async function manager(req: Request) {
 }
 
 async function catalogue(req: Request) {
-  const [services, profiles, bookingSettings] = await Promise.all([
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date())
+  const currentTime = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
+  const [services, profiles, todaySchedule] = await Promise.all([
     db.from('services').select('id,name,price,duration_minutes').eq('active', true).order('price', { ascending: false }).order('name'),
     db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern').order('full_name'),
-    db.from('booking_settings').select('online_booking_enabled').eq('id', true).maybeSingle(),
+    bookingSchedule(today),
   ])
-  if (services.error || profiles.error || bookingSettings.error) throw services.error || profiles.error || bookingSettings.error
-  return reply(req, { services: services.data, employees: profiles.data, onlineBookingEnabled: bookingSettings.data?.online_booking_enabled !== false })
+  if (services.error || profiles.error) throw services.error || profiles.error
+  todaySchedule.hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) < todaySchedule.close
+  return reply(req, { services: services.data, employees: profiles.data, onlineBookingEnabled: todaySchedule.onlineBookingEnabled, today, todaySchedule })
 }
 
 async function availability(req: Request, url: URL) {
