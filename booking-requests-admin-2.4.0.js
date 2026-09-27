@@ -31,5 +31,5 @@ var priorShow=window.showPage;window.showPage=function(id){if(id==='bookingReque
 window.SalonBookingRequests={load:load,approve:approve,reject:reject,whatsapp:whatsapp};
 installPublicLink();
 if(activeUser()&&manager()){ensure();load();realtime()}
-if(!document.querySelector('script[data-booking-schedule="v62"]')){var scheduleScript=document.createElement('script');scheduleScript.dataset.bookingSchedule='v62';scheduleScript.src='booking-schedule-admin-2.4.1.js?v=62';scheduleScript.onload=function(){var controlsScript=document.createElement('script');controlsScript.src='booking-schedule-controls-2.4.3.js?v=62';document.body.appendChild(controlsScript)};document.body.appendChild(scheduleScript)}
+if(!document.querySelector('script[data-booking-schedule="v63"]')){var scheduleScript=document.createElement('script');scheduleScript.dataset.bookingSchedule='v63';scheduleScript.src='booking-schedule-admin-2.4.1.js?v=63';scheduleScript.onload=function(){var controlsScript=document.createElement('script');controlsScript.src='booking-schedule-controls-2.4.3.js?v=63';document.body.appendChild(controlsScript)};document.body.appendChild(scheduleScript)}
 })();
