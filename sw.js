@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v58';
+const CACHE_NAME = 'salon-modern-shell-pwa-v59';
 const APP_SHELL = [
   './',
   './salon-modern.html',
