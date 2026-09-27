@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v57';
+const CACHE_NAME = 'salon-modern-shell-pwa-v58';
 const APP_SHELL = [
   './',
   './salon-modern.html',
@@ -30,6 +30,7 @@ const APP_SHELL = [
   ,'./appointment-form-actions-2.3.30.js'
   ,'./booking-requests-admin-2.4.0.js'
   ,'./booking-schedule-admin-2.4.1.js'
+  ,'./booking-schedule-controls-2.4.3.js'
   ,'./randevu/'
   ,'./randevu/booking.css'
   ,'./randevu/booking.js'

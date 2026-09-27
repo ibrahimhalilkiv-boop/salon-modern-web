@@ -10,6 +10,7 @@ const shell = fs.readFileSync('sw.js', 'utf8');
 const index = fs.readFileSync('salon-modern.html', 'utf8');
 const notificationMigration = fs.readFileSync('supabase/migrations/20260927090000_allow_booking_request_notifications.sql', 'utf8');
 const scheduleAdmin = fs.readFileSync('booking-schedule-admin-2.4.1.js', 'utf8');
+const scheduleControls = fs.readFileSync('booking-schedule-controls-2.4.3.js', 'utf8');
 
 assert.doesNotMatch(migration, /create table/i, 'Canlıdaki mevcut talep tablosu tekrar oluşturulmamalı');
 assert.match(migration, /alter table public\.online_booking_requests/, 'Mevcut online talep tablosu genişletilmeli');
@@ -48,7 +49,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v57/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v58/, 'PWA cache sürümü yükseltilmeli');
 assert.match(shell, /\.\/randevu\//, 'Public sayfa çevrimdışı shell ayrımında tanınmalı');
 assert.match(publicHtml, /\.\.\/salon-modern\.html/, 'Randevu sayfasında personel girişi bulunmalı');
 assert.doesNotMatch(publicJs, /dakika<\/small>/, 'Hizmet kartında süre yazmamalı');
@@ -57,5 +58,9 @@ assert.match(scheduleAdmin, /booking_schedule_overrides/, 'Yönetim paneli tarih
 assert.match(scheduleAdmin, /Varsayılana dön/, 'Seçili tarih varsayılana döndürülebilmeli');
 assert.match(scheduleAdmin, /removeMessageUi/, 'Mesaj yönetim arayüzü kaldırılmalı');
 assert.match(scheduleAdmin, /appointments\|\|\[\]/, 'Takvim aralığı mevcut randevuları kapsayacak şekilde genişlemeli');
+assert.match(scheduleControls, /online_booking_enabled/, 'Online randevu kalıcı açma kapama kontrolü olmalı');
+assert.match(scheduleControls, /default_open_time/, 'Genel açılış saati düzenlenebilmeli');
+assert.match(scheduleControls, /grid-template-rows/, 'Takvim satırları seçili saat aralığına göre ekrana sığmalı');
+assert.match(edge, /neq\('username', 'salon\.modern'\)/, 'Yalnız yönetim hesabı çalışan seçeneklerine girmemeli');
 
 console.log('customer booking request tests: PASS');

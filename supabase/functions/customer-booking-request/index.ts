@@ -92,7 +92,7 @@ async function manager(req: Request) {
 async function catalogue(req: Request) {
   const [services, profiles] = await Promise.all([
     db.from('services').select('id,name,price,duration_minutes').eq('active', true).order('price', { ascending: false }).order('name'),
-    db.from('profiles').select('id,full_name').eq('active', true).order('full_name'),
+    db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern').order('full_name'),
   ])
   if (services.error || profiles.error) throw services.error || profiles.error
   return reply(req, { services: services.data, employees: profiles.data })
@@ -110,7 +110,7 @@ async function availability(req: Request, url: URL) {
   if (service.error || !service.data) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
   const schedule = await bookingSchedule(date)
   if (schedule.closed) return reply(req, { date, durationMinutes: Number(service.data.duration_minutes || 60), slots: [], schedule })
-  let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true)
+  let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern')
   if (requestedEmployeeId) employeeQuery = employeeQuery.eq('id', requestedEmployeeId)
   const employees = await employeeQuery.order('full_name')
   if (employees.error || !employees.data?.length) return reply(req, { slots: [] })
