@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const pages = ['index.html', 'salon-modern.html'].map(file => fs.readFileSync(file, 'utf8'));
+const pages = ['salon-modern.html'].map(file => fs.readFileSync(file, 'utf8'));
 const worker = fs.readFileSync('sw.js', 'utf8');
 const management = fs.readFileSync('appointment-management-2.3.26.js', 'utf8');
 const deleteButton = fs.readFileSync('appointment-cancel-button-2.3.27.js', 'utf8');

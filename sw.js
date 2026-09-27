@@ -1,5 +1,6 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v55';
+const CACHE_NAME = 'salon-modern-shell-pwa-v56';
 const APP_SHELL = [
+  './',
   './salon-modern.html',
   './manifest.webmanifest',
   './salon_brand_logo.jpg',
@@ -90,7 +91,9 @@ self.addEventListener('fetch', event => {
             ? './randevu/durum/'
             : requestUrl.pathname.includes('/randevu')
               ? './randevu/'
-              : './salon-modern.html';
+              : requestUrl.pathname.endsWith('/')
+                ? './'
+                : './salon-modern.html';
           caches.open(CACHE_NAME).then(cache => cache.put(fallbackKey, copy));
           return response;
         })
@@ -98,7 +101,9 @@ self.addEventListener('fetch', event => {
           ? caches.match('./randevu/durum/')
           : requestUrl.pathname.includes('/randevu')
             ? caches.match('./randevu/')
-            : caches.match('./salon-modern.html'))
+            : requestUrl.pathname.endsWith('/')
+              ? caches.match('./')
+              : caches.match('./salon-modern.html'))
     );
     return;
   }

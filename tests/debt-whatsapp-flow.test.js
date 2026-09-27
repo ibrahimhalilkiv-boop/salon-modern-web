@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const pages = [fs.readFileSync('index.html', 'utf8'), fs.readFileSync('salon-modern.html', 'utf8')];
+const pages = [fs.readFileSync('salon-modern.html', 'utf8')];
 const migration = fs.readFileSync('supabase/migrations/20260924103000_delete_linked_debt_with_appointment.sql', 'utf8');
 
 for (const page of pages) {

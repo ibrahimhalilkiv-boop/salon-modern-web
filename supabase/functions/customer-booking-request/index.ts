@@ -7,6 +7,7 @@ const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession
 const allowedOrigins = new Set([
   'https://salonmodern.com.tr',
   'https://www.salonmodern.com.tr',
+  'https://app.salonmodern.com.tr',
   'https://ibrahimhalilkiv-boop.github.io',
   'http://127.0.0.1:4173',
   'http://localhost:4173',
