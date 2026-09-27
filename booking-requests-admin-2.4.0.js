@@ -31,4 +31,5 @@ var priorShow=window.showPage;window.showPage=function(id){if(id==='bookingReque
 window.SalonBookingRequests={load:load,approve:approve,reject:reject,whatsapp:whatsapp};
 installPublicLink();
 if(activeUser()&&manager()){ensure();load();realtime()}
+if(!document.querySelector('script[src="booking-schedule-admin-2.4.1.js"]')){var scheduleScript=document.createElement('script');scheduleScript.src='booking-schedule-admin-2.4.1.js';document.body.appendChild(scheduleScript)}
 })();

@@ -54,6 +54,31 @@ function overlaps(start: number, end: number, otherStart: string, minutes: numbe
   return start < a + minutes * 60000 && end > a
 }
 
+function timeMinutes(value: unknown, fallback: number) {
+  const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
+  if (!match) return fallback
+  const minutes = Number(match[1]) * 60 + Number(match[2])
+  return Number.isFinite(minutes) && minutes >= 0 && minutes <= 24 * 60 ? minutes : fallback
+}
+
+function minuteLabel(minutes: number) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+}
+
+async function bookingSchedule(date: string) {
+  const [settings, override] = await Promise.all([
+    db.from('booking_settings').select('online_booking_enabled,default_open_time,default_close_time').eq('id', true).maybeSingle(),
+    db.from('booking_schedule_overrides').select('open_time,close_time,is_closed').eq('schedule_date', date).maybeSingle(),
+  ])
+  if (settings.error || override.error) throw settings.error || override.error
+  const defaultOpen = timeMinutes(settings.data?.default_open_time, 9 * 60)
+  const defaultClose = timeMinutes(settings.data?.default_close_time, 19 * 60)
+  const open = timeMinutes(override.data?.open_time, defaultOpen)
+  const close = timeMinutes(override.data?.close_time, defaultClose)
+  const closed = settings.data?.online_booking_enabled === false || override.data?.is_closed === true || close <= open
+  return { closed, open, close, openTime: minuteLabel(open), closeTime: minuteLabel(close), overridden: Boolean(override.data) }
+}
+
 async function manager(req: Request) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
   if (!token) return null
@@ -66,7 +91,7 @@ async function manager(req: Request) {
 
 async function catalogue(req: Request) {
   const [services, profiles] = await Promise.all([
-    db.from('services').select('id,name,price,duration_minutes').eq('active', true).order('name'),
+    db.from('services').select('id,name,price,duration_minutes').eq('active', true).order('price', { ascending: false }).order('name'),
     db.from('profiles').select('id,full_name').eq('active', true).order('full_name'),
   ])
   if (services.error || profiles.error) throw services.error || profiles.error
@@ -83,6 +108,8 @@ async function availability(req: Request, url: URL) {
 
   const service = await db.from('services').select('id,duration_minutes').eq('id', serviceId).eq('active', true).maybeSingle()
   if (service.error || !service.data) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
+  const schedule = await bookingSchedule(date)
+  if (schedule.closed) return reply(req, { date, durationMinutes: Number(service.data.duration_minutes || 60), slots: [], schedule })
   let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true)
   if (requestedEmployeeId) employeeQuery = employeeQuery.eq('id', requestedEmployeeId)
   const employees = await employeeQuery.order('full_name')
@@ -101,8 +128,10 @@ async function availability(req: Request, url: URL) {
   const duration = Number(service.data.duration_minutes || 60)
   const now = Date.now()
   const slots = []
-  for (let minutes = 8 * 60; minutes + duration <= 24 * 60; minutes += 30) {
-    const time = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+  const cadence = duration >= 60 ? 60 : 30
+  const first = Math.ceil(schedule.open / cadence) * cadence
+  for (let minutes = first; minutes + duration <= schedule.close; minutes += cadence) {
+    const time = minuteLabel(minutes)
     const start = new Date(slotIso(date, time)).getTime()
     const end = start + duration * 60000
     if (start <= now) continue
@@ -113,7 +142,7 @@ async function availability(req: Request, url: URL) {
     }).map((employee) => employee.id)
     if (employeeIds.length) slots.push({ time, employeeIds })
   }
-  return reply(req, { date, durationMinutes: duration, slots })
+  return reply(req, { date, durationMinutes: duration, slots, schedule })
 }
 
 async function createRequest(req: Request) {

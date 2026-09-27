@@ -9,6 +9,7 @@ const adminJs = fs.readFileSync('booking-requests-admin-2.4.0.js', 'utf8');
 const shell = fs.readFileSync('sw.js', 'utf8');
 const index = fs.readFileSync('salon-modern.html', 'utf8');
 const notificationMigration = fs.readFileSync('supabase/migrations/20260927090000_allow_booking_request_notifications.sql', 'utf8');
+const scheduleAdmin = fs.readFileSync('booking-schedule-admin-2.4.1.js', 'utf8');
 
 assert.doesNotMatch(migration, /create table/i, 'Canlıdaki mevcut talep tablosu tekrar oluşturulmamalı');
 assert.match(migration, /alter table public\.online_booking_requests/, 'Mevcut online talep tablosu genişletilmeli');
@@ -25,6 +26,11 @@ assert.match(edge, /request_ip_hash[^\n]+gte\('created_at', since\)/, 'IP bazlı
 assert.match(edge, /db\.auth\.getUser\(token\)/, 'Yönetici işlemi JWT ile doğrulanmalı');
 assert.match(edge, /eq\('role', 'manager'\)/, 'Yönetici rolü server-side kontrol edilmeli');
 assert.match(edge, /action === 'availability'/, 'Public müsaitlik endpointi olmalı');
+assert.match(edge, /booking_settings/, 'Varsayılan online çalışma saatleri okunmalı');
+assert.match(edge, /booking_schedule_overrides/, 'Tarih bazlı çalışma saati okunmalı');
+assert.match(edge, /duration >= 60 \? 60 : 30/, 'Uzun hizmetler saatlik, kısa hizmetler yarım saatlik ilerlemeli');
+assert.match(edge, /minutes \+ duration <= schedule\.close/, 'Hizmet kapanıştan önce tamamen bitmeli');
+assert.match(edge, /order\('price', \{ ascending: false \}\)/, 'Hizmetler fiyatı büyükten küçüğe sıralanmalı');
 assert.match(edge, /https:\/\/app\.salonmodern\.com\.tr/, 'Özel uygulama alan adı CORS izin listesinde olmalı');
 assert.match(edge, /action === 'status'/, 'Güvenli tokenlı durum endpointi olmalı');
 assert.match(edge, /kind: 'booking_request'/, 'Yönetici bildirimi mevcut notifications yapısına yazılmalı');
@@ -42,7 +48,14 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v56/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v57/, 'PWA cache sürümü yükseltilmeli');
 assert.match(shell, /\.\/randevu\//, 'Public sayfa çevrimdışı shell ayrımında tanınmalı');
+assert.match(publicHtml, /\.\.\/salon-modern\.html/, 'Randevu sayfasında personel girişi bulunmalı');
+assert.doesNotMatch(publicJs, /dakika<\/small>/, 'Hizmet kartında süre yazmamalı');
+assert.doesNotMatch(publicJs, /Çalışan seçimi<\/small>/, 'Çalışan kartında gereksiz alt yazı bulunmamalı');
+assert.match(scheduleAdmin, /booking_schedule_overrides/, 'Yönetim paneli tarih override tablosunu kullanmalı');
+assert.match(scheduleAdmin, /Varsayılana dön/, 'Seçili tarih varsayılana döndürülebilmeli');
+assert.match(scheduleAdmin, /removeMessageUi/, 'Mesaj yönetim arayüzü kaldırılmalı');
+assert.match(scheduleAdmin, /appointments\|\|\[\]/, 'Takvim aralığı mevcut randevuları kapsayacak şekilde genişlemeli');
 
 console.log('customer booking request tests: PASS');
