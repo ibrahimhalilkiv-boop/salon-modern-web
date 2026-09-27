@@ -91,12 +91,13 @@ async function manager(req: Request) {
 }
 
 async function catalogue(req: Request) {
-  const [services, profiles] = await Promise.all([
+  const [services, profiles, bookingSettings] = await Promise.all([
     db.from('services').select('id,name,price,duration_minutes').eq('active', true).order('price', { ascending: false }).order('name'),
     db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern').order('full_name'),
+    db.from('booking_settings').select('online_booking_enabled').eq('id', true).maybeSingle(),
   ])
-  if (services.error || profiles.error) throw services.error || profiles.error
-  return reply(req, { services: services.data, employees: profiles.data })
+  if (services.error || profiles.error || bookingSettings.error) throw services.error || profiles.error || bookingSettings.error
+  return reply(req, { services: services.data, employees: profiles.data, onlineBookingEnabled: bookingSettings.data?.online_booking_enabled !== false })
 }
 
 async function availability(req: Request, url: URL) {
