@@ -15,12 +15,14 @@ global.currentUser = { id: 'manager-1', role: 'yonetici' };
 global.remoteClients = [
   { id: 'ahmet-id', full_name: 'Ahmet Yılmaz', phone: '05321111111' },
   { id: 'mehmet-id', full_name: 'Mehmet Yılmaz', phone: '05322222222' },
+  { id: 'ayse-id', full_name: 'Ayşe Yılmaz', phone: '05323333333' },
 ];
 global.remoteDebts = [
   { id: 'd1', appointment_id: 'a1', client_id: 'ahmet-id', client_name: 'Ahmet Yılmaz', amount: 500, status: 'open' },
   { id: 'd2', appointment_id: 'a2', client_id: 'mehmet-id', client_name: 'Mehmet Yılmaz', amount: 250, status: 'open' },
   { id: 'd-old', client_id: 'ahmet-id', client_name: 'Ahmet Yılmaz', amount: 125, status: 'open' },
   { id: 'd3', client_id: 'mehmet-id', client_name: 'Mehmet Yılmaz', amount: 100, status: 'paid' },
+  { id: 'd4', client_id: 'ayse-id', client_name: 'Ayşe Yılmaz', description: 'Saç bakımı', amount: 300, status: 'open' },
 ];
 global.appts = [
   { id: 'a1', operation: 'Saç kesimi' },
@@ -52,6 +54,7 @@ global.salonDb = {
         return Promise.resolve({ data: [
           { group_id: 'family-1', client_id: 'ahmet-id', relationship_label: 'Baba', is_primary: true },
           { group_id: 'family-1', client_id: 'mehmet-id', relationship_label: 'Oğul', is_primary: false },
+          { group_id: 'family-1', client_id: 'ayse-id', relationship_label: 'Kız', is_primary: false },
         ], error: null });
       },
     };
@@ -68,16 +71,24 @@ vm.runInThisContext(fs.readFileSync('debt-account-groups-2.3.29.js', 'utf8'));
   assert.match(debtList.innerHTML, /Yılmaz Ailesi/);
   assert.match(debtList.innerHTML, /Ahmet Yılmaz/);
   assert.match(debtList.innerHTML, /Mehmet Yılmaz/);
+  assert.match(debtList.innerHTML, /Ayşe Yılmaz/);
   assert.match(debtList.innerHTML, /Saç kesimi/);
   assert.match(debtList.innerHTML, /Sakal tıraşı/);
   assert.match(debtList.innerHTML, /Eski borç kaydı/);
-  assert.match(debtList.innerHTML, /İlişkili toplam borç: 875\.00 TL/);
-  assert.match(debtList.innerHTML, /875\.00 TL/);
+  assert.match(debtList.innerHTML, /İlişkili toplam borç: 1175\.00 TL/);
+  assert.match(debtList.innerHTML, /1175\.00 TL/);
   assert.doesNotMatch(debtList.innerHTML, /975\.00 TL/);
   assert.equal(global.remoteDebts[0].client_id, 'ahmet-id');
   assert.equal(global.remoteDebts[1].client_id, 'mehmet-id');
   global.selectedDebtCustomerKey = 'id:ahmet-id';
   global.renderDebtDetail();
   assert.equal(global.debtDetailRelationButton.textContent, 'İlişkili borçları görüntüle');
+  global.selectedDebtCustomerKey = 'group:family-1';
+  global.renderDebtDetail();
+  assert.match(debtDetailContent.innerHTML, /Gruba kişi ekle/);
+  assert.match(debtDetailContent.innerHTML, /removeDebtAccountMember/);
+  assert.match(debtDetailContent.innerHTML, /Ayşe Yılmaz/);
+  assert.match(debtDetailContent.innerHTML, /Saç bakımı/);
+  assert.match(debtDetailContent.innerHTML, /Bağlı kişi<\/small><strong>3<\/strong>/);
   console.log('PASS debt account group total and customer_id isolation');
 })().catch(error => { console.error(error); process.exitCode = 1; });

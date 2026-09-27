@@ -70,6 +70,38 @@
     function finish(){busy=false;button.disabled=false;button.textContent='İlişkiyi kaydet'}
   };
 
+  function ensureMemberModal(){
+    var modal=document.getElementById('debtAccountMemberModal');if(modal)return modal;
+    modal=document.createElement('div');modal.id='debtAccountMemberModal';modal.className='modal';
+    modal.innerHTML='<div class="sheet debt-group-sheet"><h2>Gruba kişi ekle</h2><p class="notice">Kişisel bilgiler ve borç kayıtları değişmez; yalnız grup toplamına dahil edilir.</p><label class="field">Müşteri<input id="debtGroupNewClient" list="debtGroupMemberOptions" autocomplete="off" placeholder="Müşteri ara"></label><label class="field">Yakınlık<input id="debtGroupNewRelation" maxlength="60" placeholder="Örn. Oğul"></label><datalist id="debtGroupMemberOptions"></datalist><button id="debtGroupMemberSave" type="button" class="save" onclick="saveDebtAccountMember()">Kişiyi ekle</button><button type="button" class="back" onclick="closeDebtAccountMemberModal()">Vazgeç</button></div>';
+    document.body.appendChild(modal);return modal;
+  }
+  window.openDebtAccountMemberModal=function(groupId){
+    if(!manager())return;var group=groups.find(function(g){return String(g.id)===String(groupId)});if(!group)return;
+    selectedGroupId=String(group.id);var modal=ensureMemberModal(),available=(window.remoteClients||[]).filter(function(c){return !memberFor(c.id)});
+    document.getElementById('debtGroupMemberOptions').innerHTML=available.map(function(c){return '<option value="'+esc(token(c))+'"></option>'}).join('');
+    document.getElementById('debtGroupNewClient').value='';document.getElementById('debtGroupNewRelation').value='';modal.classList.add('show');
+  };
+  window.closeDebtAccountMemberModal=function(){document.getElementById('debtAccountMemberModal')?.classList.remove('show')};
+  window.saveDebtAccountMember=async function(){
+    if(!manager()||busy||!selectedGroupId)return;var input=document.getElementById('debtGroupNewClient'),clientId=idFromInput(input&&input.value),client=byId(clientId),existing=memberFor(clientId),group=groups.find(function(g){return String(g.id)===String(selectedGroupId)});
+    if(!group||!client){showAppToast('Kişiyi kontrol edin','Kayıtlı bir müşteri seçin.');return}
+    if(existing){showAppToast('Kişi eklenemedi',String(existing.group_id)===String(group.id)?'Bu kişi zaten bu grupta.':'Bu kişi başka bir borç grubunda.');return}
+    busy=true;var button=document.getElementById('debtGroupMemberSave');button.disabled=true;button.textContent='Ekleniyor…';
+    var result=await salonDb.from('debt_account_group_members').insert({group_id:group.id,client_id:client.id,relationship_label:document.getElementById('debtGroupNewRelation').value.trim()||null,is_primary:false}).select('group_id,client_id,relationship_label,is_primary,created_at');
+    busy=false;button.disabled=false;button.textContent='Kişiyi ekle';
+    if(result.error){showAppToast('Kişi eklenemedi',result.error.message||'Yetki veya bağlantıyı kontrol edin.');return}
+    closeDebtAccountMemberModal();await load();renderDebtDetail();renderDebts();showAppToast('Kişi gruba eklendi',client.full_name+' borçları grup toplamında gösterilecek.');
+  };
+  window.removeDebtAccountMember=async function(groupId,clientId){
+    if(!manager()||busy)return;var member=memberFor(clientId),client=byId(clientId);if(!member||String(member.group_id)!==String(groupId))return;
+    if(member.is_primary){showAppToast('Ana kişi çıkarılamaz','Ana kişiyi değiştirmek için ilişki grubunu kaldırıp yeniden oluşturun.');return}
+    if(!confirm((client&&client.full_name||'Bu kişi')+' gruptan çıkarılsın mı?\n\nMüşteri ve borç kayıtları silinmeyecek.'))return;
+    busy=true;var result=await salonDb.from('debt_account_group_members').delete().eq('group_id',groupId).eq('client_id',clientId).select('client_id');busy=false;
+    if(result.error||!result.data||!result.data.length){showAppToast('Kişi çıkarılamadı',result.error&&result.error.message||'Yetki veya bağlantıyı kontrol edin.');return}
+    await load();renderDebtDetail();renderDebts();showAppToast('Kişi gruptan çıkarıldı','Borç ve müşteri kayıtları korunuyor.');
+  };
+
   window.openDebtAccountGroupDetail=function(id){selectedGroupId=String(id);window.selectedDebtCustomerKey='group:'+String(id);showPage('debtDetail')};
   window.removeDebtAccountGroup=async function(id){
     if(!manager()||busy)return;var group=groups.find(function(g){return String(g.id)===String(id)});if(!group)return;
@@ -111,8 +143,8 @@
       return result;
     }
     var id=key.slice(6),group=groups.find(function(g){return String(g.id)===id}),holder=document.getElementById('debtDetailContent');if(!group||!holder)return baseDetail.apply(this,arguments);
-    var ms=groupMembers(id),ids=groupClientIds(id),items=debtsForClients(ids),open=items.filter(function(d){return d.status==='open'}),primary=primaryMember(ms),owner=primary&&byId(primary.client_id),memberRows=ms.map(function(m){var c=byId(m.client_id),own=debtsForClients([String(m.client_id)]),lines=memberDebtLines(m);return '<div class="staff" onclick="openDebtDetail('+js('id:'+m.client_id)+')"><div class="avatar">'+esc(avatarFor(c&&c.full_name||'Müşteri'))+'</div><div class="item-main"><strong>'+esc(c&&c.full_name||'Müşteri')+(m.is_primary?' · Ana kişi':'')+'</strong><small>'+esc(m.relationship_label||'Bağlı kişi')+' · Kişi borcu: '+formatTry(openTotal(own))+'</small>'+lines+'</div><span class="link">Kişi detayı ›</span></div>'}).join('');
-    holder.innerHTML='<h1 class="page-title">'+esc(owner&&owner.full_name||group.name)+'</h1><small class="debt-group-name">'+esc(group.name)+'</small><div class="customer-metrics"><div class="stat-box"><small>İlişkili toplam borç</small><strong>'+formatTry(openTotal(items))+'</strong></div><div class="stat-box"><small>Bağlı kişi</small><strong>'+ms.length+'</strong></div><div class="stat-box"><small>Açık kayıt</small><strong>'+open.length+'</strong></div></div><div class="section"><h2>Kişiler ve borçları</h2></div>'+memberRows+'<button type="button" class="back debt-group-remove" onclick="removeDebtAccountGroup('+js(group.id)+')">İlişkiyi kaldır</button>'
+    var ms=groupMembers(id),ids=groupClientIds(id),items=debtsForClients(ids),open=items.filter(function(d){return d.status==='open'}),primary=primaryMember(ms),owner=primary&&byId(primary.client_id),memberRows=ms.map(function(m){var c=byId(m.client_id),own=debtsForClients([String(m.client_id)]),lines=memberDebtLines(m),remove=m.is_primary?'':'<button type="button" class="debt-member-remove" onclick="event.stopPropagation();removeDebtAccountMember('+js(group.id)+','+js(m.client_id)+')">Gruptan çıkar</button>';return '<div class="staff debt-group-member" onclick="openDebtDetail('+js('id:'+m.client_id)+')"><div class="avatar">'+esc(avatarFor(c&&c.full_name||'Müşteri'))+'</div><div class="item-main"><strong>'+esc(c&&c.full_name||'Müşteri')+(m.is_primary?' · Ana kişi':'')+'</strong><small>'+esc(m.relationship_label||'Bağlı kişi')+' · Kişi borcu: '+formatTry(openTotal(own))+'</small>'+lines+'</div>'+remove+'<span class="link">Kişi detayı ›</span></div>'}).join('');
+    holder.innerHTML='<h1 class="page-title">'+esc(owner&&owner.full_name||group.name)+'</h1><small class="debt-group-name">'+esc(group.name)+'</small><div class="customer-metrics"><div class="stat-box"><small>İlişkili toplam borç</small><strong>'+formatTry(openTotal(items))+'</strong></div><div class="stat-box"><small>Bağlı kişi</small><strong>'+ms.length+'</strong></div><div class="stat-box"><small>Açık kayıt</small><strong>'+open.length+'</strong></div></div><button type="button" class="fab debt-group-add" onclick="openDebtAccountMemberModal('+js(group.id)+')">＋ Gruba kişi ekle</button><div class="section"><h2>Kişiler ve borçları</h2></div>'+memberRows+'<button type="button" class="back debt-group-remove" onclick="removeDebtAccountGroup('+js(group.id)+')">İlişkiyi kaldır</button>'
   };
-  var style=document.createElement('style');style.textContent='.debt-group-create{width:100%;margin:0 0 12px}.debt-detail-relation{width:100%;margin:0 0 18px}.debt-family{border:1px solid #d5b477;background:#fffaf0}.debt-family .item-main small{display:block}.debt-group-line{margin-top:4px;color:var(--muted)}.debt-group-line b{color:var(--text)}.debt-group-name{display:block;margin:-8px 0 12px;color:var(--muted)}.debt-card-open{display:flex;align-items:center;gap:10px;min-width:0;flex:1;cursor:pointer}.debt-link-person{border:1px solid var(--line);background:#fff;color:#8a6228;border-radius:10px;padding:8px;font-weight:700}.debt-group-sheet{max-height:92vh;overflow:auto}.debt-group-remove{display:block;width:100%;margin-top:18px;color:#a33f3a}.debt-customer{gap:10px}';document.head.appendChild(style);
+  var style=document.createElement('style');style.textContent='.debt-group-create,.debt-group-add{width:100%;margin:0 0 12px}.debt-detail-relation{width:100%;margin:0 0 18px}.debt-family{border:1px solid #d5b477;background:#fffaf0}.debt-family .item-main small{display:block}.debt-group-line{margin-top:4px;color:var(--muted)}.debt-group-line b{color:var(--text)}.debt-group-name{display:block;margin:-8px 0 12px;color:var(--muted)}.debt-card-open{display:flex;align-items:center;gap:10px;min-width:0;flex:1;cursor:pointer}.debt-link-person,.debt-member-remove{border:1px solid var(--line);background:#fff;color:#8a6228;border-radius:10px;padding:8px;font-weight:700}.debt-member-remove{color:#a33f3a;white-space:nowrap}.debt-group-sheet{max-height:92vh;overflow:auto}.debt-group-remove{display:block;width:100%;margin-top:18px;color:#a33f3a}.debt-customer,.debt-group-member{gap:10px}';document.head.appendChild(style);
 })();

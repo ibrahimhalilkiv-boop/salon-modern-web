@@ -3,9 +3,9 @@
 
 window.SALON_APP_VERSION='2.3.15';
 
-/* A customer is marked only while a positive debt is still outstanding.
-   customer_id is the primary match; appointment_id remains supported for
-   legacy debt rows. Phone and customer name are deliberately not identities. */
+/* Calendar debt colour belongs to one appointment, not to the customer.
+   Historical, product and manually entered debts must not colour a different
+   appointment for the same customer. */
 function debtIsOutstanding(debt){
   if(!debt||Number(debt.amount||0)<=0)return false;
   var status=String(debt.status||'open').trim().toLocaleLowerCase('tr-TR');
@@ -14,11 +14,11 @@ function debtIsOutstanding(debt){
 
 window.appointmentHasOpenDebt=function(item){
   if(!item||!Array.isArray(remoteDebts))return false;
-  var appointmentId=String(item.id||''),clientId=String(item.clientId||'');
+  var appointmentId=String(item.id||'');
+  if(!appointmentId)return false;
   return remoteDebts.some(function(debt){
     if(!debtIsOutstanding(debt))return false;
-    if(appointmentId&&String(debt.appointment_id||'')===appointmentId)return true;
-    return !!clientId&&String(debt.client_id||'')===clientId;
+    return String(debt.appointment_id||'')===appointmentId;
   });
 };
 
