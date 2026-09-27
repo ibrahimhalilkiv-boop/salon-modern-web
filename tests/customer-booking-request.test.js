@@ -30,6 +30,8 @@ assert.match(edge, /action === 'availability'/, 'Public müsaitlik endpointi olm
 assert.match(edge, /booking_settings/, 'Varsayılan online çalışma saatleri okunmalı');
 assert.match(edge, /booking_schedule_overrides/, 'Tarih bazlı çalışma saati okunmalı');
 assert.match(edge, /duration >= 60 \? 60 : 30/, 'Uzun hizmetler saatlik, kısa hizmetler yarım saatlik ilerlemeli');
+assert.match(edge, /followsLengthyAppointmentAtHalfHour/, 'Uzun randevudan sonra ara saat yerine sonraki tam saat sunulmalı');
+assert.match(edge, /appointmentDuration >= 45 && appointmentEnd > currentHour && appointmentEnd <= start/, '45 dakika veya uzun işlemden sonra ara saat sunulmamalı');
 assert.match(edge, /minutes \+ duration <= schedule\.close/, 'Hizmet kapanıştan önce tamamen bitmeli');
 assert.match(edge, /order\('price', \{ ascending: false \}\)/, 'Hizmetler fiyatı büyükten küçüğe sıralanmalı');
 assert.match(edge, /https:\/\/app\.salonmodern\.com\.tr/, 'Özel uygulama alan adı CORS izin listesinde olmalı');

@@ -54,6 +54,16 @@ function overlaps(start: number, end: number, otherStart: string, minutes: numbe
   return start < a + minutes * 60000 && end > a
 }
 
+function followsLengthyAppointmentAtHalfHour(start: number, employeeId: string, appointments: Array<{ employee_id: string, scheduled_at: string, duration_minutes: number | null }>) {
+  if (new Date(start).getMinutes() === 0) return false
+  const currentHour = start - 30 * 60000
+  return appointments.some((item) => {
+    const appointmentDuration = Number(item.duration_minutes || 60)
+    const appointmentEnd = new Date(item.scheduled_at).getTime() + appointmentDuration * 60000
+    return item.employee_id === employeeId && appointmentDuration >= 45 && appointmentEnd > currentHour && appointmentEnd <= start
+  })
+}
+
 function timeMinutes(value: unknown, fallback: number) {
   const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
   if (!match) return fallback
@@ -144,7 +154,8 @@ async function availability(req: Request, url: URL) {
     const employeeIds = employees.data.filter((employee) => {
       const busy = (appointments.data || []).some((item) => item.employee_id === employee.id && overlaps(start, end, item.scheduled_at, Number(item.duration_minutes || 60)))
       const closed = (closures.data || []).some((item) => item.employee_id === employee.id && start < new Date(item.ends_at).getTime() && end > new Date(item.starts_at).getTime())
-      return !busy && !closed
+      const mustWaitForFullHour = duration < 60 && followsLengthyAppointmentAtHalfHour(start, employee.id, appointments.data || [])
+      return !busy && !closed && !mustWaitForFullHour
     }).map((employee) => employee.id)
     if (employeeIds.length) slots.push({ time, employeeIds })
   }
