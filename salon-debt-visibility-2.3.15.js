@@ -13,9 +13,11 @@ function debtIsOutstanding(debt){
 }
 
 window.appointmentHasOpenDebt=function(item){
-  if(!item||!Array.isArray(remoteDebts))return false;
+  if(!item)return false;
   var appointmentId=String(item.id||'');
   if(!appointmentId)return false;
+  if(typeof remoteOpenDebtAppointmentIds!=='undefined'&&remoteOpenDebtAppointmentIds instanceof Set&&remoteOpenDebtAppointmentIds.has(appointmentId))return true;
+  if(!Array.isArray(remoteDebts))return false;
   return remoteDebts.some(function(debt){
     if(!debtIsOutstanding(debt))return false;
     return String(debt.appointment_id||'')===appointmentId;
