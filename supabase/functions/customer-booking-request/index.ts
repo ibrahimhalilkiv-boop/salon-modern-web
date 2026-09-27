@@ -56,11 +56,10 @@ function overlaps(start: number, end: number, otherStart: string, minutes: numbe
 
 function followsLengthyAppointmentAtHalfHour(start: number, employeeId: string, appointments: Array<{ employee_id: string, scheduled_at: string, duration_minutes: number | null }>) {
   if (new Date(start).getMinutes() === 0) return false
-  const currentHour = start - 30 * 60000
   return appointments.some((item) => {
     const appointmentDuration = Number(item.duration_minutes || 60)
     const appointmentEnd = new Date(item.scheduled_at).getTime() + appointmentDuration * 60000
-    return item.employee_id === employeeId && appointmentDuration >= 45 && appointmentEnd > currentHour && appointmentEnd <= start
+    return item.employee_id === employeeId && appointmentDuration >= 45 && appointmentEnd === start
   })
 }
 
