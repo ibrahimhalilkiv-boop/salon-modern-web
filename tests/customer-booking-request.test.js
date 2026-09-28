@@ -56,7 +56,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v73/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v74/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -91,7 +91,9 @@ assert.doesNotMatch(adminJs, /randevu talebiniz onaylandı/, 'Ayrı hardcoded on
 assert.match(adminJs, /if\(url\)window\.location\.href=url/, 'WhatsApp yalnız geçerli onay URLsi üretildiğinde açılmalı');
 assert.match(scheduleControls, /amount\.readOnly=false/, 'Randevu ücret alanı elle düzenlenebilir olmalı');
 assert.match(scheduleControls, /amount\.disabled=false/, 'Randevu ücret alanı etkin kalmalı');
-assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=73/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
+assert.match(index, /nextHour=Math\.min\(1440,\(Math\.floor\(startMinute\/60\)\+1\)\*60\)/, 'Kapalı saat seçimi bir sonraki tam saate kadar tüm aralığı kapatmalı');
+assert.match(index, /closedSlotStart['"]\)\.onchange/, 'Kapalı saat başlangıcı değişince bitiş önerisi birlikte güncellenmeli');
+assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=74/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
 assert.match(phase2, /profile\.active&&profile\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı günlük çalışan özetine katılmamalı');
 assert.match(assistant, /p\.active&&p\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı asistan çalışan sonuçlarına katılmamalı');
 assert.match(scheduleControls, /installAdminProfileFilters/, 'Önbellekte kalan eski özet kodu için yönetici profili çalışma anında da filtrelenmeli');
