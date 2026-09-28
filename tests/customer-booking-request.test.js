@@ -56,7 +56,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v74/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v75/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -77,6 +77,8 @@ assert.match(scheduleAdmin, /appointments\|\|\[\]/, 'Takvim aralığı mevcut ra
 assert.match(scheduleControls, /online_booking_enabled/, 'Online randevu kalıcı açma kapama kontrolü olmalı');
 assert.match(scheduleControls, /default_open_time/, 'Genel açılış saati düzenlenebilmeli');
 assert.match(scheduleControls, /grid-template-rows/, 'Takvim satırları seçili saat aralığına göre ekrana sığmalı');
+assert.match(scheduleControls, /amount\.readOnly=false;amount\.disabled=false/, 'Randevu ücreti elle değiştirilebilir olmalı');
+assert.match(scheduleControls, /Hizmet fiyatı otomatik gelir; bu randevu için değiştirebilirsiniz\./, 'Manuel randevu ücreti davranışı kullanıcıya açıklanmalı');
 assert.match(edge, /neq\('username', 'salon\.modern'\)/, 'Yalnız yönetim hesabı çalışan seçeneklerine girmemeli');
 assert.match(edge, /getUTCDay\(\) === 0/, 'Özel ayar yoksa pazar günü kapalı olmalı');
 assert.match(scheduleAdmin, /getDay\(\)===0/, 'Yönetim takvimi de pazar gününü varsayılan kapalı saymalı');
@@ -93,7 +95,7 @@ assert.match(scheduleControls, /amount\.readOnly=false/, 'Randevu ücret alanı 
 assert.match(scheduleControls, /amount\.disabled=false/, 'Randevu ücret alanı etkin kalmalı');
 assert.match(index, /nextHour=Math\.min\(1440,\(Math\.floor\(startMinute\/60\)\+1\)\*60\)/, 'Kapalı saat seçimi bir sonraki tam saate kadar tüm aralığı kapatmalı');
 assert.match(index, /closedSlotStart['"]\)\.onchange/, 'Kapalı saat başlangıcı değişince bitiş önerisi birlikte güncellenmeli');
-assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=74/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
+assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=75/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
 assert.match(phase2, /profile\.active&&profile\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı günlük çalışan özetine katılmamalı');
 assert.match(assistant, /p\.active&&p\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı asistan çalışan sonuçlarına katılmamalı');
 assert.match(scheduleControls, /installAdminProfileFilters/, 'Önbellekte kalan eski özet kodu için yönetici profili çalışma anında da filtrelenmeli');
