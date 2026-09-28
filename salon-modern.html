@@ -246,12 +246,12 @@ renderCalendar=function(){
   html+='<div class="team-head" style="grid-column:1;grid-row:1">Saat</div>';
   columns.forEach(function(member,index){html+='<button type="button" class="team-head" style="grid-column:'+(index+2)+';grid-row:1" onclick="selectTeamMember('+jsAttr(member[0])+')">'+safe(member[0].split(' ')[0])+'</button>'});
   slots.forEach(function(time,rowIndex){
-    var row=rowIndex+2,fullHour=time.slice(3)==='00';
+    var row=rowIndex+2,fullHour=time.slice(3)==='00',appointmentStart=time.slice(3)==='00'||time.slice(3)==='30';
     if(fullHour)html+='<div class="duration-time" style="grid-column:1;grid-row:'+row+' / span 4">'+time.replace(':','.')+'</div>';
     columns.forEach(function(member,columnIndex){
       var profile=profileForEmployeeName(member[0]);
       var closed=closedSlotFor(date,time,15,profile&&profile.id);
-      var canOpen=fullHour&&!closed;
+      var canOpen=appointmentStart&&!closed;
       html+='<div class="duration-cell '+(fullHour?'hour-start':'')+'" style="grid-column:'+(columnIndex+2)+';grid-row:'+row+'"'+(canOpen?' onclick="openSlotChoice('+jsAttr(time)+','+jsAttr(member[0])+')"':'')+'></div>';
     });
   });
@@ -272,7 +272,7 @@ renderCalendar=function(){
     var units=Math.max(1,Math.min(slots.length-startIndex,Math.ceil((new Date(slot.ends_at).getTime()-new Date(slot.starts_at).getTime())/900000)));
     html+='<button type="button" class="team-event duration-event duration-closed-event" style="grid-column:'+(personIndex+2)+';grid-row:'+(startIndex+2)+' / span '+units+'" onclick="event.stopPropagation();openClosedSlotModal('+jsAttr(slot.id)+')"><strong>Kapalı</strong></button>';
   });
-  target.innerHTML=html+'</div></div><div class="calendar-hint">Takvim bugunun tarihine gore guncellenir. Sadece saat baslari gorunur; islem suresi randevunun kapladigi alani otomatik belirler.</div>';
+  target.innerHTML=html+'</div></div><div class="calendar-hint">Takvim 30 dakikalik baslangiclarla kullanilir. 19.00 ve 19.30 yonetim randevularina aciktir; online son baslangic 19.00\'dir.</div>';
   if(date===localDate(0)){
     var now=new Date(),minutes=now.getHours()*60+now.getMinutes();
     if(minutes>=480&&minutes<1440){

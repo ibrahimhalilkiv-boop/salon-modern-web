@@ -74,6 +74,10 @@ function minuteLabel(minutes: number) {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 }
 
+// Online customers may start no later than 19:00. The management calendar
+// deliberately remains independent and can accept later manual appointments.
+const ONLINE_LAST_START_MINUTES = 19 * 60
+
 async function bookingSchedule(date: string) {
   const [settings, override] = await Promise.all([
     db.from('booking_settings').select('online_booking_enabled,default_open_time,default_close_time').eq('id', true).maybeSingle(),
@@ -109,7 +113,7 @@ async function catalogue(req: Request) {
     bookingSchedule(today),
   ])
   if (services.error || profiles.error) throw services.error || profiles.error
-  todaySchedule.hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) < todaySchedule.close
+  todaySchedule.hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) < Math.min(todaySchedule.close, ONLINE_LAST_START_MINUTES)
   return reply(req, { services: services.data, employees: profiles.data, onlineBookingEnabled: todaySchedule.onlineBookingEnabled, today, todaySchedule })
 }
 
@@ -145,7 +149,7 @@ async function availability(req: Request, url: URL) {
   const slots = []
   const cadence = duration >= 60 ? 60 : 30
   const first = Math.ceil(schedule.open / cadence) * cadence
-  for (let minutes = first; minutes + duration <= schedule.close; minutes += cadence) {
+  for (let minutes = first; minutes <= ONLINE_LAST_START_MINUTES && minutes + duration <= schedule.close; minutes += cadence) {
     const time = minuteLabel(minutes)
     const start = new Date(slotIso(date, time)).getTime()
     const end = start + duration * 60000
