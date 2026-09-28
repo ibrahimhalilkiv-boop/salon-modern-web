@@ -8,6 +8,7 @@ const deleteButton = fs.readFileSync('appointment-cancel-button-2.3.27.js', 'utf
 const debtWarning = fs.readFileSync('appointment-debt-warning-2.3.28.js', 'utf8');
 const actions = fs.readFileSync('appointment-form-actions-2.3.30.js', 'utf8');
 const pushMigration = fs.readFileSync('supabase/migrations/20260921121500_route_reminders_to_creator.sql', 'utf8');
+const recovery = fs.readFileSync('pwa-recovery-2.3.21.js', 'utf8');
 
 const criticalScripts = [
   'appointment-management-2.3.26.js',
@@ -42,5 +43,9 @@ assert.doesNotMatch(deleteButton, /Randevuyu iptal et/, 'Modal düğmesi eski ip
 assert.doesNotMatch(debtWarning, /subtree\s*:\s*true/, 'Borç uyarısı recursive observer kurmamalı');
 
 assert.match(pushMigration, /select a\.created_by,a\.id,'appointment_reminder'/, 'Bir saatlik hatırlatma randevuyu oluşturana gitmeli');
+assert.match(recovery, /reloadKey = 'salonShellReloaded:' \+ cacheVersion/, 'Her PWA sürümü kendine ait tek yenileme anahtarını kullanmalı');
+assert.doesNotMatch(recovery, /salonShellReloadedV16/, 'Sabit yenileme anahtarı sonraki sürümleri engellememeli');
+assert.match(pages[0], /pwa-recovery-2\.3\.21\.js\?v=79/, 'PWA kurtarma kodu sürümlü yüklenmeli');
+assert.match(pages[0], /booking-requests-admin-2\.4\.0\.js\?v=79/, 'Takvim yükleyicisi sürümlü yüklenmeli');
 
 console.log('PASS critical patch load order and singleton handlers');
