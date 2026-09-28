@@ -36,6 +36,8 @@ assert.match(edge, /followsLengthyAppointmentAtHalfHour/, 'Uzun randevudan sonra
 assert.match(edge, /appointmentDuration >= 45 && appointmentEnd === start/, '45 dakika veya uzun işlem ara saatte tam bitiyorsa sonraki tam saat sunulmalı');
 assert.doesNotMatch(edge, /appointmentEnd > currentHour/, 'İşlem ara saatten önce biterse ara saat gereksiz engellenmemeli');
 assert.match(edge, /minutes \+ duration <= schedule\.close/, 'Hizmet kapanıştan önce tamamen bitmeli');
+assert.match(edge, /db\.from\('closed_time_slots'\)/, 'Online müsaitlik çalışan kapalı saatlerini okumalı');
+assert.match(edge, /start < new Date\(item\.ends_at\)\.getTime\(\) && end > new Date\(item\.starts_at\)\.getTime\(\)/, 'Hizmet kapalı aralıkla kısmen çakışsa bile online saat sunulmamalı');
 assert.match(edge, /order\('price', \{ ascending: false \}\)/, 'Hizmetler fiyatı büyükten küçüğe sıralanmalı');
 assert.match(edge, /https:\/\/app\.salonmodern\.com\.tr/, 'Özel uygulama alan adı CORS izin listesinde olmalı');
 assert.match(edge, /action === 'status'/, 'Güvenli tokenlı durum endpointi olmalı');
@@ -54,7 +56,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v70/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v73/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -80,8 +82,18 @@ assert.match(edge, /getUTCDay\(\) === 0/, 'Özel ayar yoksa pazar günü kapalı
 assert.match(scheduleAdmin, /getDay\(\)===0/, 'Yönetim takvimi de pazar gününü varsayılan kapalı saymalı');
 assert.match(scheduleAdmin, /half=time\.slice\(3\)===['"]00['"]\|\|time\.slice\(3\)===['"]30['"]/, 'Yönetim takviminde saat ve yarım saat başlangıçları seçilebilmeli');
 assert.match(scheduleAdmin, /for\(var minute=display\.start;minute<display\.end;minute\+=15\)/, 'Kapanış saati yalnız bitiş sınırı olmalı');
-assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=69/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
+assert.match(scheduleAdmin, /window\.remoteClosedSlots\|\|\[\]/, 'Kapalı saatler son takvim rendererında görünür blok olarak çizilmeli');
+assert.match(scheduleAdmin, /duration-closed-event/, 'Kapalı saat bloğu ayrı görünüm sınıfı kullanmalı');
+assert.match(scheduleAdmin, /openClosedSlotModal/, 'Kapalı saat bloğu düzenleme ekranını açmalı');
+assert.match(adminJs, /approvedWhatsappUrl/, 'Online onay ve manuel bildirim ortak WhatsApp üreticisini kullanmalı');
+assert.match(adminJs, /window\.whatsappAppointmentUrl/, 'Online onay mevcut appointment_confirmation şablon akışını kullanmalı');
+assert.doesNotMatch(adminJs, /randevu talebiniz onaylandı/, 'Ayrı hardcoded onay mesajı tutulmamalı');
+assert.match(adminJs, /if\(url\)window\.location\.href=url/, 'WhatsApp yalnız geçerli onay URLsi üretildiğinde açılmalı');
+assert.match(scheduleControls, /amount\.readOnly=false/, 'Randevu ücret alanı elle düzenlenebilir olmalı');
+assert.match(scheduleControls, /amount\.disabled=false/, 'Randevu ücret alanı etkin kalmalı');
+assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=73/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
 assert.match(phase2, /profile\.active&&profile\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı günlük çalışan özetine katılmamalı');
 assert.match(assistant, /p\.active&&p\.username!==['"]salon\.modern['"]/, 'Yalnız yönetici hesabı asistan çalışan sonuçlarına katılmamalı');
+assert.match(scheduleControls, /installAdminProfileFilters/, 'Önbellekte kalan eski özet kodu için yönetici profili çalışma anında da filtrelenmeli');
 
 console.log('customer booking request tests: PASS');
