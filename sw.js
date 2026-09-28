@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v79';
+const CACHE_NAME = 'salon-modern-shell-pwa-v80';
 const APP_SHELL = [
   './',
   './salon-modern.html',
@@ -19,7 +19,7 @@ const APP_SHELL = [
   './appointment-management-2.3.26.js',
   './salon-web-push.js',
   './pwa-stability-2.3.20.js',
-  './pwa-recovery-2.3.21.js?v=79',
+  './pwa-recovery-2.3.21.js?v=80',
   './pwa-device-session-2.3.22.js',
   './pwa-back-navigation-2.3.23.js',
   './pwa-desktop-layout-2.3.24.js',
@@ -28,9 +28,9 @@ const APP_SHELL = [
   './appointment-debt-warning-2.3.28.js',
   './debt-account-groups-2.3.29.js'
   ,'./appointment-form-actions-2.3.30.js'
-  ,'./booking-requests-admin-2.4.0.js?v=79'
-  ,'./booking-schedule-admin-2.4.1.js?v=79'
-  ,'./booking-schedule-controls-2.4.3.js?v=79'
+  ,'./booking-requests-admin-2.4.0.js?v=80'
+  ,'./booking-schedule-admin-2.4.1.js?v=80'
+  ,'./booking-schedule-controls-2.4.3.js?v=80'
   ,'./randevu/'
   ,'./randevu/booking.css'
   ,'./randevu/booking.js'

@@ -57,7 +57,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v79/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v80/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -96,9 +96,10 @@ assert.match(scheduleControls, /amount\.readOnly=false/, 'Randevu ücret alanı 
 assert.match(scheduleControls, /amount\.disabled=false/, 'Randevu ücret alanı etkin kalmalı');
 assert.match(index, /nextHour=Math\.min\(1440,\(Math\.floor\(startMinute\/60\)\+1\)\*60\)/, 'Kapalı saat seçimi bir sonraki tam saate kadar tüm aralığı kapatmalı');
 assert.match(index, /closedSlotStart['"]\)\.onchange/, 'Kapalı saat başlangıcı değişince bitiş önerisi birlikte güncellenmeli');
-assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=79/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
+assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=80/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
 assert.match(scheduleAdmin, /end=Math\.ceil\(end\/60\)\*60/, 'Yarım saatte biten görünüm son tam saate tamamlanmalı');
 assert.match(scheduleControls, /endLabel\.textContent=''/, 'Teknik bitiş sınırı yeni bir saat dilimi gibi gösterilmemeli');
+assert.match(scheduleControls, /repeat\('\+slots\+',minmax\(8px,1fr\)\) 0px/, 'Teknik bitiş satırı takvim altında boş alan bırakmamalı');
 assert.match(index, /appointmentStart=time\.slice\(3\)===['"]00['"]\|\|time\.slice\(3\)===['"]30['"]/, 'Yönetim takviminde saat ve yarım saat başlangıçları aktif olmalı');
 assert.match(index, /480\+\(index\*30\)/, 'Randevu formu yalnız 30 dakikalık başlangıçlar üretmeli');
 assert.match(scheduleAdmin, /step="1800"/, 'Tarih özelindeki çalışma saatleri yalnız tam veya yarım saat seçtirmeli');
