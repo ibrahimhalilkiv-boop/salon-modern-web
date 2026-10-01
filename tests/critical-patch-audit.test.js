@@ -20,13 +20,13 @@ const criticalScripts = [
 
 for (const page of pages) {
   for (const script of criticalScripts) {
-    const count = page.split(`src="${script}"`).length - 1;
+    const count = [...page.matchAll(/src="([^"]+)"/g)].filter(match => match[1].split('?')[0] === script).length;
     assert.equal(count, 1, `${script} her HTML kabuğunda tam bir kez yüklenmeli`);
   }
 }
 
 for (const script of criticalScripts) {
-  const count = worker.split(`'./${script}'`).length - 1;
+  const count = [...worker.matchAll(/'\.\/([^']+)'/g)].filter(match => match[1].split('?')[0] === script).length;
   assert.equal(count, 1, `${script} PWA kabuğunda tam bir kez bulunmalı`);
 }
 
@@ -46,6 +46,6 @@ assert.match(pushMigration, /select a\.created_by,a\.id,'appointment_reminder'/,
 assert.match(recovery, /reloadKey = 'salonShellReloaded:' \+ cacheVersion/, 'Her PWA sürümü kendine ait tek yenileme anahtarını kullanmalı');
 assert.doesNotMatch(recovery, /salonShellReloadedV16/, 'Sabit yenileme anahtarı sonraki sürümleri engellememeli');
 assert.match(pages[0], /pwa-recovery-2\.3\.21\.js\?v=81/, 'PWA kurtarma kodu sürümlü yüklenmeli');
-assert.match(pages[0], /booking-requests-admin-2\.4\.0\.js\?v=81/, 'Takvim yükleyicisi sürümlü yüklenmeli');
+assert.match(pages[0], /booking-requests-admin-2\.4\.0\.js\?v=90/, 'Takvim yükleyicisi sürümlü yüklenmeli');
 
 console.log('PASS critical patch load order and singleton handlers');

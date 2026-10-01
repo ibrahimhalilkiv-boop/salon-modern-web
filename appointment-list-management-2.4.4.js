@@ -21,7 +21,8 @@
       document.getElementById('managedRefresh').onclick=load;
     }
     var drawer=document.querySelector('#drawerLayer .drawer');
-    if(drawer&&!document.getElementById('drawerManagedAppointments')){var button=document.createElement('button');button.id='drawerManagedAppointments';button.className='menu-item';button.textContent='▤  Randevu Yönetimi';button.onclick=function(){window.drawerPage('managedAppointments')};drawer.appendChild(button)}
+    document.getElementById('drawerBookingRequests')?.remove();
+    if(drawer){var button=document.getElementById('drawerManagedAppointments');if(!button){button=document.createElement('button');button.id='drawerManagedAppointments';button.className='menu-item';button.textContent='▤  Randevu Yönetimi';button.onclick=function(){window.drawerPage('managedAppointments')}}var admin=drawer.querySelector("[onclick=\"drawerPage('admin')\"]");drawer.insertBefore(button,admin||drawer.querySelector('#drawerLogout')||null)}
   }
   async function sourceIds(ids){
     var session=await window.salonDb.auth.getSession();if(session.error)throw session.error;var token=session.data?.session?.access_token;if(!token)throw new Error('Personel oturumu gerekli.');

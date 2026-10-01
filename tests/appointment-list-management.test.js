@@ -25,7 +25,12 @@ const row=(id,employee='employee1')=>({id,employee_id:employee,client_name:'Test
  let resolveOld;pending=new Promise(resolve=>resolveOld=resolve);const old=api.load();pending=null;records=[row('latest')];await api.load();resolveOld({data:[row('stale')]});await old;assert.match(elems.managedList.innerHTML,/1 randevu/);assert.doesNotMatch(elems.managedList.innerHTML,/stale/);
  failure={message:'TEST_LOAD_ERROR'};await api.load();assert.match(elems.managedList.innerHTML,/TEST_LOAD_ERROR/);failure=null;
  ctx.logout();ctx.currentUser=null;const before=calls.length;await api.load();assert.equal(calls.length,before);
-assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=89/);
+assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=90/);
  assert.match(source,/window.toggleDrawer=function\(\)\{ensure\(\)/,'Install the menu even when session restoration skips the enter wrapper');
- console.log('PASS appointment management dates, sources, employee isolation, edit/delete delegation, pagination, stale responses and logout');
+ const adminAnchor={id:'admin'},oldRequest={remove(){this.removed=true}};elems.drawerBookingRequests=oldRequest;
+ let positioned=null;const drawer={querySelector:()=>adminAnchor,insertBefore(button,anchor){elems[button.id]=button;positioned=anchor}};
+ ctx.document.querySelector=()=>drawer;ctx.document.createElement=()=>({});ctx.currentUser=actor;ctx.toggleDrawer=function(){};
+ await api.load();assert.equal(positioned,adminAnchor);assert.equal(oldRequest.removed,true);assert.equal(elems.drawerManagedAppointments.textContent,'▤  Randevu Yönetimi');
+ assert.doesNotMatch(fs.readFileSync('booking-requests-admin-2.4.0.js','utf8'),/button.id='drawerBookingRequests'/,'Request menu must not be recreated');
+ console.log('PASS appointment management dates, sources, employee isolation, edit/delete delegation, pagination, stale responses, logout and replacement menu position');
 })().catch(error=>{console.error(error);process.exitCode=1});
