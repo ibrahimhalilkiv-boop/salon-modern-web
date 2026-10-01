@@ -44,7 +44,7 @@
   }
   function render(source){
     var holder=document.getElementById('managedList');if(!holder)return;var shown=rows.filter(function(item){return source==='all'||item.source===source});
-    holder.innerHTML='<div class="notice">'+shown.length+' randevu</div>'+(shown.map(function(item,index){return '<div class="appointment" style="flex-wrap:wrap"><div class="item-main"><strong>'+esc(item.customer)+'</strong><small>'+esc(item.date)+' · '+esc(item.time)+' · '+esc(item.staff)+'</small><small>'+esc(item.operation)+' · ₺ '+esc(item.amount)+' · '+(item.source==='online'?'Online':'Personel')+'</small></div><button type="button" class="link" data-edit="'+index+'">Düzenle</button><button type="button" class="remove" data-delete="'+index+'">Sil</button></div>'}).join('')||'<div class="empty">Bu filtrede randevu yok.</div>');
+    holder.innerHTML='<p class="muted">'+shown.length+' randevu</p>'+(shown.map(function(item,index){return '<div class="appointment" style="flex-wrap:wrap"><div class="item-main"><strong>'+esc(item.customer)+'</strong><small>'+esc(item.date)+' · '+esc(item.time)+' · '+esc(item.staff)+'</small><small>'+esc(item.operation)+' · ₺ '+esc(item.amount)+' · '+(item.source==='online'?'Online':'Personel')+'</small></div><button type="button" class="link" data-edit="'+index+'">Düzenle</button><button type="button" class="remove" data-delete="'+index+'">Sil</button></div>'}).join('')||'<div class="empty">Bu filtrede randevu yok.</div>');
     holder.querySelectorAll('[data-edit]').forEach(function(button){button.onclick=function(){edit(shown[Number(button.dataset.edit)])}});
     holder.querySelectorAll('[data-delete]').forEach(function(button){button.onclick=function(){remove(shown[Number(button.dataset.delete)])}});
   }

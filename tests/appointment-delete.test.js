@@ -46,6 +46,7 @@ vm.runInThisContext(fs.readFileSync('appointment-management-2.3.26.js', 'utf8'))
 
 (async () => {
   const managementSource = fs.readFileSync('appointment-management-2.3.26.js', 'utf8');
+  assert.match(managementSource,/appointmentDeleteDetails" class="notice" style="display:block"/,'Confirmation must visibly show the selected customer, date and time');
   assert.match(managementSource, /Promise\.race\(\[Promise\.resolve\(request\)/, 'Silme isteği tarayıcıyı süresiz kilitlememeli');
   assert.match(managementSource, /function finishUi\(\)/, 'Silme sonrası arayüz tek merkezden kapatılmalı');
   const buttonSource = fs.readFileSync('appointment-cancel-button-2.3.27.js', 'utf8');
