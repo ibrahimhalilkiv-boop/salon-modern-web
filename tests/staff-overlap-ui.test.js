@@ -1,12 +1,12 @@
 const assert=require('node:assert/strict'),fs=require('node:fs');
 const html=fs.readFileSync('salon-modern.html','utf8');
 const picker=html.match(/refreshAppointmentTimeAvailability=function\(\)\{[^\r\n]+/)[0];
-assert.match(picker,/closedSlotFor\(date,option.value,duration,employee.id\)/);
-assert.match(picker,/editingAppointmentId&&appointmentConflictFor/,'New staff booking must not disable occupied times');
+assert.match(picker,/closedSlotFor\(date,option.value,appointmentFormDuration\(\),employee.id\)/);
+assert.doesNotMatch(picker,/appointmentConflictFor/,'Staff occupied times remain selectable with confirmation');
 const saves=[...html.matchAll(/saveAppointment=async function\(event\)\{/g)];
 const finalSave=html.slice(saves[saves.length-2].index,saves[saves.length-1].index);
-assert.match(finalSave,/if\(editingAppointmentId&&appointmentConflictFor/,'Existing edit safeguard retained, new manual overlap allowed');
-assert.match(finalSave,/closedSlotFor\(dates\[i\],time,30,employee.id\)/,'Closed-slot rule unchanged');
+assert.match(finalSave,/appointmentActionConfirm\(originalId\?'Yine de güncelle':'Yine de ekle'/,'Both create and edit require explicit overlap confirmation');
+assert.match(finalSave,/closedSlotFor\(dates\[i\],time,duration,employee.id\)/,'Closed-slot rule uses real duration');
 const migration=fs.readFileSync('supabase/migrations/20261001143351_allow_staff_appointment_overlap.sql','utf8');
 assert.match(migration,/new.source='online' and new.status<>'cancelled'/);
 assert.match(migration,/pg_advisory_xact_lock/);

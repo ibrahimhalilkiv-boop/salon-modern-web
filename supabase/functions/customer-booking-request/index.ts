@@ -54,15 +54,6 @@ function overlaps(start: number, end: number, otherStart: string, minutes: numbe
   return start < a + minutes * 60000 && end > a
 }
 
-function followsLengthyAppointmentAtHalfHour(start: number, employeeId: string, appointments: Array<{ employee_id: string, scheduled_at: string, duration_minutes: number | null }>) {
-  if (new Date(start).getMinutes() === 0) return false
-  return appointments.some((item) => {
-    const appointmentDuration = Number(item.duration_minutes || 60)
-    const appointmentEnd = new Date(item.scheduled_at).getTime() + appointmentDuration * 60000
-    return item.employee_id === employeeId && appointmentDuration >= 45 && appointmentEnd === start
-  })
-}
-
 function timeMinutes(value: unknown, fallback: number) {
   const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
   if (!match) return fallback
@@ -119,21 +110,21 @@ async function catalogue(req: Request) {
     bookingSchedule(today),
   ])
   if (profiles.error) throw profiles.error
-  todaySchedule.hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) < Math.min(todaySchedule.close, ONLINE_LAST_START_MINUTES)
-  return reply(req, { services, employees: profiles.data, onlineBookingEnabled: todaySchedule.onlineBookingEnabled, today, todaySchedule })
+  const hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) < Math.min(todaySchedule.close, ONLINE_LAST_START_MINUTES)
+  return reply(req, { services, employees: profiles.data, onlineBookingEnabled: todaySchedule.onlineBookingEnabled, today, todaySchedule: { ...todaySchedule, hasRemainingWindow } })
 }
 
-async function availability(req: Request, url: URL) {
+async function availability(req: Request, url: URL, own?: { id: string, service_id: string, employee_id: string, duration_minutes: number }) {
   const date = url.searchParams.get('date') || ''
-  const serviceId = url.searchParams.get('service') || ''
-  const requestedEmployeeId = url.searchParams.get('employee') || ''
+  const serviceId = own?.service_id || url.searchParams.get('service') || ''
+  const requestedEmployeeId = own?.employee_id || url.searchParams.get('employee') || ''
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !serviceId) return reply(req, { error: 'Tarih ve hizmet gerekli.' }, 400)
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date())
   if (date < today) return reply(req, { error: 'Geçmiş tarih seçilemez.' }, 400)
 
-  const service = (await onlineServices()).find((item) => item.id === serviceId)
+  const service = own ? { id: own.service_id, duration_minutes: own.duration_minutes } : (await onlineServices()).find((item) => item.id === serviceId)
   if (!service) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
-  if (!Number.isInteger(service.duration_minutes) || service.duration_minutes < 15 || service.duration_minutes > 120 || service.duration_minutes % 15 !== 0) return reply(req, { error: 'Bu hizmetin süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
+  if (!Number.isSafeInteger(service.duration_minutes) || service.duration_minutes <= 0) return reply(req, { error: 'Bu hizmetin süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
   const schedule = await bookingSchedule(date)
   if (schedule.closed) return reply(req, { date, durationMinutes: service.duration_minutes, slots: [], schedule })
   let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern')
@@ -145,8 +136,8 @@ async function availability(req: Request, url: URL) {
   const to = `${date}T23:59:59+03:00`
   const ids = employees.data.map((item) => item.id)
   const [appointments, closures] = await Promise.all([
-    db.from('appointments').select('employee_id,scheduled_at,duration_minutes,status')
-      .in('employee_id', ids).gte('scheduled_at', from).lte('scheduled_at', to).neq('status', 'cancelled'),
+    db.from('appointments').select('id,employee_id,scheduled_at,duration_minutes,status')
+      .in('employee_id', ids).lt('scheduled_at', to).gt('scheduled_end', from).neq('status', 'cancelled'),
     db.from('closed_time_slots').select('employee_id,starts_at,ends_at')
       .in('employee_id', ids).lt('starts_at', to).gt('ends_at', from),
   ])
@@ -154,7 +145,7 @@ async function availability(req: Request, url: URL) {
   const duration = service.duration_minutes
   const now = Date.now()
   const slots = []
-  const cadence = duration >= 60 ? 60 : 30
+  const cadence = 15
   const first = Math.ceil(schedule.open / cadence) * cadence
   for (let minutes = first; minutes <= ONLINE_LAST_START_MINUTES && minutes + duration <= schedule.close; minutes += cadence) {
     const time = minuteLabel(minutes)
@@ -162,10 +153,9 @@ async function availability(req: Request, url: URL) {
     const end = start + duration * 60000
     if (start <= now) continue
     const employeeIds = employees.data.filter((employee) => {
-      const busy = (appointments.data || []).some((item) => item.employee_id === employee.id && overlaps(start, end, item.scheduled_at, Number(item.duration_minutes || 60)))
+      const busy = (appointments.data || []).some((item) => (!own || item.id !== own.id) && item.employee_id === employee.id && overlaps(start, end, item.scheduled_at, Number(item.duration_minutes || 60)))
       const closed = (closures.data || []).some((item) => item.employee_id === employee.id && start < new Date(item.ends_at).getTime() && end > new Date(item.starts_at).getTime())
-      const mustWaitForFullHour = duration < 60 && followsLengthyAppointmentAtHalfHour(start, employee.id, appointments.data || [])
-      return !busy && !closed && !mustWaitForFullHour
+      return !busy && !closed
     }).map((employee) => employee.id)
     if (employeeIds.length) slots.push({ time, employeeIds })
   }
@@ -243,10 +233,45 @@ async function createRequest(req: Request) {
 }
 
 async function publicStatus(req: Request, token: string) {
-  if (!/^[0-9a-f-]{36}$/i.test(token)) return reply(req, { error: 'Geçersiz takip kodu.' }, 400)
-  const row = await db.from('online_booking_requests').select('status,scheduled_at').eq('public_token', token).maybeSingle()
+  if (!validUuid(token)) return reply(req, { error: 'Geçersiz takip kodu.' }, 400)
+  const row = await customerBooking(token)
   if (!row.data) return reply(req, { error: 'Talep bulunamadı.' }, 404)
-  return reply(req, { status: row.data.status, requested_date: row.data.scheduled_at, requested_start_at: row.data.scheduled_at })
+  const item = row.data.appointment
+  const starts = item?.scheduled_at || row.data.scheduled_at
+  return reply(req, { status: item?.status === 'cancelled' ? 'cancelled' : row.data.status,
+    requested_date: starts, requested_start_at: starts, revision: row.data.customer_revision,
+    appointment: item ? { customer: item.client_name, service: item.service_name, employee: item.employee?.full_name,
+      scheduledAt: starts, durationMinutes: item.duration_minutes, amount: item.amount,
+      canManage: item.status === 'confirmed' && row.data.status === 'approved' && new Date(starts).getTime() > Date.now() } : null })
+}
+
+function validUuid(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }
+type CustomerBookingRow = { status: string, scheduled_at: string, customer_revision: number,
+  appointment: null | { id: string, client_name: string, service_name: string, service_id: string, employee_id: string,
+    scheduled_at: string, duration_minutes: number, amount: number, status: string, employee: null | { full_name: string } } }
+async function customerBooking(token: string) {
+  const result = await db.from('online_booking_requests')
+    .select('status,scheduled_at,customer_revision,appointment:appointments!online_booking_requests_appointment_id_fkey(id,client_name,service_name,service_id,employee_id,scheduled_at,duration_minutes,amount,status,employee:profiles!appointments_employee_id_fkey(full_name))')
+    .eq('public_token', token).maybeSingle().returns<CustomerBookingRow>()
+  if (result.error) throw result.error
+  return result
+}
+async function customerAvailability(req: Request, url: URL) {
+  const token = url.searchParams.get('token') || ''
+  if (!validUuid(token)) return reply(req, { error: 'Geçersiz takip kodu.' }, 400)
+  const row = await customerBooking(token), item = row.data?.appointment
+  if (!item || item.status !== 'confirmed' || row.data?.status !== 'approved' || new Date(item.scheduled_at).getTime() <= Date.now()) return reply(req, { error: 'Randevu değiştirilemez.' }, 409)
+  return availability(req, url, item)
+}
+async function customerAction(req: Request, action: string) {
+  const body = await req.json().catch(() => ({}))
+  if (body.appointmentId || body.employeeId || body.serviceId || body.staff_overlap_override) return reply(req, { error: 'Yalnız bağlı randevunun tarihi ve saati değiştirilebilir.' }, 400)
+  if (!validUuid(body.token || '') || !validUuid(body.operation || '') || !Number.isInteger(body.revision)) return reply(req, { error: 'Geçersiz işlem bilgileri.' }, 400)
+  if (action === 'update' && (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '') || !/^\d{2}:\d{2}$/.test(body.time || ''))) return reply(req, { error: 'Tarih ve saat seçin.' }, 400)
+  const result = await db.rpc('manage_customer_online_booking', { p_token: body.token, p_operation: body.operation,
+    p_revision: body.revision, p_action: action, p_start: action === 'update' ? slotIso(body.date, body.time) : null })
+  if (result.error) return reply(req, { error: 'Randevu değiştirilemedi. Bilgileri ve müsait saatleri yenileyin.' }, 409)
+  return reply(req, result.data)
 }
 
 async function adminList(req: Request) {
@@ -312,8 +337,10 @@ Deno.serve(async (req) => {
     if (req.method === 'GET' && action === 'catalogue') return await catalogue(req)
     if (req.method === 'GET' && action === 'availability') return await availability(req, url)
     if (req.method === 'GET' && action === 'status') return await publicStatus(req, url.searchParams.get('token') || '')
+    if (req.method === 'GET' && action === 'customer-availability') return await customerAvailability(req, url)
     if (req.method === 'GET' && action === 'admin-list') return await adminList(req)
     if (req.method === 'POST' && action === 'create') return await createRequest(req)
+    if (req.method === 'POST' && (action === 'customer-update' || action === 'customer-cancel')) return await customerAction(req, action === 'customer-update' ? 'update' : 'cancel')
     if (req.method === 'POST' && (action === 'approve' || action === 'reject')) return await adminAction(req, action)
     return reply(req, { error: 'İşlem bulunamadı.' }, 404)
   } catch (error) {
