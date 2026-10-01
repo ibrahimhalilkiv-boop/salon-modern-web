@@ -57,7 +57,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v87/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v88/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');

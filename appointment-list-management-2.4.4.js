@@ -56,8 +56,9 @@
   function reset(){requestNumber++;rows=[];release();Object.assign(filter,{period:'today',source:'all',start:'',end:''});document.getElementById('managedAppointments')?.remove();document.getElementById('drawerManagedAppointments')?.remove()}
   window.SalonAppointmentList={load:load,dates:dates,filter:filter,permitted:permitted};
   var priorEnter=window.enterApp;window.enterApp=function(){var result=priorEnter.apply(this,arguments);ensure();return result};
-  var priorShow=window.showPage;window.showPage=function(id){if(id==='managedAppointments'){if(!user())return;ensure()}var result=priorShow.apply(this,arguments);if(id==='managedAppointments')load();return result};
-  var priorReload=window.reloadRemoteData;window.reloadRemoteData=async function(){var result=await priorReload.apply(this,arguments);if(active())load();return result};
+  var priorShow=window.showPage;window.showPage=function(id){if(id==='managedAppointments'&&!user())return;ensure();var result=priorShow.apply(this,arguments);if(id==='managedAppointments')load();return result};
+  var priorDrawer=window.toggleDrawer;window.toggleDrawer=function(){ensure();return priorDrawer.apply(this,arguments)};
+  var priorReload=window.reloadRemoteData;window.reloadRemoteData=async function(){var result=await priorReload.apply(this,arguments);ensure();if(active())load();return result};
   var priorClose=window.closeAppointmentModal;window.closeAppointmentModal=function(){var result=priorClose.apply(this,arguments);release();return result};
   var priorDeleteClose=window.closeAppointmentDeleteModal;window.closeAppointmentDeleteModal=function(){var result=priorDeleteClose.apply(this,arguments);if(!document.getElementById('appointmentDeleteModal')?.classList.contains('show'))release();return result};
   var priorLogout=window.logout;window.logout=function(){reset();return priorLogout.apply(this,arguments)};
