@@ -3,6 +3,7 @@
 window.SALON_APP_VERSION='2.3.14';
 var financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',pendingSale:null,pendingUsage:null,loaded:false,loading:false};
 var finance230Busy=false,finance230ConfirmResolver=null;
+var finance230DateRequest=0;
 var money=function(value){return new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:2}).format(Number(value||0))};
 var esc=function(value){return typeof safe==='function'?safe(String(value??'')):String(value??'').replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})};
 var today=function(){return typeof localDate==='function'?localDate(0):new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Istanbul'})};
@@ -29,20 +30,21 @@ function installFinance230(){
     '</div>';
   var nav=document.querySelector('#app .nav');if(nav)document.getElementById('app').insertBefore(page,nav);else document.getElementById('app').appendChild(page);
   var editPage=document.createElement('section');editPage.id='finance230RecordEdit';editPage.className='page';editPage.innerHTML='<div class="content finance230-content"><button class="back" type="button" onclick="closeFinance230Edit()">‹ Kasa kayıtları</button><h1 class="page-title" id="finance230EditTitle">Kaydı güncelle</h1><div class="finance230-card"><form id="finance230EditForm" onsubmit="saveFinance230Edit(event)"></form></div></div>';if(nav)document.getElementById('app').insertBefore(editPage,nav);else document.getElementById('app').appendChild(editPage);
-  var productsPage=document.createElement('section');productsPage.id='salonProducts';productsPage.className='page';productsPage.innerHTML='<div class="content finance230-content"><button class="back" type="button" onclick="showPage(\'finance\')">‹ Muhasebe</button><div class="finance230-title"><div><h1 class="page-title">Ürün ve stok</h1><small>Mevcut stok, satış fiyatı ve salon içi kullanım</small></div><span class="role" data-app-version>v2.3.14</span></div><div id="salonProductsContent"><div class="security">Ürünler hazırlanıyor…</div></div></div>';if(nav)document.getElementById('app').insertBefore(productsPage,nav);else document.getElementById('app').appendChild(productsPage);
+var productsPage=document.createElement('section');productsPage.id='salonProducts';productsPage.className='page';productsPage.innerHTML='<div class="content finance230-content"><button class="back" type="button" onclick="openFinance230(\'closing\')">‹ Günlük kasa</button><div class="finance230-title"><div><h1 class="page-title">Ürün ve stok</h1><small>Mevcut stok, satış fiyatı ve salon içi kullanım</small></div><span class="role" data-app-version>v2.3.14</span></div><div id="salonProductsContent"><div class="security">Ürünler hazırlanıyor…</div></div></div>';if(nav)document.getElementById('app').insertBefore(productsPage,nav);else document.getElementById('app').appendChild(productsPage);
   var actionPage=document.createElement('section');actionPage.id='finance230ProductAction';actionPage.className='page';actionPage.innerHTML='<div class="content finance230-content"><button id="finance230ActionBack" class="back" type="button" onclick="openFinance230Products()">‹ Ürün ve stok</button><h1 class="page-title" id="finance230ProductActionTitle">İşlemi kontrol et</h1><div class="finance230-card"><form id="finance230ProductActionForm" onsubmit="saveFinance230ProductAction(event)"></form></div></div>';if(nav)document.getElementById('app').insertBefore(actionPage,nav);else document.getElementById('app').appendChild(actionPage);
   installFinance230Navigation();
   if(!document.getElementById('finance230Confirm')){var modal=document.createElement('div');modal.id='finance230Confirm';modal.className='finance230-confirm hidden';modal.innerHTML='<div class="finance230-confirm-card"><h2 id="finance230ConfirmTitle">İşlemi onaylayın</h2><div id="finance230ConfirmBody"></div><div class="finance230-confirm-actions"><button type="button" onclick="finance230ResolveConfirm(false)">Vazgeç</button><button type="button" class="confirm" onclick="finance230ResolveConfirm(true)">Onayla</button></div></div>';document.body.appendChild(modal)}
 }
 
 function installFinance230Navigation(){
-  var drawer=document.querySelector('#drawerLayer .drawer'),accounting=drawer&&Array.from(drawer.querySelectorAll('button')).find(function(node){return /Muhasebe/i.test((node.textContent||node.innerText||'').replace(/\s+/g,' ').trim())}),menu=accounting&&(accounting.parentElement||accounting.parentNode);if(!drawer||!accounting||!menu)return;
+  document.querySelectorAll('#app > .nav button').forEach(function(button){if(/Muhasebe/i.test(button.textContent||''))button.remove()});
+  var drawer=document.querySelector('#drawerLayer .drawer'),accounting=drawer&&Array.from(drawer.querySelectorAll('button')).find(function(node){return /Muhasebe/i.test((node.textContent||node.innerText||'').replace(/\s+/g,' ').trim())}),menu=accounting?.parentElement||document.getElementById('finance230Menu')?.parentElement||drawer;if(!drawer||!menu)return;
   var cashButton=document.getElementById('finance230Menu');if(!cashButton){cashButton=document.createElement('button');cashButton.id='finance230Menu';cashButton.className='menu-item';cashButton.type='button'}cashButton.innerHTML='₺ &nbsp; Günlük kasa';cashButton.onclick=function(event){event?.preventDefault();openFinance230('closing')};
   var stockButton=document.getElementById('drawerProducts');if(!stockButton){stockButton=document.createElement('button');stockButton.id='drawerProducts';stockButton.className='menu-item';stockButton.type='button';stockButton.innerHTML='▣ &nbsp; Ürün ve stok'}stockButton.onclick=function(event){event?.preventDefault();openFinance230Products()};
   var saleButton=document.getElementById('drawerProductSale');if(!saleButton){saleButton=document.createElement('button');saleButton.id='drawerProductSale';saleButton.className='menu-item';saleButton.type='button';saleButton.innerHTML='₺ &nbsp; Satış'}saleButton.onclick=function(event){event?.preventDefault();openFinance230('sale')};
-  accounting.insertAdjacentElement('afterend',cashButton);cashButton.insertAdjacentElement('afterend',stockButton);stockButton.insertAdjacentElement('afterend',saleButton);
+  if(accounting){accounting.insertAdjacentElement('afterend',cashButton);accounting.remove()}else if(!cashButton.parentElement)menu.appendChild(cashButton);cashButton.insertAdjacentElement('afterend',stockButton);stockButton.insertAdjacentElement('afterend',saleButton);
   document.getElementById('drawerAuditHistory')?.remove();document.getElementById('drawerSalonAssistant')?.remove();
-  var financePage=document.getElementById('finance'),content=financePage&&financePage.querySelector('.content'),title=content&&content.querySelector('.page-title');if(content&&!document.getElementById('finance230AccountingNav')){var shortcuts=document.createElement('div');shortcuts.id='finance230AccountingNav';shortcuts.className='finance230-accounting-nav';shortcuts.innerHTML='<button type="button" class="active" onclick="showPage(\'finance\')">Muhasebe</button><button type="button" onclick="openFinance230(\'closing\')">Günlük kasa</button><button type="button" onclick="openFinance230Products()">Ürün ve stok</button><button type="button" onclick="openFinance230(\'sale\')">Satış</button>';if(title)title.insertAdjacentElement('afterend',shortcuts);else content.insertBefore(shortcuts,content.firstChild)}
+  var financePage=document.getElementById('finance'),content=financePage&&financePage.querySelector('.content'),title=content&&content.querySelector('.page-title');if(content&&!document.getElementById('finance230AccountingNav')){var shortcuts=document.createElement('div');shortcuts.id='finance230AccountingNav';shortcuts.className='finance230-accounting-nav';shortcuts.innerHTML='<button type="button" onclick="openFinance230(\'closing\')">Günlük kasa</button><button type="button" onclick="openFinance230Products()">Ürün ve stok</button><button type="button" onclick="openFinance230(\'sale\')">Satış</button>';if(title)title.insertAdjacentElement('afterend',shortcuts);else content.insertBefore(shortcuts,content.firstChild)}
 }
 
 function openFinance230(tab){syncFinance230Version();if(typeof closeDrawer==='function')closeDrawer();showPage('salonFinance');finance230Tab(tab||'closing');loadFinance230(false)}
@@ -71,11 +73,10 @@ async function loadFinance230(force){
       salonDb.from('finance_reserve_rules').select('id,daily_amount,effective_from,created_at').order('effective_from',{ascending:false}),
       salonDb.from('daily_cash_closings').select('*').order('business_date',{ascending:false}).limit(40),
       salonDb.from('reserve_ledger').select('id,entry_date,entry_type,amount,note,created_at').order('entry_date',{ascending:false}).order('created_at',{ascending:false}).limit(50),
-      salonDb.from('business_expenses').select('id,expense_date,account_scope,category,description,amount,created_at,updated_at').order('expense_date',{ascending:false}).order('created_at',{ascending:false}).limit(100),
       salonDb.from('clients').select('id,full_name,phone,active').eq('active',true).order('full_name')
     ]);
     var failed=results.find(function(result){return result.error});if(failed)throw failed.error;
-    financeState.products=results[0].data||[];financeState.sales=results[1].data||[];financeState.movements=results[2].data||[];financeState.rules=results[3].data||[];financeState.closings=results[4].data||[];financeState.ledger=results[5].data||[];financeState.expenses=results[6].data||[];financeState.clients=results[7].data||[];financeState.loaded=true;renderAll();
+    financeState.products=results[0].data||[];financeState.sales=results[1].data||[];financeState.movements=results[2].data||[];financeState.rules=results[3].data||[];financeState.closings=results[4].data||[];financeState.ledger=results[5].data||[];financeState.clients=results[6].data||[];financeState.loaded=true;renderAll();
   }catch(error){toast('Kasa verileri yüklenemedi',errText(error))}finally{financeState.loading=false;document.getElementById('finance230Loading')?.classList.add('hidden')}
 }
 window.loadFinance230=loadFinance230;
@@ -84,15 +85,19 @@ function renderAll(){renderClosing();renderSale();renderProducts();renderReserve
 async function renderClosing(){
   var holder=document.getElementById('finance230Closing');if(!holder||!manager())return;
   var selected=document.getElementById('finance230Date')?.value||today();
-  holder.innerHTML='<div class="finance230-card"><label class="field">Günlük hesap tarihi<input id="finance230Date" type="date" value="'+esc(selected)+'" onchange="renderFinance230Summary()"></label><div id="finance230Summary"><div class="empty">Hesaplanıyor…</div></div></div>'+expenseFormHtml()+financeRecordsHtml()+closingHistoryHtml();
+  holder.innerHTML='<div class="finance230-card"><label class="field">Günlük hesap tarihi<input id="finance230Date" type="date" value="'+esc(selected)+'" onchange="renderFinance230Summary()"></label><div id="finance230Summary"><div class="empty">Hesaplanıyor…</div></div></div>'+expenseFormHtml()+'<div id="finance230Records"></div>'+closingHistoryHtml();
   await renderFinance230Summary();
 }
 window.renderClosing=renderClosing;
 
 async function renderFinance230Summary(){
   var date=document.getElementById('finance230Date')?.value||today(),holder=document.getElementById('finance230Summary');if(!holder)return;
+  var request=++finance230DateRequest,records=document.getElementById('finance230Records');
+  if(records)records.innerHTML='<div class="section"><h2>Gider kayıtları</h2></div><h3>'+esc(date)+'</h3><div class="empty">Giderler yükleniyor…</div>';
+  loadFinance230Expenses(date,request);
   holder.innerHTML='<div class="empty">Günlük kasa hesaplanıyor…</div>';
   var result=await salonDb.rpc('calculate_daily_cash_summary',{p_date:date});
+  if(request!==finance230DateRequest||document.getElementById('finance230Summary')!==holder||document.getElementById('finance230Date')?.value!==date)return;
   if(result.error){holder.innerHTML='<div class="security finance230-error">'+esc(result.error.message)+'</div>';return}
   var s=result.data||{},dirty=s.closing_status==='dirty',closed=s.closing_status==='closed';
   var rows=[
@@ -121,7 +126,14 @@ function expenseFormHtml(){return '<div class="finance230-card"><div class="sect
 async function saveFinance230Expense(event){event.preventDefault();var date=document.getElementById('f230ExpenseDate'),scope=document.getElementById('f230ExpenseScope'),category=document.getElementById('f230ExpenseCategory'),description=document.getElementById('f230ExpenseDescription'),amount=document.getElementById('f230ExpenseAmount');var payload={expense_date:date?.value,account_scope:scope?.value,category:category?.value,description:(description?.value||'').trim()||null,amount:Number(amount?.value),created_by:currentUser.id};if(!payload.expense_date||!Number.isFinite(payload.amount)||payload.amount<=0){toast('Eksik bilgi','Gider tarihini ve tutarını kontrol edin.');return}var result=await salonDb.from('business_expenses').insert(payload).select('id').single();if(result.error){toast('Gider kaydedilemedi',result.error.message);return}event.target.reset();var nextDate=document.getElementById('f230ExpenseDate');if(nextDate)nextDate.value=today();financeState.loaded=false;await loadFinance230(true);if(typeof loadCashTracking==='function')loadCashTracking();toast('Gider kaydedildi',payload.account_scope==='reserve'?'Ana gider fondan düşüldü.':'Günlük paylaşım hesabına eklendi.')}
 window.saveFinance230Expense=saveFinance230Expense;
 
-function financeRecordsHtml(){var expenses=financeState.expenses.slice(0,30).map(function(x){return '<button type="button" class="finance230-row finance230-open-row" onclick="editFinance230Expense(\''+x.id+'\')"><span><strong>'+esc(x.category)+'</strong><small>'+esc(x.expense_date)+' · '+esc(x.account_scope==='reserve'?'Ana gider':'Günlük gider')+(x.description?' · '+esc(x.description):'')+'</small></span><b class="minus">'+money(x.amount)+'</b><i>›</i></button>'}).join('');return '<div class="section"><h2>Gider kayıtları</h2><small>Güncellemek için kayda dokunun</small></div><div class="finance230-list">'+(expenses||'<div class="empty">Henüz gider kaydı yok.</div>')+'</div>'}
+async function loadFinance230Expenses(date,request){
+  try{var rows=[],offset=0,pageSize=500;
+    while(true){var result=await salonDb.from('business_expenses').select('id,expense_date,account_scope,category,description,amount,created_at,updated_at').eq('expense_date',date).order('created_at',{ascending:false}).order('id').range(offset,offset+pageSize-1);if(request!==finance230DateRequest)return;if(result.error)throw result.error;var batch=result.data||[];rows=rows.concat(batch);if(batch.length<pageSize)break;offset+=pageSize}
+    if(document.getElementById('finance230Date')?.value!==date)return;
+    financeState.expenses=rows;var holder=document.getElementById('finance230Records');if(holder)holder.innerHTML=financeRecordsHtml(date);
+  }catch(error){if(request!==finance230DateRequest)return;var holder=document.getElementById('finance230Records');if(holder)holder.innerHTML='<div class="section"><h2>Gider kayıtları</h2></div><h3>'+esc(date)+'</h3><div class="security finance230-error">'+esc(errText(error))+'</div>'}
+}
+function financeRecordsHtml(date){var expenses=financeState.expenses.filter(function(x){return x.expense_date===date}).map(function(x){return '<button type="button" class="finance230-row finance230-open-row" onclick="editFinance230Expense(\''+x.id+'\')"><span><strong>'+esc(x.category)+'</strong><small>'+esc(x.account_scope==='reserve'?'Ana gider':'Günlük gider')+(x.description?' · '+esc(x.description):'')+'</small></span><b class="minus">'+money(x.amount)+'</b><i>›</i></button>'}).join('');return '<div class="section"><h2>Gider kayıtları</h2><small>Güncellemek için kayda dokunun</small></div><h3>'+esc(date)+'</h3><div class="finance230-list">'+(expenses||'<div class="empty">Bu tarihte gider kaydı yok.</div>')+'</div>'}
 
 function openFinance230Edit(title,body){document.getElementById('finance230EditTitle').textContent=title;document.getElementById('finance230EditForm').innerHTML=body;showPage('finance230RecordEdit')}
 function closeFinance230Edit(){openFinance230('closing')}
@@ -187,7 +199,7 @@ function syncFinance230Version(){var value='v'+window.SALON_APP_VERSION;document
 var previousEnterApp=typeof enterApp==='function'?enterApp:null;
 if(previousEnterApp)enterApp=function(){var result=previousEnterApp.apply(this,arguments);setTimeout(function(){syncFinance230Version();if(manager())loadFinance230(false)},150);return result};
 var previousLogout=typeof logout==='function'?logout:null;
-if(previousLogout)logout=async function(){financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',loaded:false,loading:false};return previousLogout.apply(this,arguments)};
+if(previousLogout)logout=async function(){finance230DateRequest++;financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',loaded:false,loading:false};return previousLogout.apply(this,arguments)};
 
 var style=document.createElement('style');style.textContent=
   '.finance230-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.finance230-title .page-title{margin-bottom:2px}.finance230-title small{color:var(--muted)}'+
