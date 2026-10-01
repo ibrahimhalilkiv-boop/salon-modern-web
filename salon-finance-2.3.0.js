@@ -86,7 +86,7 @@ function renderAll(){renderClosing();renderSale();renderProducts();renderReserve
 async function renderClosing(){
   var holder=document.getElementById('finance230Closing');if(!holder||!manager())return;
   var selected=document.getElementById('finance230Date')?.value||today();
-  holder.innerHTML='<div class="finance230-card"><h2>Günlük kasa ve kapanış</h2><label class="field">Günlük hesap tarihi<input id="finance230Date" type="date" value="'+esc(selected)+'" onchange="renderFinance230Summary()"></label><div id="finance230Summary"><div class="empty">Hesaplanıyor…</div></div></div>'+finance230PeriodHtml()+expenseFormHtml()+'<div id="finance230Records"></div>'+closingHistoryHtml();
+holder.innerHTML='<div class="finance230-card"><h2>Günlük kasa ve kapanış</h2><label class="field">Günlük hesap tarihi<input id="finance230Date" type="date" value="'+esc(selected)+'" onchange="renderFinance230Summary()"></label><div id="finance230Summary"><div class="empty">Hesaplanıyor…</div></div></div>'+expenseFormHtml()+finance230PeriodHtml()+'<div id="finance230Records"></div>'+closingHistoryHtml();
   renderFinance230Period();
   await renderFinance230Summary();
 }

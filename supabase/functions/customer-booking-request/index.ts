@@ -108,7 +108,6 @@ async function onlineServices() {
   const result = await db.from('services').select('id,name,price,duration_minutes').eq('active', true)
   if (result.error) throw result.error
   return (result.data || []).sort((a, b) => Number(b.price || 0) - Number(a.price || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'tr') || String(a.id).localeCompare(String(b.id)))
-    .map((service, index) => ({ ...service, duration_minutes: index < 4 ? 60 : 30 }))
 }
 
 async function catalogue(req: Request) {
@@ -134,6 +133,7 @@ async function availability(req: Request, url: URL) {
 
   const service = (await onlineServices()).find((item) => item.id === serviceId)
   if (!service) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
+  if (!Number.isInteger(service.duration_minutes) || service.duration_minutes < 15 || service.duration_minutes > 120 || service.duration_minutes % 15 !== 0) return reply(req, { error: 'Bu hizmetin süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
   const schedule = await bookingSchedule(date)
   if (schedule.closed) return reply(req, { date, durationMinutes: service.duration_minutes, slots: [], schedule })
   let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern')
@@ -223,6 +223,7 @@ async function createRequest(req: Request) {
   if (employeeId) availabilityUrl.searchParams.set('employee', employeeId)
   const availabilityResponse = await availability(new Request(availabilityUrl, { headers: req.headers }), availabilityUrl)
   const availabilityBody = await availabilityResponse.json()
+  if (!availabilityResponse.ok) return reply(req, { error: availabilityBody.error || 'Müsait saatler yüklenemedi.' }, availabilityResponse.status)
   const chosen = (availabilityBody.slots || []).find((item: { time: string, employeeIds: string[] }) => item.time === time)
   if (!chosen || (employeeId && !chosen.employeeIds.includes(employeeId))) return reply(req, { error: 'Seçilen saat artık müsait değil.' }, 409)
 
@@ -249,6 +250,25 @@ async function publicStatus(req: Request, token: string) {
 }
 
 async function adminList(req: Request) {
+  const sourceIds = new URL(req.url).searchParams.get('sourceIds')
+  if (sourceIds !== null) {
+    const ids = sourceIds.split(',').filter(Boolean)
+    if (ids.length > 200 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) return reply(req, { error: 'Randevu kimliklerini kontrol edin.' }, 400)
+    const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+    const auth = await db.auth.getUser(token)
+    if (auth.error || !auth.data.user) return reply(req, { error: 'Personel oturumu gerekli.' }, 401)
+    const actor = await db.from('profiles').select('id').eq('id', auth.data.user.id).eq('active', true).maybeSingle()
+    if (actor.error || !actor.data) return reply(req, { error: 'Aktif personel oturumu gerekli.' }, 403)
+    if (!ids.length) return reply(req, { sourceAppointmentIds: [] })
+    const userDb = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('authorization') || '' } } })
+    const allowed = await userDb.from('appointments').select('id').in('id', ids)
+    if (allowed.error) throw allowed.error
+    const allowedIds = (allowed.data || []).map(row => row.id)
+    if (!allowedIds.length) return reply(req, { sourceAppointmentIds: [] })
+    const sources = await db.from('online_booking_requests').select('appointment_id').in('appointment_id', allowedIds)
+    if (sources.error) throw sources.error
+    return reply(req, { sourceAppointmentIds: (sources.data || []).map(row => row.appointment_id) })
+  }
   const actor = await manager(req)
   if (!actor) return reply(req, { error: 'Yönetici oturumu gerekli.' }, 401)
   const rows = await db.from('online_booking_requests').select('*,services(name,price),requested_profile:profiles!online_booking_requests_employee_id_fkey(full_name)')
