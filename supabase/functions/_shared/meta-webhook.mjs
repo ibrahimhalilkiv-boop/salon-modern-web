@@ -8,7 +8,7 @@ export function extractMetaEvents(body) {
         if (Array.isArray(change.value?.messages)) events.messages.push(...change.value.messages);
         if (Array.isArray(change.value?.statuses)) events.statuses.push(...change.value.statuses);
       } else if (change?.field === 'message_template_status_update') {
-        events.templateChanges.push(change.value ?? {});
+        events.templateChanges.push({ ...(change.value ?? {}), waba_id: String(entry.id ?? '') });
       }
     }
   }

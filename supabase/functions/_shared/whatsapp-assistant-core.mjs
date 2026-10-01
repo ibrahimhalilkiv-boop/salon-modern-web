@@ -165,5 +165,3 @@ export function maskPhone(value = "") {
   if (!normalized) return "Telefon yok";
   return `+90 5** *** ** ${normalized.slice(-2)}`;
 }
-
-

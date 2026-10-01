@@ -24,6 +24,9 @@ type Intent = "price" | "service" | "availability" | "create_appointment" | "res
 
 const SAFE_MODE = (Deno.env.get("SAFE_MODE") ?? "true").toLowerCase() !== "false";
 const ASSISTANT_ENABLED = assistantEnabled(Deno.env);
+// Public asset ID, not a credential. Only this Salon Modern WABA may revoke
+// mappings; an old/test WABA with the same template name cannot affect them.
+const WEBHOOK_WABA_ID = Deno.env.get("WHATSAPP_BUSINESS_ACCOUNT_ID") ?? "1859183478383573";
 const BOOKING_WRITE_ENABLED = ASSISTANT_ENABLED && !SAFE_MODE && (Deno.env.get("BOOKING_WRITE_ENABLED") ?? "false").toLowerCase() === "true";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -433,6 +436,7 @@ Deno.serve(async (request: Request) => {
     if (saved.error) return json({ ok: false, error: "receipt_store_failed" }, 503);
   }
   for (const change of templateChanges) {
+    if (change.waba_id !== WEBHOOK_WABA_ID) continue;
     const revoked = templateRevocation(change);
     if (!revoked) continue;
     const saved = await db.from("whatsapp_meta_template_mappings")
@@ -500,4 +504,3 @@ Deno.serve(async (request: Request) => {
   }
   return json({ ok: true, safe_mode: SAFE_MODE, booking_write_enabled: BOOKING_WRITE_ENABLED, processed: results });
 });
-

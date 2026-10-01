@@ -3,7 +3,7 @@
 ## Completed, without customer sends
 
 - Imported the actual deployed `whatsapp-assistant-v31` v18 source into this repository (not the divergent old local backend copy).
-- Deployed v19 with signed delivery receipts, conditional monotonic delivery states and template revocation handling.
+- Deployed v20 with signed delivery receipts, conditional monotonic delivery states and template revocation handling scoped to the selected WABA.
 - `WHATSAPP_ASSISTANT_ENABLED` defaults to false. Outbound appointment dispatch `SAFE_MODE` no longer implicitly enables the inbound bot, AI calls or booking writes.
 - Incoming Business App echoes/history are not handled as customer requests. No history/state-sync subscriptions are needed for this appointment notification task.
 - Rejected/paused/disabled/deleted templates clear their approved hash; APPROVED events alone cannot approve unverified content.
@@ -12,11 +12,11 @@
 
 ## Validation
 
-- `node tests/meta-webhook-readiness.test.mjs`: 10 checks PASS, including actual signed handler with mock DB, invalid signature, receipt ID targeting, disabled inbound processing and original verification challenge.
+- `node tests/meta-webhook-readiness.test.mjs`: 11 checks PASS, including actual signed handler with mock DB, invalid signature, receipt ID targeting, WABA isolation, disabled inbound processing and original verification challenge.
 - Existing backend `tests/meta-whatsapp.mjs`: PASS.
 - Existing backend `tests/whatsapp-assistant-v31-core.mjs`: PASS.
 - Syntax: Node TypeScript stripping + VM compilation of deployed handler PASS; git diff whitespace check PASS.
-- Live function v19 ACTIVE; unsigned GET 403, unsigned POST 401. No signed production test write or customer message sent.
+- Live function v20 ACTIVE; unsigned GET 403, unsigned POST 401. No signed production test write or customer message sent.
 
 ## Still required — do not call production messaging ready
 
