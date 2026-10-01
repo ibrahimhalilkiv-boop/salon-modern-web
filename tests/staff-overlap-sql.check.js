@@ -1,0 +1,34 @@
+// In-memory database only. Never connects to production.
+const path=require('node:path'),fs=require('node:fs'),assert=require('node:assert/strict');
+const base=process.argv[2]||'@electric-sql/pglite';
+const {PGlite}=require(base),{btree_gist}=require(path.join(base,'dist/contrib/btree_gist.cjs'));
+(async()=>{
+ const db=new PGlite({extensions:{btree_gist}});
+ await db.exec(`create extension btree_gist; create schema private;
+ create table appointments(id uuid primary key default gen_random_uuid(),employee_id uuid,scheduled_at timestamptz,duration_minutes int,scheduled_end timestamptz,service_id uuid,status text default 'confirmed',source text default 'staff');
+ create table closed_time_slots(employee_id uuid,starts_at timestamptz,ends_at timestamptz);
+ create function set_end() returns trigger language plpgsql as $$ begin new.scheduled_end:=new.scheduled_at+make_interval(mins=>new.duration_minutes); return new;end $$;
+ create trigger zz_end before insert or update on appointments for each row execute function set_end();
+ alter table appointments add constraint appointments_no_overlap exclude using gist(employee_id with =,tstzrange(scheduled_at,scheduled_end,'[)') with &&) where(status<>'cancelled');
+ create function private.reject_appointment_during_closed_time() returns trigger language plpgsql as $$ begin return new;end $$;
+ create trigger appointments_validate_schedule before insert on appointments for each row execute function private.reject_appointment_during_closed_time();`);
+ await db.exec(fs.readFileSync('supabase/migrations/20261001143351_allow_staff_appointment_overlap.sql','utf8'));
+ const emp='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
+ const add=(time,duration,source='staff',employee=emp,status='confirmed')=>db.query("insert into appointments(employee_id,scheduled_at,duration_minutes,source,status) values($1,$2,$3,$4,$5) returning id",[employee,'2026-10-05T'+time+':00+03:00',duration,source,status]);
+ await add('10:00',90);await add('10:30',30);await add('10:00',30);
+ assert.equal((await db.query('select count(*)::int n from appointments')).rows[0].n,3,'Manual overlaps accepted');
+ await assert.rejects(add('11:00',30,'online'),/çakışan/);
+ const online=(await add('11:30',60,'online')).rows[0].id;
+ await assert.rejects(add('12:00',30,'online'),/çakışan/);
+ await add('12:00',30,'staff','00000000-0000-4000-8000-000000000001');
+ await add('10:00',60,'online',other);
+ await assert.rejects(db.query("update appointments set source='staff' where id=$1",[online]),/kaynağı/);
+ await assert.rejects(db.query("update appointments set scheduled_at='2026-10-05T10:30:00+03:00' where id=$1",[online]),/çakışan/);
+ await add('13:00',30,'staff',emp,'cancelled');await add('13:00',30,'online');
+ await db.query("insert into closed_time_slots values($1,'2026-10-05T14:00:00+03:00','2026-10-05T15:00:00+03:00')",[emp]);
+ for(const source of ['staff','online'])await assert.rejects(add('13:30',60,source),/kapalı/);
+ const definition=(await db.query("select pg_get_constraintdef(oid) d from pg_constraint where conname='appointments_no_overlap'")).rows[0].d;
+ assert.match(definition,/source = 'online'/);
+ assert.equal((await db.query("select prosecdef from pg_proc where oid='private.reject_appointment_during_closed_time()'::regprocedure")).rows[0].prosecdef,false);
+ await db.close();console.log('PASS local SQL manual overlap, online/manual conflicts, actual duration, update/source guard, cancelled exclusion, employee isolation and closed slots');
+})().catch(error=>{console.error(error);process.exitCode=1});
