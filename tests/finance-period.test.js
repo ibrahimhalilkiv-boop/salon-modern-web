@@ -7,6 +7,7 @@ assert.equal(ctx.finance230MonthBounds('2024-02').end,'2024-02-29');
 assert.equal(ctx.finance230MonthBounds('2026-12').end,'2026-12-31');
 assert.equal(ctx.finance230MonthBounds('2027-02').end,'2027-02-28');
 assert.match(ctx.finance230PeriodHtml(),/2026-10/);
+assert.match(source, /holder\.innerHTML='<div[^\n]+Günlük kasa ve kapanış[^\n]+\+finance230PeriodHtml\(\)/, 'Daily cash and closing must precede the period report');
 assert.deepEqual(JSON.parse(JSON.stringify(ctx.finance230PeriodDates())),{start:'2026-10-01',end:'2026-10-31'});
 ctx.finance230PeriodFilter={mode:'range',start:'2026-10-02',end:'2026-10-01'};assert.throws(()=>ctx.finance230PeriodDates(),/kontrol/);
 ctx.finance230PeriodFilter={mode:'range',start:'2026-02-30',end:'2026-03-01'};assert.throws(()=>ctx.finance230PeriodDates(),/kontrol/);
