@@ -4,6 +4,7 @@ window.SALON_APP_VERSION='2.3.14';
 var financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',pendingSale:null,pendingUsage:null,loaded:false,loading:false};
 var finance230Busy=false,finance230ConfirmResolver=null;
 var finance230DateRequest=0;
+var finance230PeriodRequest=0,finance230PeriodFilter=null,finance230PeriodExpenses=[];
 var money=function(value){return new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',minimumFractionDigits:2}).format(Number(value||0))};
 var esc=function(value){return typeof safe==='function'?safe(String(value??'')):String(value??'').replace(/[&<>"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]})};
 var today=function(){return typeof localDate==='function'?localDate(0):new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Istanbul'})};
@@ -85,10 +86,77 @@ function renderAll(){renderClosing();renderSale();renderProducts();renderReserve
 async function renderClosing(){
   var holder=document.getElementById('finance230Closing');if(!holder||!manager())return;
   var selected=document.getElementById('finance230Date')?.value||today();
-  holder.innerHTML='<div class="finance230-card"><label class="field">Günlük hesap tarihi<input id="finance230Date" type="date" value="'+esc(selected)+'" onchange="renderFinance230Summary()"></label><div id="finance230Summary"><div class="empty">Hesaplanıyor…</div></div></div>'+expenseFormHtml()+'<div id="finance230Records"></div>'+closingHistoryHtml();
+  holder.innerHTML=finance230PeriodHtml()+'<div class="finance230-card"><h2>Günlük kasa ve kapanış</h2><label class="field">Günlük hesap tarihi<input id="finance230Date" type="date" value="'+esc(selected)+'" onchange="renderFinance230Summary()"></label><div id="finance230Summary"><div class="empty">Hesaplanıyor…</div></div></div>'+expenseFormHtml()+'<div id="finance230Records"></div>'+closingHistoryHtml();
+  renderFinance230Period();
   await renderFinance230Summary();
 }
 window.renderClosing=renderClosing;
+
+function finance230MonthBounds(month){
+  if(!/^\d{4}-\d{2}$/.test(month||''))throw new Error('Ay seçimini kontrol edin.');
+  var parts=month.split('-').map(Number);if(parts[1]<1||parts[1]>12||parts[0]<1)throw new Error('Ay seçimini kontrol edin.');
+  var last=new Date(Date.UTC(parts[0],parts[1],0)).getUTCDate();
+  return {start:month+'-01',end:month+'-'+String(last).padStart(2,'0')};
+}
+function finance230PeriodHtml(){
+  if(!finance230PeriodFilter){var month=today().slice(0,7),bounds=finance230MonthBounds(month);finance230PeriodFilter={mode:'month',month:month,start:bounds.start,end:bounds.end}}
+  var f=finance230PeriodFilter;
+  return '<div class="finance230-card"><h2>Toplam kasa ve gider raporu</h2><label class="field">Rapor dönemi<select id="finance230PeriodMode" onchange="finance230ChangePeriod()"><option value="month"'+(f.mode==='month'?' selected':'')+'>Ay seçimi</option><option value="range"'+(f.mode==='range'?' selected':'')+'>Tarih aralığı</option></select></label>'+
+    '<div id="finance230MonthField"'+(f.mode==='month'?'':' style="display:none"')+'><label class="field">Ay<input id="finance230PeriodMonth" type="month" value="'+esc(f.month)+'" onchange="finance230ChangePeriod()"></label></div>'+
+    '<div id="finance230RangeFields" class="row"'+(f.mode==='range'?'':' style="display:none"')+'><label class="field">Başlangıç<input id="finance230PeriodStart" type="date" value="'+esc(f.start)+'" onchange="finance230ChangePeriod()"></label><label class="field">Bitiş<input id="finance230PeriodEnd" type="date" value="'+esc(f.end)+'" onchange="finance230ChangePeriod()"></label></div>'+
+    '<button type="button" class="back" onclick="renderFinance230Period()">Raporu yenile</button><div id="finance230PeriodSummary"></div><div id="finance230PeriodRecords"></div></div>';
+}
+function finance230ChangePeriod(){
+  var f=finance230PeriodFilter;f.mode=document.getElementById('finance230PeriodMode').value;f.month=document.getElementById('finance230PeriodMonth').value;
+  f.start=document.getElementById('finance230PeriodStart').value;f.end=document.getElementById('finance230PeriodEnd').value;
+  document.getElementById('finance230MonthField').style.display=f.mode==='month'?'':'none';document.getElementById('finance230RangeFields').style.display=f.mode==='range'?'':'none';
+  renderFinance230Period();
+}
+function finance230PeriodDates(){
+  var f=finance230PeriodFilter,dates=f.mode==='month'?finance230MonthBounds(f.month):{start:f.start,end:f.end};
+  function valid(value){var date=new Date(value+'T00:00:00Z');return /^\d{4}-\d{2}-\d{2}$/.test(value||'')&&Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value}
+  if(!valid(dates.start)||!valid(dates.end)||dates.start>dates.end)throw new Error('Başlangıç ve bitiş tarihlerini kontrol edin.');
+  if((Date.parse(dates.end)-Date.parse(dates.start))/86400000>3660)throw new Error('Tek raporda en fazla 10 yıllık tarih aralığı seçilebilir.');
+  return dates;
+}
+async function finance230PeriodExpenseRows(start,end,request){
+  var rows=[],offset=0,size=500;
+  while(true){var result=await salonDb.from('business_expenses').select('id,expense_date,account_scope,category,description,amount,created_at,updated_at').gte('expense_date',start).lte('expense_date',end).order('expense_date',{ascending:false}).order('created_at',{ascending:false}).order('id').range(offset,offset+size-1);
+    if(request!==finance230PeriodRequest)return null;if(result.error)throw result.error;
+    var batch=result.data||[];rows=rows.concat(batch);if(batch.length<size)return rows;offset+=size;
+  }
+}
+function finance230PeriodRecordsHtml(rows){
+  var previous='',html='<h3>Dönemin gider kayıtları</h3>';
+  rows.forEach(function(x){if(x.expense_date!==previous){if(previous)html+='</div>';html+='<h4>'+esc(x.expense_date)+'</h4><div class="finance230-list">';previous=x.expense_date}
+    html+='<button type="button" class="finance230-row finance230-open-row" onclick="editFinance230PeriodExpense(\''+esc(x.id)+'\')"><span><strong>'+esc(x.category)+'</strong><small>'+esc(x.account_scope==='reserve'?'Ana gider (fondan)':'Günlük gider')+(x.description?' · '+esc(x.description):'')+'</small></span><b class="minus">'+money(x.amount)+'</b><i>›</i></button>';
+  });return html+(previous?'</div>':'<div class="empty">Bu dönemde gider kaydı yok.</div>');
+}
+function finance230LedgerHtml(rows){return '<div class="finance230-ledger">'+rows.map(function(row){return '<div><span>'+esc(row[0])+'</span><strong class="'+(Number(row[1])<0?'minus':'')+'">'+money(row[1])+'</strong></div>'}).join('')+'</div>'}
+function finance230PeriodSummaryHtml(s){
+  return '<h3>'+esc(s.start_date)+' — '+esc(s.end_date)+'</h3>'+finance230LedgerHtml([
+    ['Hizmet cirosu',s.service_turnover],['Ürün cirosu',s.product_turnover],['Toplam ciro',s.gross_turnover],
+    ['Borca yazılan satışlar',-Number(s.unpaid_debt_amount||0)],['Dönemde tahsil edilen borç',s.debt_collections],['Kasaya giren tutar',s.distributable_revenue],
+    ['Günlük giderler',-Number(s.daily_expenses||0)],['Çalışan primleri',-Number(s.commission_total||0)],['Hesaplanan ana fon payı',-Number(s.reserve_contribution||0)]
+  ])+'<div class="finance230-result finance230-single-cash"><small>Seçilen dönemde kalan</small><strong>'+money(s.distributable_amount)+'</strong></div>'+
+  '<p class="hint">Günlük kasa hesaplarının toplamıdır; önceki dönemden devreden nakit dahil değildir. Mevcut günlük hesap kuralları korunur.</p>'+
+  '<h3>Gider toplamları</h3>'+finance230LedgerHtml([['Günlük gider',s.daily_expenses],['Ana gider (fondan)',s.main_expenses],['Tüm giderler — bilgi amaçlı',s.all_expenses]])+
+  '<p class="hint">Ana gider fondan ödenir; kasadan ikinci kez düşülmez.</p><h3>Dönemin ana fon hesabı</h3>'+finance230LedgerHtml([
+    ['Dönem başı fon bakiyesi',s.fund_opening_balance],['Fona işlenen katkı',s.fund_posted_contribution],['Fondan ödenen gider',-Number(s.fund_main_expenses||0)],['Açılış ve düzeltme hareketleri',s.fund_adjustments],['Dönem sonu fon bakiyesi',s.fund_closing_balance]
+  ])+'<p class="hint">Fon bakiyesi kayıtlı fon hareketlerine dayanır. Hesaplanan fon payı yalnız gün kapatılınca fona işlenir. Kapanmış gün: '+esc(s.closed_days)+' / '+esc(s.day_count)+(Number(s.dirty_days)?' · Yeniden kapanış gereken: '+esc(s.dirty_days):'')+'.</p>';
+}
+async function renderFinance230Period(){
+  var page=document.getElementById('salonFinance'),panel=document.getElementById('finance230Closing');if((page&&!page.classList.contains('active'))||(panel&&panel.classList.contains('hidden')))return;
+  var holder=document.getElementById('finance230PeriodSummary'),records=document.getElementById('finance230PeriodRecords');if(!holder||!records||!manager())return;
+  var request=++finance230PeriodRequest;finance230PeriodExpenses=[];holder.innerHTML='<div class="empty">Dönem hesaplanıyor…</div>';records.innerHTML='<div class="empty">Giderler yükleniyor…</div>';
+  try{var dates=finance230PeriodDates(),results=await Promise.all([salonDb.rpc('calculate_cash_period_summary',{p_start:dates.start,p_end:dates.end}),finance230PeriodExpenseRows(dates.start,dates.end,request)]);
+    if(request!==finance230PeriodRequest||document.getElementById('finance230PeriodSummary')!==holder)return;
+    if(results[0].error)throw results[0].error;if(!results[0].data||!results[1])throw new Error('Rapor verisi alınamadı.');
+    finance230PeriodExpenses=results[1];holder.innerHTML=finance230PeriodSummaryHtml(results[0].data);records.innerHTML=finance230PeriodRecordsHtml(results[1]);
+  }catch(error){if(request!==finance230PeriodRequest||document.getElementById('finance230PeriodSummary')!==holder)return;holder.innerHTML='<div class="security finance230-error">'+esc(errText(error))+'</div>';records.innerHTML=''}
+}
+function editFinance230PeriodExpense(id){var row=finance230PeriodExpenses.find(function(x){return x.id===id});if(!row||!manager())return;financeState.expenses=financeState.expenses.filter(function(x){return x.id!==id}).concat([row]);editFinance230Expense(id)}
+window.finance230ChangePeriod=finance230ChangePeriod;window.renderFinance230Period=renderFinance230Period;window.editFinance230PeriodExpense=editFinance230PeriodExpense;
 
 async function renderFinance230Summary(){
   var date=document.getElementById('finance230Date')?.value||today(),holder=document.getElementById('finance230Summary');if(!holder)return;
@@ -199,7 +267,7 @@ function syncFinance230Version(){var value='v'+window.SALON_APP_VERSION;document
 var previousEnterApp=typeof enterApp==='function'?enterApp:null;
 if(previousEnterApp)enterApp=function(){var result=previousEnterApp.apply(this,arguments);setTimeout(function(){syncFinance230Version();if(manager())loadFinance230(false)},150);return result};
 var previousLogout=typeof logout==='function'?logout:null;
-if(previousLogout)logout=async function(){finance230DateRequest++;financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',loaded:false,loading:false};return previousLogout.apply(this,arguments)};
+if(previousLogout)logout=async function(){finance230DateRequest++;finance230PeriodRequest++;finance230PeriodFilter=null;finance230PeriodExpenses=[];financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',loaded:false,loading:false};return previousLogout.apply(this,arguments)};
 
 var style=document.createElement('style');style.textContent=
   '.finance230-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.finance230-title .page-title{margin-bottom:2px}.finance230-title small{color:var(--muted)}'+

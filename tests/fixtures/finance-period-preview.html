@@ -1,0 +1,10 @@
+<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kasa raporu — yerel mock test</title>
+<body><main id="app" class="app"><section id="salonFinance" class="page active"><div class="content finance230-content"><h1>Yerel test: Kasa raporu</h1><p>Canlı bağlantı yoktur. Tutarlar test verisidir.</p><div id="finance230Closing"></div></div></section></main>
+<script>
+window.currentUser={id:'mock',role:'yonetici'};window.showPage=function(){};
+window.localDate=function(){return '2026-10-01'};
+window.salonDb={rpc:function(name,args){return Promise.resolve({data:name==='calculate_daily_cash_summary'?{gross_turnover:1500,distributable_amount:600}:Object.assign({service_turnover:12500,product_turnover:1500,gross_turnover:14000,unpaid_debt_amount:2000,debt_collections:500,distributable_revenue:12500,daily_expenses:1000,commission_total:3000,reserve_contribution:1500,distributable_amount:7000,main_expenses:600,all_expenses:1600,fund_opening_balance:2500,fund_posted_contribution:1000,fund_main_expenses:600,fund_adjustments:0,fund_closing_balance:2900,day_count:31,closed_days:10}, {start_date:args.p_start,end_date:args.p_end})})},from:function(){var start;return {select:function(){return this},eq:function(){return this},gte:function(k,v){start=v;return this},lte:function(){return this},order:function(){return this},range:function(){return Promise.resolve({data:start?[{id:'test',expense_date:start,category:'Elektrik',description:'Test gideri',account_scope:'reserve',amount:600}]:[]})}}}};
+(async function(){var html=await(await fetch('../../salon-modern.html')).text(),style=document.createElement('style');style.textContent=Array.from(html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)).map(function(m){return m[1]}).join('\n');document.head.appendChild(style);
+var script=document.createElement('script');script.src='../../salon-finance-2.3.0.js';script.onload=function(){renderClosing()};document.body.appendChild(script);
+var desktop=document.createElement('script');desktop.src='../../pwa-desktop-layout-2.3.24.js';document.body.appendChild(desktop)})();
+</script></body></html>
