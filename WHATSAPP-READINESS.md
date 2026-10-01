@@ -8,7 +8,7 @@
 - Incoming Business App echoes/history are not handled as customer requests. No history/state-sync subscriptions are needed for this appointment notification task.
 - Rejected/paused/disabled/deleted templates clear their approved hash; APPROVED events alone cannot approve unverified content.
 - Existing webhook challenge token fallback, HMAC authentication and original assistant implementation retained. No new database schema, migration, customer record or appointment changes.
-- Meta `message_template_status_update` field subscribed. `messages` requires separate user approval because it transmits incoming conversations to the webhook; with the bot disabled only receipts are persisted.
+- Meta `message_template_status_update` and `messages` fields subscribed (v26.0). User explicitly approved the messages subscription on 2 October 2026; Meta UI confirmed Subscribed. With the bot disabled only receipts are persisted; incoming conversation content is not stored by the application.
 
 ## Validation
 
