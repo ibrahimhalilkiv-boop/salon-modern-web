@@ -104,17 +104,24 @@ async function manager(req: Request) {
   return profile.data || null
 }
 
+async function onlineServices() {
+  const result = await db.from('services').select('id,name,price,duration_minutes').eq('active', true)
+  if (result.error) throw result.error
+  return (result.data || []).sort((a, b) => Number(b.price || 0) - Number(a.price || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'tr') || String(a.id).localeCompare(String(b.id)))
+    .map((service, index) => ({ ...service, duration_minutes: index < 4 ? 60 : 30 }))
+}
+
 async function catalogue(req: Request) {
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date())
   const currentTime = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
   const [services, profiles, todaySchedule] = await Promise.all([
-    db.from('services').select('id,name,price,duration_minutes').eq('active', true).order('price', { ascending: false }).order('name'),
+    onlineServices(),
     db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern').order('full_name'),
     bookingSchedule(today),
   ])
-  if (services.error || profiles.error) throw services.error || profiles.error
+  if (profiles.error) throw profiles.error
   todaySchedule.hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) < Math.min(todaySchedule.close, ONLINE_LAST_START_MINUTES)
-  return reply(req, { services: services.data, employees: profiles.data, onlineBookingEnabled: todaySchedule.onlineBookingEnabled, today, todaySchedule })
+  return reply(req, { services, employees: profiles.data, onlineBookingEnabled: todaySchedule.onlineBookingEnabled, today, todaySchedule })
 }
 
 async function availability(req: Request, url: URL) {
@@ -125,10 +132,10 @@ async function availability(req: Request, url: URL) {
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date())
   if (date < today) return reply(req, { error: 'Geçmiş tarih seçilemez.' }, 400)
 
-  const service = await db.from('services').select('id,duration_minutes').eq('id', serviceId).eq('active', true).maybeSingle()
-  if (service.error || !service.data) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
+  const service = (await onlineServices()).find((item) => item.id === serviceId)
+  if (!service) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
   const schedule = await bookingSchedule(date)
-  if (schedule.closed) return reply(req, { date, durationMinutes: Number(service.data.duration_minutes || 60), slots: [], schedule })
+  if (schedule.closed) return reply(req, { date, durationMinutes: service.duration_minutes, slots: [], schedule })
   let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern')
   if (requestedEmployeeId) employeeQuery = employeeQuery.eq('id', requestedEmployeeId)
   const employees = await employeeQuery.order('full_name')
@@ -144,7 +151,7 @@ async function availability(req: Request, url: URL) {
       .in('employee_id', ids).lt('starts_at', to).gt('ends_at', from),
   ])
   if (appointments.error || closures.error) throw appointments.error || closures.error
-  const duration = Number(service.data.duration_minutes || 60)
+  const duration = service.duration_minutes
   const now = Date.now()
   const slots = []
   const cadence = duration >= 60 ? 60 : 30
@@ -174,10 +181,21 @@ async function createRequest(req: Request) {
   const requestedDate = clean(body.date, 10)
   const time = clean(body.time, 5)
   const note = clean(body.note, 500) || null
+  const submissionToken = clean(body.submissionToken, 36)
+  if (submissionToken && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(submissionToken)) return reply(req, { error: 'Geçersiz kayıt anahtarı.' }, 400)
   if (customerName.length < 3 || !customerPhone || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) || !/^\d{2}:\d{2}$/.test(time)) {
     return reply(req, { error: 'Bilgileri kontrol edin.' }, 400)
   }
   const startAt = slotIso(requestedDate, time)
+  if (submissionToken) {
+    const existing = await db.from('online_booking_requests').select('id,public_token,status,phone_normalized,service_id,employee_id,scheduled_at').eq('public_token', submissionToken).maybeSingle()
+    if (existing.error) throw existing.error
+    if (existing.data) {
+      const row = existing.data
+      if (row.phone_normalized !== customerPhone || row.service_id !== serviceId || row.employee_id !== employeeId || new Date(row.scheduled_at).getTime() !== new Date(startAt).getTime()) return reply(req, { error: 'Kayıt bilgileri değişti. Sayfayı yenileyin.' }, 409)
+      if (row.status === 'approved') return reply(req, { requestNumber: row.id.slice(0, 8).toUpperCase(), statusToken: row.public_token, status: 'approved' }, 200)
+    }
+  }
   if (new Date(startAt).getTime() <= Date.now()) return reply(req, { error: 'Geçmiş tarih seçilemez.' }, 400)
   const max = Date.now() + 90 * 86400000
   if (new Date(startAt).getTime() > max) return reply(req, { error: 'En fazla 90 gün sonrası seçilebilir.' }, 400)
@@ -191,6 +209,7 @@ async function createRequest(req: Request) {
     db.from('online_booking_requests').select('id', { count: 'exact', head: true }).eq('request_ip_hash', ipHash).gte('created_at', since),
     db.from('services').select('id,name,price,duration_minutes').eq('id', serviceId).eq('active', true).maybeSingle(),
   ])
+  if (phoneCount.error || ipCount.error || service.error) throw phoneCount.error || ipCount.error || service.error
   if ((phoneCount.count || 0) >= 3 || (ipCount.count || 0) >= 10) return reply(req, { error: 'Çok fazla talep gönderildi. Lütfen daha sonra deneyin.' }, 429)
   if (!service.data) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
   if (employeeId) {
@@ -208,27 +227,18 @@ async function createRequest(req: Request) {
   if (!chosen || (employeeId && !chosen.employeeIds.includes(employeeId))) return reply(req, { error: 'Seçilen saat artık müsait değil.' }, 409)
 
   if (!employeeId) return reply(req, { error: 'Bir çalışan seçin.' }, 400)
-  const inserted = await db.from('online_booking_requests').insert({
+  const inserted = await db.rpc('create_confirmed_online_booking', { p_booking: {
     client_name: customerName, phone: customerPhone, phone_normalized: customerPhone,
     service_id: serviceId, service_name: service.data.name, amount: service.data.price,
     employee_id: employeeId, scheduled_at: startAt,
-    duration_minutes: Number(service.data.duration_minutes || 30), note, request_ip_hash: ipHash,
-  }).select('id,public_token').single()
-  if (inserted.error) throw inserted.error
-
-  const managers = await db.from('profiles').select('id').eq('active', true).eq('role', 'manager')
-  if (managers.error) throw managers.error
-  if (managers.data?.length) {
-    const notified = await db.from('notifications').insert(managers.data.map((item) => ({
-      recipient_id: item.id, kind: 'booking_request', title: 'YENİ RANDEVU TALEBİ',
-      body: `${customerName}\n${requestedDate} • ${time}`,
-    })))
-    if (notified.error) {
-      console.error('[customer-booking-request] notification insert failed', notified.error)
-      return reply(req, { requestNumber: inserted.data.id.slice(0, 8).toUpperCase(), statusToken: inserted.data.public_token, notificationWarning: true }, 201)
-    }
+    duration_minutes: availabilityBody.durationMinutes, note, request_ip_hash: ipHash,
+    public_token: submissionToken || crypto.randomUUID(),
+  } })
+  if (inserted.error) {
+    console.error('[customer-booking-request] automatic confirmation failed', inserted.error)
+    return reply(req, { error: 'Randevu kaydedilemedi. Seçtiğiniz saat dolmuş veya kapanmış olabilir. Müsait saatleri yenileyin.' }, 409)
   }
-  return reply(req, { requestNumber: inserted.data.id.slice(0, 8).toUpperCase(), statusToken: inserted.data.public_token }, 201)
+  return reply(req, { requestNumber: inserted.data.id.slice(0, 8).toUpperCase(), statusToken: inserted.data.public_token, status: 'approved' }, 201)
 }
 
 async function publicStatus(req: Request, token: string) {

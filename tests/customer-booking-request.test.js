@@ -39,16 +39,16 @@ assert.match(edge, /minutes <= ONLINE_LAST_START_MINUTES && minutes \+ duration 
 assert.match(edge, /ONLINE_LAST_START_MINUTES = 19 \* 60/, 'Online son başlangıç saati 19.00 olarak sabitlenmeli');
 assert.match(edge, /db\.from\('closed_time_slots'\)/, 'Online müsaitlik çalışan kapalı saatlerini okumalı');
 assert.match(edge, /start < new Date\(item\.ends_at\)\.getTime\(\) && end > new Date\(item\.starts_at\)\.getTime\(\)/, 'Hizmet kapalı aralıkla kısmen çakışsa bile online saat sunulmamalı');
-assert.match(edge, /order\('price', \{ ascending: false \}\)/, 'Hizmetler fiyatı büyükten küçüğe sıralanmalı');
+assert.match(edge, /Number\(b.price \|\| 0\) - Number\(a.price \|\| 0\)/, 'Hizmetler sunucuda fiyatı büyükten küçüğe sıralanmalı');
 assert.match(edge, /https:\/\/app\.salonmodern\.com\.tr/, 'Özel uygulama alan adı CORS izin listesinde olmalı');
 assert.match(edge, /action === 'status'/, 'Güvenli tokenlı durum endpointi olmalı');
-assert.match(edge, /kind: 'booking_request'/, 'Yönetici bildirimi mevcut notifications yapısına yazılmalı');
-assert.match(edge, /notification insert failed/, 'Bildirim hatası sessizce yutulmamalı');
+assert.match(edge, /create_confirmed_online_booking/, 'Yeni kayıt atomik olarak otomatik onaylanmalı');
+assert.match(edge, /automatic confirmation failed/, 'Kayıt hatası sessizce yutulmamalı');
 assert.match(notificationMigration, /'booking_request'::text/, 'Bildirim türü veritabanı kısıtında izinli olmalı');
 
 assert.match(publicHtml, /Salon Modern \| Online Randevu/, 'SEO başlığı bulunmalı');
 assert.match(publicHtml, /og:title/, 'Open Graph bilgisi bulunmalı');
-assert.match(publicHtml, /Talebiniz Salon Modern tarafından onaylandığında/, 'Talebin kesin randevu olmadığı açık olmalı');
+assert.match(publicHtml, /Randevunuz kaydedildiğinde otomatik onaylanır/, 'Otomatik onay davranışı açık olmalı');
 assert.doesNotMatch(publicHtml, /service_role/i, 'Public HTML gizli anahtar içermemeli');
 assert.match(publicJs, /action=create/, 'Form Edge Function üzerinden gönderilmeli');
 assert.doesNotMatch(publicJs, /\.from\(['"]appointments/, 'Public tarayıcı appointments tablosuna doğrudan yazmamalı');
@@ -57,7 +57,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v81/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v84/, 'PWA cache sürümü yükseltilmeli');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');

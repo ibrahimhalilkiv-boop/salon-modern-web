@@ -1,0 +1,35 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const {stripTypeScriptTypes}=require('node:module');
+let handler;
+let services=Array.from({length:6},(_,i)=>({id:'s'+i,name:'Hizmet '+i,price:600-i*50,duration_minutes:15})).reverse();
+let overrides=null,appointments=[],closures=[],rpcCalls=[],existing=null,rpcError=null;
+const db={rpc(name,args){rpcCalls.push({name,args});return Promise.resolve({data:{id:'12345678-0000-4000-8000-000000000001',public_token:args.p_booking.public_token},error:rpcError})},from(table){let single=false;const filters={};const query={select(){return this},eq(key,value){filters[key]=value;return this},neq(){return this},in(){return this},gte(){return this},lte(){return this},lt(){return this},gt(){return this},order(){return this},maybeSingle(){single=true;return this},then(resolve,reject){let data=table==='services'?(single?services.find(s=>s.id===filters.id):services):table==='profiles'?(single?{id:'e1'}:[{id:'e1'}]):table==='booking_settings'?{online_booking_enabled:true,default_open_time:'09:00',default_close_time:'20:00'}:table==='booking_schedule_overrides'?overrides:table==='appointments'?appointments:table==='online_booking_requests'?existing:closures;return Promise.resolve({data,error:null,count:0}).then(resolve,reject)}};return query}};
+let source=fs.readFileSync('supabase/functions/customer-booking-request/index.ts','utf8').replace(/^import[^\n]+\n/,'');
+const ctx=vm.createContext({createClient:()=>db,Deno:{env:{get:()=>''},serve:fn=>handler=fn},Request,Response,URL,Intl,Date,crypto,TextEncoder,console});
+vm.runInContext(stripTypeScriptTypes(source,{mode:'transform'}),ctx);
+async function slots(service){const url=new URL('https://test/?action=availability&date=2026-10-05&service='+service);return (await handler(new Request(url))).json()}
+(async()=>{
+ const ranked=await vm.runInContext('onlineServices()',ctx);
+ assert.deepEqual(Array.from(ranked,x=>x.id),['s0','s1','s2','s3','s4','s5']);
+ assert.deepEqual(Array.from(ranked,x=>x.duration_minutes),[60,60,60,60,30,30]);
+ let data=await slots('s0');assert.equal(data.durationMinutes,60);assert(data.slots.every(x=>x.time.endsWith(':00')));assert(data.slots.some(x=>x.time==='19:00'));assert(!data.slots.some(x=>x.time==='19:30'));
+ data=await slots('s4');assert.equal(data.durationMinutes,30);assert(data.slots.some(x=>x.time==='09:30'));assert(!data.slots.some(x=>x.time==='19:30'));
+ overrides={open_time:'10:00',close_time:'11:00',is_closed:false};data=await slots('s0');assert.deepEqual(data.slots.map(x=>x.time),['10:00']);
+ closures=[{employee_id:'e1',starts_at:'2026-10-05T10:30:00+03:00',ends_at:'2026-10-05T11:15:00+03:00'}];data=await slots('s0');assert.equal(data.slots.length,0);
+ overrides={is_closed:true};data=await slots('s4');assert.equal(data.slots.length,0);
+ overrides=null;closures=[];
+ const payload={customerName:'Test Person',customerPhone:'05000000001',serviceId:'s0',employeeId:'e1',date:'2026-10-05',time:'10:00',submissionToken:'00000000-0000-4000-8000-000000000001'};
+ const create=p=>handler(new Request('https://test/?action=create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}));
+ let response=await create(payload);assert.equal(response.status,201);assert.equal((await response.json()).status,'approved');assert.equal(rpcCalls.length,1);assert.equal(rpcCalls[0].args.p_booking.duration_minutes,60);
+ response=await create({...payload,serviceId:'s4',time:'10:30'});assert.equal(response.status,201);assert.equal(rpcCalls[1].args.p_booking.duration_minutes,30);
+ existing={id:'12345678-0000-4000-8000-000000000001',public_token:payload.submissionToken,status:'approved',phone_normalized:'905000000001',service_id:'s0',employee_id:'e1',scheduled_at:'2026-10-05T10:00:00+03:00'};
+ response=await create(payload);assert.equal(response.status,200);assert.equal(rpcCalls.length,2,'Retry must not create another appointment');existing=null;
+ rpcError={message:'conflict'};response=await create(payload);assert.equal(response.status,409);assert(!(await response.json()).status);rpcError=null;
+ services=services.slice(0,3);assert((await vm.runInContext('onlineServices()',ctx)).every(x=>x.duration_minutes===60));
+ const sql=fs.readFileSync('supabase/migrations/20261001063305_online_booking_auto_confirm.sql','utf8');
+ assert.match(sql,/pg_advisory_xact_lock/);assert.match(sql,/security invoker/);assert.match(sql,/from public,anon,authenticated/);assert.match(sql,/'approved',appointment,now\(\)/);assert.doesNotMatch(sql,/update public\.online_booking_requests/);
+ const js=fs.readFileSync('randevu/booking.js','utf8');assert.match(js,/if\(button.disabled\)return/);assert.match(js,/submissionToken/);assert.match(js,/data.status!=='approved'/);
+ console.log('online auto confirmation and duration tests: PASS');
+})().catch(err=>{console.error(err);process.exitCode=1});
