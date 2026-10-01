@@ -39,13 +39,13 @@
       if(actor.role!=='yonetici')loaded=loaded.filter(function(row){return String(row.employee_id)===String(actor.id)});
       var online=loaded.length?await sourceIds(loaded.map(function(row){return row.id})):new Set();
       if(seq!==requestNumber||user()?.id!==actor.id)return;
-      rows=loaded.map(function(raw){var item=window.remoteAppointment(raw);item.duration=raw.duration_minutes;item.source=online.has(String(raw.id))?'online':'staff';return item});
+      rows=loaded.map(function(raw){var item=window.remoteAppointment(raw);item.duration=raw.duration_minutes;item.creatorId=raw.created_by;item.source=online.has(String(raw.id))?'online':'staff';return item});
       render(selectedSource);
     }catch(error){if(seq===requestNumber&&user()?.id===actor.id){rows=[];holder.innerHTML='<div class="empty">'+esc(error.message||'Randevular yüklenemedi.')+'</div>'}}
   }
   function render(source){
     var holder=document.getElementById('managedList');if(!holder)return;var shown=rows.filter(function(item){return source==='all'||item.source===source});
-    holder.innerHTML='<p class="muted">'+shown.length+' randevu</p>'+(shown.map(function(item,index){return '<div class="appointment" style="flex-wrap:wrap"><div class="item-main"><strong>'+esc(item.customer)+'</strong><small>'+esc(item.date)+' · '+esc(item.time)+' · '+esc(item.staff)+'</small><small>'+esc(item.operation)+' · ₺ '+esc(item.amount)+' · '+(item.source==='online'?'Online':'Personel')+'</small></div><button type="button" class="link" data-edit="'+index+'">Düzenle</button><button type="button" class="remove" data-delete="'+index+'">Sil</button></div>'}).join('')||'<div class="empty">Bu filtrede randevu yok.</div>');
+    holder.innerHTML='<p class="muted">'+shown.length+' randevu</p>'+(shown.map(function(item,index){return '<div class="appointment" style="flex-wrap:wrap"><div class="item-main"><strong>'+esc(item.customer)+'</strong><small>'+esc(item.date)+' · '+esc(item.time)+' · '+esc(item.staff)+'</small><small>'+esc(item.operation)+' · ₺ '+esc(item.amount)+' · '+(item.source==='online'?'Online':'Personel')+'</small>'+(source==='staff'?'<small>Ekleyen: '+esc((window.remoteProfiles||[]).find(function(profile){return item.creatorId&&String(profile.id)===String(item.creatorId)})?.full_name||'Belirtilmemiş')+'</small>':'')+'</div><button type="button" class="link" data-edit="'+index+'">Düzenle</button><button type="button" class="remove" data-delete="'+index+'">Sil</button></div>'}).join('')||'<div class="empty">Bu filtrede randevu yok.</div>');
     holder.querySelectorAll('[data-edit]').forEach(function(button){button.onclick=function(){edit(shown[Number(button.dataset.edit)])}});
     holder.querySelectorAll('[data-delete]').forEach(function(button){button.onclick=function(){remove(shown[Number(button.dataset.delete)])}});
   }

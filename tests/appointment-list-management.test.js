@@ -16,6 +16,8 @@ const row=(id,employee='employee1')=>({id,employee_id:employee,client_name:'Test
  assert(!decodeURIComponent(fetches[0].url).includes('other'));
  assert.deepEqual(ctx.appts,[{id:'existing'}],'Listing must never overwrite the calendar state');
  api.filter.source='online';await api.load();assert.match(elems.managedList.innerHTML,/1 randevu/);assert.doesNotMatch(elems.managedList.innerHTML,/Personel/);
+ ctx.remoteProfiles=[{id:'creator1',full_name:'Ekleyen Test <Ad>'}];records=[{...row('staffCreator'),created_by:'creator1'},row('unknownCreator')];api.filter.source='staff';await api.load();assert.match(elems.managedList.innerHTML,/Ekleyen: Ekleyen Test &lt;Ad&gt;/);assert.match(elems.managedList.innerHTML,/Ekleyen: Belirtilmemiş/);
+ records=[row('online1'),row('staff1'),row('other','employee2')];
  assert.equal(api.permitted({employeeId:'employee2'}),false);
  ctx.currentUser={id:'manager1',role:'yonetici'};calls=[];api.filter.source='all';await api.load();assert(!calls.some(x=>x.op==='eq'));assert.match(elems.managedList.innerHTML,/3 randevu/);
  let editButtons=[],deleteButtons=[];elems.managedList.querySelectorAll=selector=>selector==='[data-edit]'?editButtons:deleteButtons;
@@ -25,7 +27,7 @@ const row=(id,employee='employee1')=>({id,employee_id:employee,client_name:'Test
  let resolveOld;pending=new Promise(resolve=>resolveOld=resolve);const old=api.load();pending=null;records=[row('latest')];await api.load();resolveOld({data:[row('stale')]});await old;assert.match(elems.managedList.innerHTML,/1 randevu/);assert.doesNotMatch(elems.managedList.innerHTML,/stale/);
  failure={message:'TEST_LOAD_ERROR'};await api.load();assert.match(elems.managedList.innerHTML,/TEST_LOAD_ERROR/);failure=null;
  ctx.logout();ctx.currentUser=null;const before=calls.length;await api.load();assert.equal(calls.length,before);
-assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=90/);
+assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=91/);
  assert.match(source,/window.toggleDrawer=function\(\)\{ensure\(\)/,'Install the menu even when session restoration skips the enter wrapper');
  const adminAnchor={id:'admin'},oldRequest={remove(){this.removed=true}};elems.drawerBookingRequests=oldRequest;
  let positioned=null;const drawer={querySelector:()=>adminAnchor,insertBefore(button,anchor){elems[button.id]=button;positioned=anchor}};
