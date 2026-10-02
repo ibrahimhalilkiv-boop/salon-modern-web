@@ -1133,14 +1133,16 @@ var deliveredNativeNotifications=new Set();
 function assignmentNotificationDate(item){var match=String(item?.body||'').match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);return match?match[3]+'-'+match[2]+'-'+match[1]:''}
 function assignmentNotificationIsFuture(item){var date=assignmentNotificationDate(item);if(!date)return true;var match=String(item.body||'').match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);return Date.parse(date+'T'+match[4]+':'+match[5]+':00+03:00')>Date.now()}
 function markAssignmentNotificationRead(id){return salonDb.from('notifications').update({read_at:new Date().toISOString()}).eq('id',id).eq('recipient_id',currentUser.id)}
+function seenAssignmentIds(){try{var ids=JSON.parse(localStorage.getItem('salonSeenAssignments:'+currentUser.id)||'[]');return Array.isArray(ids)?ids:[]}catch(_){return []}}
+function acknowledgeAssignment(item){var ids=seenAssignmentIds(),id=String(item.id);if(!ids.includes(id))ids.push(id);try{localStorage.setItem('salonSeenAssignments:'+currentUser.id,JSON.stringify(ids.slice(-300)))}catch(_){}Promise.resolve(markAssignmentNotificationRead(item.id)).then(function(result){if(result?.error)console.warn('Bildirim görüldü kaydı:',result.error.message)}).catch(function(error){console.warn('Bildirim görüldü kaydı:',error.message)})}
 function deliverAssignmentNotification(item){
   if(!item||!['appointment','appointment_update'].includes(item.kind)||item.recipient_id!==currentUser?.id||deliveredNativeNotifications.has(String(item.id)))return;
-  if(!assignmentNotificationIsFuture(item)){markAssignmentNotificationRead(item.id);return}
+  if(seenAssignmentIds().includes(String(item.id))||!assignmentNotificationIsFuture(item)){acknowledgeAssignment(item);return}
   deliveredNativeNotifications.add(String(item.id));showAppToast(item.title,item.body);
+  acknowledgeAssignment(item);
   var status='unsupported';
   if(window.SalonAndroid?.showAssignmentNotification)status=SalonAndroid.showAssignmentNotification(String(item.id),String(item.title||'Yeni randevu'),String(item.body||''),String(item.appointment_id||''),assignmentNotificationDate(item));
   else if(window.SalonAndroid?.showNotification){SalonAndroid.showNotification(String(item.id),String(item.title||'Yeni randevu'),String(item.body||''));status='shown'}
-  if(status==='shown'||status==='duplicate')markAssignmentNotificationRead(item.id)
 }
 async function deliverUnreadAssignmentNotifications(){
   if(!currentUser)return;
