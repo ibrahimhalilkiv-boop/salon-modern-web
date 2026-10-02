@@ -23,10 +23,10 @@
     localStorage.removeItem(EXPLICIT_LOGOUT_KEY);
   }
 
-  function forgetSession() {
+  function forgetSession(explicit) {
     localStorage.removeItem(DEVICE_USER_KEY);
     localStorage.removeItem(DEVICE_SEEN_KEY);
-    localStorage.setItem(EXPLICIT_LOGOUT_KEY, 'true');
+    if (explicit) localStorage.setItem(EXPLICIT_LOGOUT_KEY, 'true');
   }
 
   var previousLogin = window.login;
@@ -42,7 +42,7 @@
   var previousLogout = window.logout;
   if (typeof previousLogout === 'function') {
     window.logout = async function () {
-      forgetSession();
+      forgetSession(true);
       return previousLogout.apply(this, arguments);
     };
   }
@@ -51,7 +51,7 @@
     if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
       trustSession(session);
     }
-    if (event === 'SIGNED_OUT') forgetSession();
+    if (event === 'SIGNED_OUT') forgetSession(false);
   });
 
   salonDb.auth.getSession().then(function (result) {

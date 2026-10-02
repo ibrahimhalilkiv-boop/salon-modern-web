@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v95';
+const CACHE_NAME = 'salon-modern-shell-pwa-v96';
 const APP_SHELL = [
   './',
   './salon-modern.html',
@@ -18,20 +18,20 @@ const APP_SHELL = [
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js',
   './appointment-management-2.3.26.js?v=89',
-  './salon-web-push.js',
-  './pwa-stability-2.3.20.js',
+  './salon-web-push.js?v=96',
+  './pwa-stability-2.3.20.js?v=96',
   './pwa-recovery-2.3.21.js?v=81',
-  './pwa-device-session-2.3.22.js',
+  './pwa-device-session-2.3.22.js?v=96',
   './pwa-back-navigation-2.3.23.js',
   './pwa-desktop-layout-2.3.24.js',
   './pwa-auth-contact-cleanup-2.3.25.js',
   './appointment-cancel-button-2.3.27.js',
   './appointment-debt-warning-2.3.28.js',
   './debt-account-groups-2.3.29.js'
-  ,'./appointment-form-actions-2.3.30.js?v=95'
-  ,'./booking-requests-admin-2.4.0.js?v=94'
-  ,'./booking-schedule-admin-2.4.1.js?v=94'
-  ,'./booking-schedule-controls-2.4.3.js?v=82'
+  ,'./appointment-form-actions-2.3.30.js?v=96'
+  ,'./booking-requests-admin-2.4.0.js?v=96'
+  ,'./booking-schedule-admin-2.4.1.js?v=96'
+  ,'./booking-schedule-controls-2.4.3.js?v=96'
   ,'./randevu/'
   ,'./randevu/booking.css'
   ,'./randevu/booking.js'
@@ -59,11 +59,17 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const target = new URL(event.notification.data?.url || './salon-modern.html', self.registration.scope).href;
+  const data = event.notification.data || {};
+  const targetUrl = new URL('./salon-modern.html', self.registration.scope);
+  for (const [key, value] of Object.entries({date:data.appointmentDate,appointment:data.appointmentId||data.appointment_id,kind:data.kind||data.type,notification:data.notificationId})) {
+    if (value) targetUrl.searchParams.set(key, String(value));
+  }
+  const target = targetUrl.href;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
     for (const client of clients) {
-      if (new URL(client.url).origin === new URL(target).origin) {
-        client.postMessage({ type: 'SALON_NOTIFICATION_OPEN', data: event.notification.data || {} });
+      const url = new URL(client.url);
+      if (url.origin === targetUrl.origin && url.pathname === targetUrl.pathname) {
+        client.postMessage({ type: 'SALON_NOTIFICATION_OPEN', data });
         return client.focus();
       }
     }

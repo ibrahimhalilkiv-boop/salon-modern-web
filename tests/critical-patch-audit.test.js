@@ -46,6 +46,6 @@ assert.match(pushMigration, /select a\.created_by,a\.id,'appointment_reminder'/,
 assert.match(recovery, /reloadKey = 'salonShellReloaded:' \+ cacheVersion/, 'Her PWA sürümü kendine ait tek yenileme anahtarını kullanmalı');
 assert.doesNotMatch(recovery, /salonShellReloadedV16/, 'Sabit yenileme anahtarı sonraki sürümleri engellememeli');
 assert.match(pages[0], /pwa-recovery-2\.3\.21\.js\?v=81/, 'PWA kurtarma kodu sürümlü yüklenmeli');
-assert.match(pages[0], /booking-requests-admin-2\.4\.0\.js\?v=94/, 'Takvim yükleyicisi sürümlü yüklenmeli');
+assert.match(pages[0], /booking-requests-admin-2\.4\.0\.js\?v=96/, 'Takvim yükleyicisi sürümlü yüklenmeli');
 
 console.log('PASS critical patch load order and singleton handlers');

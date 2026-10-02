@@ -54,5 +54,5 @@
   content.addEventListener('touchcancel',clear,{capture:true,passive:true});
   content.addEventListener('dragover',function(event){if(!gesture||!gesture.desktop)return;gesture.x=event.clientX;gesture.y=event.clientY});
   content.addEventListener('dragend',clear);
-  var style=document.createElement('style');style.textContent='.duration-cell.drag-over{background:#b8d8c9!important;outline:2px solid #187657!important;z-index:6!important}.calendar-dragging{outline:2px solid #187657!important;opacity:.8}.duration-cell:not(.hour-start){box-shadow:inset 0 1px #ded8cd55}';document.head.append(style);
+  var style=document.createElement('style');style.textContent='.duration-cell.drag-over{background:#b8d8c9!important;outline:2px solid #187657!important;z-index:6!important}.calendar-dragging{outline:2px solid #187657!important;opacity:.8}.duration-cell:not(.hour-start){box-shadow:none}';document.head.append(style);
 })();

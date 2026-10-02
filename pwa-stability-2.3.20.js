@@ -255,6 +255,7 @@
       if (requestId !== authRequest) return;
       trace('startRemoteApp-error', { requestId: requestId, message: String(error && error.message || ''), temporary: isTemporary(error) });
       if (isTemporary(error)) return showConnectionProblem(error);
+      if (error && isIrrecoverableRefresh(error)) error.salonIrrecoverableSession = true;
       if (error && error.salonIrrecoverableSession) await localSignOut();
       if (storedAuthSnapshot().hasStoredSession && !(error && error.salonIrrecoverableSession)) return showConnectionProblem(error);
       setState(AUTH.UNAUTHENTICATED);
@@ -275,11 +276,14 @@
     trace('beforeunload', Object.assign({ page: active && active.id || '' }, storedAuthSnapshot()));
   });
 
-  window.addEventListener('online', function () {
+  function retryRememberedSession() {
     if (authState !== AUTH.TEMPORARY_NETWORK_ERROR) return;
     clearTimeout(retryTimer);
     retryTimer = setTimeout(function () { window.startRemoteApp(); }, 400);
-  });
+  }
+  window.addEventListener('online', retryRememberedSession);
+  window.addEventListener('focus', retryRememberedSession);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) retryRememberedSession(); });
 
   function formIsBusy() {
     var active = document.activeElement;
