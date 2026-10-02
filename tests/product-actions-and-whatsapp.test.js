@@ -1,0 +1,15 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const finance=fs.readFileSync('salon-finance-2.3.0.js','utf8');
+const actions=finance.slice(finance.indexOf('function openFinance230ProductAction('),finance.indexOf('function restockFinance230Product('));
+const opened=[];const context={financeState:{products:[{id:'p1',name:'Test',stock_quantity:5,sale_price:100,active:true}]},openFinance230Action:(title,body)=>opened.push({title,body}),esc:String,today:()=> '2026-10-02'};
+context.window=context;vm.createContext(context);vm.runInContext('(function(){'+actions+'})();',context);
+assert.equal(typeof context.openFinance230ProductAction,'function','Inline handlers need exported action');
+context.openFinance230ProductAction('usage','p1');assert.match(opened[0].body,/value="usage"/);assert.match(opened[0].body,/max="5"/);
+context.openFinance230ProductAction('delete','p1');assert.match(opened[1].body,/value="delete"/);assert.match(opened[1].body,/Geçmiş satış/);
+context.openFinance230ProductAction('restore','p1');assert.match(opened[2].body,/value="restore"/);
+context.openFinance230ProductAction('delete','unknown');assert.equal(opened.length,3);
+const source=fs.readFileSync('appointment-form-actions-2.3.30.js','utf8'),functions=['editingId','appointment','shareNow'].map(name=>source.match(new RegExp('  function '+name+'\\([^\\n]+'))[0]).join('\n');
+const shared=[];const share={editingAppointmentId:'a1',closeSuggestions(){},window:{shareAppointmentWhatsApp:id=>shared.push(id)}};vm.createContext(share);
+vm.runInContext("let appts=[{id:'a1'}];"+functions,share);assert.equal(share.window.appts,undefined,'Matches real lexical appointment state');
+share.shareNow({preventDefault(){},stopPropagation(){}});assert.deepEqual(shared,['a1']);share.editingAppointmentId='missing';share.shareNow();assert.equal(shared.length,1);
+console.log('PASS product action exports usage/delete/restore and WhatsApp uses lexical appointment state');

@@ -2,7 +2,7 @@
   'use strict';
   var saving=false,requestInFlight=false,saveWatchdog=null,calendarSelectedStaff='';
   function editingId(){return typeof editingAppointmentId!=='undefined'?editingAppointmentId:null}
-  function appointment(){var id=editingId();return id&&Array.isArray(window.appts)?window.appts.find(function(item){return String(item.id)===String(id)})||null:null}
+  function appointment(){var id=editingId();return id&&typeof appts!=='undefined'&&Array.isArray(appts)?appts.find(function(item){return String(item.id)===String(id)})||null:null}
   function closeSuggestions(){var panel=document.getElementById('typedCustomerSuggestions');if(panel){panel.classList.remove('show');panel.style.pointerEvents='none'}}
   function elements(){var modal=document.getElementById('appointmentModal'),form=modal&&modal.querySelector('form.sheet'),save=form&&form.querySelector('button.save:not(#permanentAppointmentDelete):not(#permanentAppointmentCancel):not(#directAppointmentDelete)');return {modal:modal,form:form,save:save}}
   function customerKey(value){return String(value||'').trim().toLocaleLowerCase('tr').replace(/[ç]/g,'c').replace(/[ğ]/g,'g').replace(/[ıi]/g,'i').replace(/[ö]/g,'o').replace(/[ş]/g,'s').replace(/[ü]/g,'u').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
