@@ -30,8 +30,10 @@ var time=cell.dataset.calendarTime.split(':'),fraction=(minute-Number(time[0])*6
 if(typeof syncCurrentTimeLineVisibility==='function')syncCurrentTimeLineVisibility();
 }
 var previousRender=window.renderCalendar;window.renderCalendar=function(){removeAdminFromStaff();var result=previousRender.apply(this,arguments);fitCalendar();requestAnimationFrame(function(){fitCalendar();updateCurrentTimeLine()});return result};
+function watchCalendarLayout(){var content=document.getElementById('calendarContent');if(!content||content.__salonLayoutObserver)return;var frame=0;content.__salonLayoutObserver=new MutationObserver(function(){if(frame)return;frame=requestAnimationFrame(function(){frame=0;fitCalendar();updateCurrentTimeLine()})});content.__salonLayoutObserver.observe(content,{childList:true});fitCalendar()}
+watchCalendarLayout();
 setInterval(updateCurrentTimeLine,60000);
-window.addEventListener('resize',updateCurrentTimeLine);
+window.addEventListener('resize',function(){fitCalendar();updateCurrentTimeLine()});
 document.addEventListener('visibilitychange',function(){if(!document.hidden)updateCurrentTimeLine()});
 var previousOpenAppointment=window.openAppointmentModal;if(previousOpenAppointment)window.openAppointmentModal=function(){var result=previousOpenAppointment.apply(this,arguments),amount=document.getElementById('appointmentAmount'),modal=document.getElementById('appointmentModal'),editing=Boolean(arguments[1]);enableEditableAppointmentAmount();if(amount)amount.dataset.manuallyEdited='false';if(modal)modal.classList.toggle('appointment-editing',editing);return result};
 var previousReload=window.reloadRemoteData;if(previousReload)window.reloadRemoteData=async function(){var result=await previousReload.apply(this,arguments);removeAdminFromStaff();await install();if(typeof renderCalendar==='function')renderCalendar();return result};
