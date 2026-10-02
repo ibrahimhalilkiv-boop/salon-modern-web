@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v94';
+const CACHE_NAME = 'salon-modern-shell-pwa-v95';
 const APP_SHELL = [
   './',
   './salon-modern.html',
@@ -28,7 +28,7 @@ const APP_SHELL = [
   './appointment-cancel-button-2.3.27.js',
   './appointment-debt-warning-2.3.28.js',
   './debt-account-groups-2.3.29.js'
-  ,'./appointment-form-actions-2.3.30.js?v=94'
+  ,'./appointment-form-actions-2.3.30.js?v=95'
   ,'./booking-requests-admin-2.4.0.js?v=94'
   ,'./booking-schedule-admin-2.4.1.js?v=94'
   ,'./booking-schedule-controls-2.4.3.js?v=82'
