@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v100';
+const CACHE_NAME = 'salon-modern-shell-pwa-v101';
 const APP_SHELL = [
   './',
   './salon-modern.html',
@@ -50,11 +50,29 @@ self.addEventListener('message', event => {
 
 self.addEventListener('push', event => {
   let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch (_) { data = { body: event.data ? event.data.text() : '' }; }
-  event.waitUntil(self.registration.showNotification(data.title || 'Salon Modern', {
-    body: data.body || 'Yeni bir bildiriminiz var.', icon: './salon-icon-192.png', badge: './salon-icon-192.png',
-    tag: data.tag || ('salon-' + (data.notificationId || Date.now())), renotify: false, data
-  }));
+  try { data = event.data ? event.data.json() : {}; }
+  catch (_) { try { data = { body: event.data ? event.data.text() : '' }; } catch (_) { data = {}; } }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
+  // Contract: dispatcher sends title/body and routing metadata at the top level.
+  // Showing a notification must not depend on a page, login or network request.
+  const title = typeof data.title === 'string' && data.title ? data.title : 'Salon Modern';
+  const body = typeof data.body === 'string' && data.body ? data.body : 'Yeni bir bildiriminiz var.';
+  const tag = typeof data.tag === 'string' && data.tag ? data.tag : 'salon-' + (data.notificationId || Date.now());
+  event.waitUntil((async () => {
+    try {
+      await self.registration.showNotification(title, {
+        body, icon: './salon-icon-192.png', badge: './salon-icon-192.png', tag, renotify: false, data
+      });
+    } catch (error) {
+      console.error('[salon-push] showNotification failed', data.notificationId || '', error);
+      // Retry with only essential options; retain click routing and dedup tag.
+      try { await self.registration.showNotification(title, { body, tag, data }); }
+      catch (fallbackError) {
+        console.error('[salon-push] fallback failed', data.notificationId || '', fallbackError);
+        throw fallbackError;
+      }
+    }
+  })());
 });
 
 self.addEventListener('notificationclick', event => {
