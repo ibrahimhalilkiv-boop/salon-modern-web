@@ -1,0 +1,11 @@
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const html=fs.readFileSync('salon-modern.html','utf8');
+const home=html.match(/<section id="home"[\s\S]*?<\/section>/)[0];
+assert.match(home,/Salon bilgileri yükleniyor/);
+for(const retired of ['Haftalık gelir','class="bars"','Net kâr','Bekleyen ödeme','Hoş geldiniz'])assert(!home.includes(retired),retired+' must not remain as startup UI');
+assert.match(home,/<div hidden aria-hidden="true" id="legacyHomeBindings">/,'Initial inline render retains invisible empty compatibility nodes');
+const assistant=fs.readFileSync('salon-assistant-2.0.0.js','utf8');
+assert.match(assistant,/if\(!document\.getElementById\('todayText'\)\)/,'Existing compatibility guards remain');
+assert.match(assistant,/if\(!document\.getElementById\('next'\)\)return/);
+assert.match(fs.readFileSync('salon-phase2-1.8.0.js','utf8'),/window\.salonPhase2RenderHome=phase2RenderHome/,'Modern home remains the single UI owner');
+console.log('PASS retired startup dashboard removed, compatibility guards and modern home retained');

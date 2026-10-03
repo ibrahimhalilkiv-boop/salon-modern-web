@@ -3,7 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {chromium}=require(path.join(process.argv[2],'playwright'));
 const setup=`
 var currentUser=null,appts=[],remoteClients=[],teamCalendarDate='',waCount=0,signouts=0,reloads=0,claims=0,unsubscribes=0,subscribes=0;
-var mode={session:true,sessionError:null,userError:null,profileError:null,inactive:false,reloadError:false,subscriptionError:false,active:true};
+var mode={session:true,sessionError:null,userError:null,profileError:null,inactive:false,reloadError:false,emptyCalendar:false,subscriptionError:false,active:true};
 var record={id:'a1',clientId:'c1',customer:'Fixture',phone:'05321234567',date:'2026-10-05',time:'12:00',staff:'Fixture staff',amount:100};
 var listeners={},authListeners=[],sub=null;
 function makeSub(id,expiration){return {endpoint:id,expirationTime:expiration,toJSON(){return {endpoint:id,keys:{p256dh:'fixture',auth:'fixture'}}},async unsubscribe(){unsubscribes++;sub=null;return true}}}
@@ -21,7 +21,7 @@ refreshSession:async()=>({data:{session:null},error:{status:400,code:'refresh_to
 setSession:async()=>({data:{session:{user:{id:'u1'}}},error:null}),
 signOut:async()=>{signouts++;mode.session=false;currentUser=null;localStorage.removeItem('sb-fixture-auth-token');for(var f of authListeners)f('SIGNED_OUT',null);return {error:null}},
 onAuthStateChange:f=>{authListeners.push(f);return {data:{subscription:{unsubscribe(){}}}}}},
-from(table){var query={select(){return query},eq(){return query},update(){return query},maybeSingle:async()=> table==='profiles'?{data:{id:'u1',full_name:'Fixture',role:'manager',active:!mode.inactive},error:mode.profileError}:{data:{active:mode.active},error:null},then(resolve,reject){return Promise.resolve({data:null,error:null}).then(resolve,reject)}};return query},
+from(table){var query={select(){return query},eq(){return query},update(){return query},maybeSingle:async()=> table==='profiles'?{data:{id:'u1',full_name:'Fixture',role:'manager',active:!mode.inactive},error:mode.profileError}:table==='appointments'?{data:mode.targetMissing?null:record,error:null}:{data:{active:mode.active},error:null},then(resolve,reject){return Promise.resolve({data:null,error:null}).then(resolve,reject)}};return query},
 rpc:async()=>{claims++;return {data:null,error:mode.subscriptionError?{message:'Fixture registration failure'}:null}}};
 function enterApp(){document.getElementById('app').classList.remove('hidden');document.getElementById('auth').classList.add('hidden')}
 function showPage(id){window.lastPage=id}
@@ -29,7 +29,8 @@ function showAppToast(t,b){window.lastToast=t+' '+b}
 function setRemoteAuth(){document.getElementById('auth').classList.remove('hidden');document.getElementById('loginForm').classList.remove('hidden');document.getElementById('app').classList.add('hidden')}
 function remoteError(m){window.lastError=m}
 function profileToUser(p){return {id:p.id,name:p.full_name,role:'yonetici',remote:true}}
-async function reloadRemoteData(){reloads++;if(mode.reloadError)throw {status:503,message:'Fixture network error'};appts=[record]}
+async function reloadRemoteData(){reloads++;if(mode.reloadError)throw {status:503,message:'Fixture network error'};appts=mode.emptyCalendar?[]:[record]}
+function remoteAppointment(row){return row}
 function subscribeSalon(){}
 function appointmentDate(x){return x.date}
 function whatsappPhone(){return '905321234567'}
@@ -58,13 +59,18 @@ await page.evaluate(()=>{mode.reloadError=true;});await page.evaluate(()=>startR
 await page.evaluate(()=>{mode.reloadError=false;window.dispatchEvent(new Event('online'));});await page.waitForFunction(()=>getSalonAuthState()==='AUTHENTICATED');
 await page.evaluate(()=>{appts=[];mode.reloadError=true;message({notificationId:'n2',appointmentId:'a1',appointmentDate:'2026-10-05',kind:'appointment_reminder'});});await page.waitForTimeout(40);assert.equal(await page.evaluate(()=>waCount),1);
 await page.evaluate(()=>{mode.reloadError=false;window.dispatchEvent(new Event('focus'));});await page.waitForFunction(()=>waCount===2);
+await page.evaluate(()=>{appts=[];mode.emptyCalendar=true;message({notificationId:'n-target',appointmentId:'a1',appointmentDate:'2026-10-05',kind:'appointment_reminder'});});await page.waitForFunction(()=>waCount===3);
+assert.equal(await page.evaluate(()=>appts.length),0,'Targeted resolution must not overwrite the calendar');
+await page.evaluate(()=>{appts=[];mode.targetMissing=true;message({notificationId:'n-retry',appointmentId:'a1',appointmentDate:'2026-10-05',kind:'appointment_reminder'});});await page.waitForTimeout(60);
+assert(await page.evaluate(()=>sessionStorage.getItem('salonPendingWebPushOpenV1')),'Unavailable appointment must remain pending, not marked handled');
+await page.evaluate(()=>{mode.targetMissing=false;window.dispatchEvent(new Event('focus'));});await page.waitForFunction(()=>waCount===4);
 await page.evaluate(()=>{mode.active=false;});await page.evaluate(()=>SalonWebPush.sync());assert((await page.evaluate(()=>unsubscribes))>=1);assert((await page.evaluate(()=>subscribes))>=1);
 await page.evaluate(()=>{mode.active=true;sub.expirationTime=Date.now()-1000});const old=await page.evaluate(()=>unsubscribes);await page.evaluate(()=>SalonWebPush.sync());assert.equal(await page.evaluate(()=>unsubscribes),old+1);
 await page.evaluate(()=>{mode.subscriptionError=true});await page.evaluate(()=>SalonWebPush.sync());assert.match(await page.locator('#webPushStatus').textContent(),/bağlantısı bekleniyor/);
 await page.evaluate(()=>{mode.subscriptionError=false;Notification.permission='denied';SalonWebPush.render()});assert.match(await page.locator('#webPushStatus').textContent(),/engellenmiş/);
 await page.evaluate(()=>{mode.userError={status:401,message:'JWT expired'}});await page.evaluate(()=>startRemoteApp());assert.equal(await page.evaluate(()=>getSalonAuthState()),'UNAUTHENTICATED');assert.equal(await page.evaluate(()=>signouts),1,'Invalid refresh token really signs out');
 await page.evaluate(()=>{mode.session=true;mode.userError=null;mode.inactive=true;});await page.evaluate(()=>startRemoteApp());assert.equal(await page.evaluate(()=>getSalonAuthState()),'UNAUTHENTICATED');assert.equal(await page.evaluate(()=>signouts),2,'Inactive profile requires login');
-await page.evaluate(()=>{mode.inactive=false});await page.evaluate(()=>startRemoteApp());await page.evaluate(()=>logout());await page.evaluate(()=>message({notificationId:'n3',appointmentId:'a1',kind:'appointment_reminder'}));assert.equal(await page.evaluate(()=>waCount),2);assert.equal(await page.evaluate(()=>sessionStorage.getItem('salonPendingWebPushOpenV1')),null);
+await page.evaluate(()=>{mode.inactive=false});await page.evaluate(()=>startRemoteApp());await page.evaluate(()=>logout());await page.evaluate(()=>message({notificationId:'n3',appointmentId:'a1',kind:'appointment_reminder'}));assert.equal(await page.evaluate(()=>waCount),4);assert.equal(await page.evaluate(()=>sessionStorage.getItem('salonPendingWebPushOpenV1')),null);
 console.log('PASS mobile PWA fixture: cold/warm notification, once-only WhatsApp, return session, profile/data network retry, expired subscription replacement, permission/registration errors, invalid token, inactive profile and explicit logout');
 }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

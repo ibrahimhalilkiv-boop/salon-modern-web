@@ -132,6 +132,8 @@
   function showConnectionProblem(error) {
     setState(AUTH.TEMPORARY_NETWORK_ERROR);
     if (typeof currentUser !== 'undefined' && currentUser) {
+      // Never expose the retired startup dashboard after a partial data load.
+      if (typeof window.salonPhase2RenderHome === 'function') window.salonPhase2RenderHome();
       document.getElementById('auth')?.classList.add('hidden');
       document.getElementById('app')?.classList.remove('hidden');
       window.showAppToast?.('Bağlantı bekleniyor', 'Oturumunuz korunuyor. İnternet gelince yeniden denenecek.');
