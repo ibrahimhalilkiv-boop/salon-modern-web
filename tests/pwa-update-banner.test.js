@@ -1,0 +1,18 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('pwa-stability-2.3.20.js','utf8');
+const snippet=source.slice(source.indexOf('  function showUpdate(registration)'),source.lastIndexOf('})();'));
+let click,removed=false,controllerChange;
+const button={addEventListener:(_,fn)=>click=fn},span={};
+const banner={style:{},querySelector:s=>s==='button'?button:span,remove:()=>removed=true};
+const registration={waiting:{postMessage(){}},addEventListener(){},update:()=>Promise.resolve()};
+const sw={controller:{},ready:Promise.resolve(registration),addEventListener:(event,fn)=>{if(event==='controllerchange')controllerChange=fn},removeEventListener(){}};
+const context={document:{getElementById:()=>removed?null:banner,createElement:()=>banner,body:{appendChild(){}}},navigator:{serviceWorker:sw},location:{protocol:'https:',reload(){}},window:{confirm:()=>true},formIsBusy:()=>false,updateRequested:false,setTimeout:()=>1,clearTimeout(){}};
+context.document.getElementById=()=>null;
+vm.runInNewContext(snippet+';showUpdate(registration);',Object.assign(context,{registration}));
+registration.waiting=null;
+assert.doesNotThrow(()=>click(),'Already activated worker must not leave a broken update button');
+assert.equal(removed,true,'Stale update banner must be removed');
+removed=false;context.document.getElementById=()=>banner;
+controllerChange();
+assert.equal(removed,true,'Automatic activation must also dismiss the update banner');
+console.log('PASS update banner: stale worker and automatic activation');
