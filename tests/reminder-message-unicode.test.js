@@ -1,0 +1,14 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync('salon-modern.html','utf8');
+const source=html.split(/\r?\n/).filter(line=>line.startsWith('function plainReminderMessage(')||line.startsWith('whatsappReminderUrl=function(')).join('\n');
+const template='Merhaba {customer},\n\n📅 Tarih: 3 Ekim Cumartesi\n🕒 Saat: 23:44\n👤 Çalışan: Halil Kıv\n\nRandevunuza 1 saat kalmıştır.';
+const ctx={whatsappPhone:()=> '905355038544',appointmentTemplateValues:customer=>({customer}),renderSavedTemplate:(_key,values)=>template.replace('{customer}',values.customer)};
+vm.createContext(ctx);vm.runInContext(source,ctx);
+const url=new URL(ctx.whatsappReminderUrl('Şefik Çığ Öztürk','05355038544','2026-10-03','23:44','Halil Kıv',0));
+const message=url.searchParams.get('text');
+assert.equal(url.origin,'https://wa.me');assert.equal(url.pathname,'/905355038544');
+assert.match(message,/Şefik Çığ Öztürk/);assert.match(message,/Tarih: 3 Ekim Cumartesi/);assert.match(message,/Saat: 23:44/);assert.match(message,/Çalışan: Halil Kıv/);
+assert.doesNotMatch(message,/[📅🕒👤\uFFFD]/u);assert.doesNotMatch(message,/Ücret/);
+assert.match(template,/📅/,'Saved template must not be modified');
+assert.equal(ctx.plainReminderMessage('Merhaba 📅 adlı müşteri\n📅 Tarih: bugün'),'Merhaba 📅 adlı müşteri\nTarih: bugün','Only leading field-label emoji are removed');
+console.log('PASS reminder readable labels, Turkish UTF-8 URL roundtrip, recipient and saved-template preservation');
