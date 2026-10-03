@@ -29,6 +29,32 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
   });
   await page.waitForFunction(()=>window.fixtureWhatsApp===1,{timeout:3000});
   assert.deepEqual(errors,[]);
-  console.log('PASS actual local shell boot and modern home after retired UI removal');
+  await page.evaluate(()=>{
+   window.fixtureWrites=[];
+   const query=()=>{const q={then(resolve,reject){return Promise.resolve({data:[],error:null}).then(resolve,reject)}};
+    for(const method of ['select','eq','neq','gte','gt','lte','lt','in','order','limit','range','is','or'])q[method]=()=>q;
+    q.maybeSingle=q.single=()=>Promise.resolve({data:null,error:null});
+    for(const method of ['insert','update','delete','upsert'])q[method]=()=>{fixtureWrites.push(method);throw Error('Unexpected fixture mutation')};return q};
+   window.salonDb={from:()=>query(),rpc:()=>Promise.resolve({data:{},error:null}),auth:{getSession:()=>Promise.resolve({data:{session:{access_token:'fixture'}},error:null})}};
+  });
+  for(const viewport of [{width:430,height:850},{width:1440,height:900}]){
+   await page.setViewportSize(viewport);
+   const pages=await page.evaluate(()=>Array.from(document.querySelectorAll('#app > .page')).map(p=>p.id));
+   for(const id of pages){
+    if(['finance','team','bookingRequests'].includes(id))continue;
+    await page.evaluate(id=>showPage(id),id);
+    assert(await page.locator('#'+id).count(),'Page exists: '+id);
+   }
+   await page.evaluate(()=>openAppointmentModal('19:30',null,'Fixture'));
+   assert(await page.locator('#appointmentModal').isVisible());
+   await page.evaluate(()=>closeAppointmentModal());
+   await page.evaluate(()=>openFinance230('closing'));
+   await page.waitForFunction(()=>document.getElementById('finance230PeriodSummary')?.textContent.includes('Seçilen dönemde kalan'));
+   await page.evaluate(()=>openFinance230Products());
+   console.log('PASS full-shell '+viewport.width+'px navigation: '+pages.join(', '));
+  }
+  assert.deepEqual(await page.evaluate(()=>fixtureWrites),[]);
+  assert.deepEqual(errors,[],'Full shell page navigation must not throw');
+  console.log('PASS actual local shell startup, reminder route, modern home, mobile/desktop navigation, appointment form and cash/product screens; zero fixture writes');
  }finally{await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1});
