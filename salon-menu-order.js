@@ -12,6 +12,15 @@
       drawer.insertBefore(button,marker);
     });
     marker.remove();
+    [['drawerCashSeparator','finance230Menu'],['drawerCustomersSeparator','drawerDebts']].forEach(function(pair){
+      var target=document.getElementById(pair[1]);if(!target)return;
+      var separator=document.getElementById(pair[0]);
+      if(!separator){separator=document.createElement('hr');separator.id=pair[0]}
+      separator.className='drawer-separator manager-menu';
+      separator.classList.toggle('hidden',window.currentUser?.role!=='yonetici');
+      drawer.insertBefore(separator,target);
+    });
+    drawer.querySelectorAll('#appVersion,[data-app-version]').forEach(function(node){node.remove()});
     drawer.querySelectorAll(':scope > .manager-menu > .drawer-separator').forEach(function(separator){separator.classList.add('hidden')});
     document.getElementById('drawerRecoveryCenter')?.classList.add('hidden');
     drawer.querySelectorAll('[data-push-settings-menu]').forEach(function(button){button.remove()});
