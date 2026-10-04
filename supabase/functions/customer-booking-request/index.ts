@@ -68,6 +68,16 @@ function minuteLabel(minutes: number) {
 // Online customers may start no later than 19:00. The management calendar
 // deliberately remains independent and can accept later manual appointments.
 const ONLINE_LAST_START_MINUTES = 19 * 60
+const ONLINE_HOUR_SERVICE_IDS = new Set([
+  '2638b0ff-a6e0-412c-b212-0f4d238d9be1', // Saç sakal ağda maske yıkama
+  '620dbf23-22f9-4362-85a4-eed7c377e9be', // Saç sakal maske yıkama
+  '0cdc2d09-b75e-4545-ba73-1c01665400c7', // Saç,sakal kesim yıkama
+  '65f7f4ae-77ff-4409-b10a-5607a05aceee', // Saç sakal kesim
+])
+
+function onlineDuration(serviceId: string) {
+  return ONLINE_HOUR_SERVICE_IDS.has(serviceId) ? 60 : 30
+}
 
 async function bookingSchedule(date: string) {
   const [settings, override] = await Promise.all([
@@ -98,7 +108,9 @@ async function manager(req: Request) {
 async function onlineServices() {
   const result = await db.from('services').select('id,name,price,duration_minutes').eq('active', true)
   if (result.error) throw result.error
-  return (result.data || []).sort((a, b) => Number(b.price || 0) - Number(a.price || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'tr') || String(a.id).localeCompare(String(b.id)))
+  return (result.data || [])
+    .sort((a, b) => Number(b.price || 0) - Number(a.price || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'tr') || String(a.id).localeCompare(String(b.id)))
+    .map((item) => ({ ...item, online_duration_minutes: onlineDuration(item.id) }))
 }
 
 async function catalogue(req: Request) {
@@ -122,11 +134,13 @@ async function availability(req: Request, url: URL, own?: { id: string, service_
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date())
   if (date < today) return reply(req, { error: 'Geçmiş tarih seçilemez.' }, 400)
 
-  const service = own ? { id: own.service_id, duration_minutes: own.duration_minutes } : (await onlineServices()).find((item) => item.id === serviceId)
+  const service = own
+    ? { id: own.service_id, online_duration_minutes: own.duration_minutes }
+    : (await onlineServices()).find((item) => item.id === serviceId)
   if (!service) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
-  if (!Number.isSafeInteger(service.duration_minutes) || service.duration_minutes <= 0) return reply(req, { error: 'Bu hizmetin süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
+  if (!Number.isSafeInteger(service.online_duration_minutes) || service.online_duration_minutes <= 0) return reply(req, { error: 'Bu hizmetin online süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
   const schedule = await bookingSchedule(date)
-  if (schedule.closed) return reply(req, { date, durationMinutes: service.duration_minutes, slots: [], schedule })
+  if (schedule.closed) return reply(req, { date, durationMinutes: service.online_duration_minutes, slots: [], schedule })
   let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern')
   if (requestedEmployeeId) employeeQuery = employeeQuery.eq('id', requestedEmployeeId)
   const employees = await employeeQuery.order('full_name')
@@ -142,7 +156,7 @@ async function availability(req: Request, url: URL, own?: { id: string, service_
       .in('employee_id', ids).lt('starts_at', to).gt('ends_at', from),
   ])
   if (appointments.error || closures.error) throw appointments.error || closures.error
-  const duration = service.duration_minutes
+  const duration = service.online_duration_minutes
   const now = Date.now()
   const slots = []
   const cadence = 15
