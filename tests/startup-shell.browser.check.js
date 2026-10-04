@@ -29,6 +29,18 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
   });
   await page.waitForFunction(()=>window.fixtureWhatsApp===1,{timeout:3000});
   assert.deepEqual(errors,[]);
+  const menuLabels=()=>page.evaluate(()=>Array.from(document.querySelectorAll('.drawer .menu-item')).filter(button=>!button.closest('.hidden')&&!button.hidden).map(button=>button.textContent.replace(/^[^\p{L}]+/u,'').replace(/\s+/g,' ').trim()));
+  const expectedMenu=['Ana sayfa','Takvim','İstatistikler','Çalışan Performansı','Günlük kasa','Ürün ve stok','Satış','Borçlar','Müşteriler','Akıllı Müşteri Analizi','Randevu Yönetimi','Yönetim paneli','Hesaptan çıkış yap'];
+  assert.deepEqual(await menuLabels(),expectedMenu,'Manager menu uses requested order without notification/recovery links');
+  await page.evaluate(()=>{simplifyNavigation();toggleDrawer();toggleDrawer()});
+  assert.deepEqual(await menuLabels(),expectedMenu,'Repeated installers keep menu stable');
+  await page.evaluate(()=>{currentUser.role='personel';enterApp()});
+  const staffMenu=await menuLabels();
+  for(const label of ['Günlük kasa','Ürün ve stok','Satış','Borçlar','Müşteriler','Çalışan Performansı','Yönetim paneli'])assert(!staffMenu.includes(label),'Staff permissions retained: '+label);
+  assert(staffMenu.includes('Randevu Yönetimi'));
+  await page.evaluate(()=>{currentUser.role='yonetici';enterApp()});
+  assert.deepEqual(await menuLabels(),expectedMenu,'Manager menu restored after role change');
+  console.log('PASS requested menu order, repeated initialization and manager/staff visibility; push runtime preserved');
   await page.evaluate(()=>{
    window.fixtureWrites=[];
    const query=()=>{const q={then(resolve,reject){return Promise.resolve({data:[],error:null}).then(resolve,reject)}};
