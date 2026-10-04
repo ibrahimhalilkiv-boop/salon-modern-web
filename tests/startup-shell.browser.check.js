@@ -36,6 +36,14 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
   assert.deepEqual(await menuLabels(),expectedMenu,'Repeated installers keep menu stable');
   assert.equal(await page.locator('#drawerCashSeparator').count(),1);
   assert.equal(await page.locator('#drawerCustomersSeparator').count(),1);
+  await page.setViewportSize({width:430,height:1000});
+  await page.evaluate(()=>toggleDrawer());
+  for(const id of ['drawerCashSeparator','drawerCustomersSeparator']){
+   assert(await page.locator('#'+id).isVisible(),'Manager separator must be visually rendered: '+id);
+   assert(await page.locator('#'+id).evaluate(node=>{const rect=node.getBoundingClientRect(),style=getComputedStyle(node);return rect.width>100&&rect.height>=1&&style.borderTopStyle==='solid'}),'Separator has a rendered border');
+  }
+  await page.screenshot({path:'../menu-separators-v108-mobile.png'});
+  await page.evaluate(()=>toggleDrawer());
   assert.equal(await page.locator('.drawer #appVersion').count(),0,'Menu version removed');
   assert.deepEqual(await page.evaluate(()=>['drawerCashSeparator','drawerCustomersSeparator'].map(id=>{const separator=document.getElementById(id);return [separator.previousElementSibling.id,separator.nextElementSibling.id]})),[['drawerEmployeePerformance','finance230Menu'],['drawerProductSale','drawerDebts']],'Section separators bracket the requested groups');
   await page.evaluate(()=>{currentUser.role='personel';enterApp()});

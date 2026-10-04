@@ -17,7 +17,8 @@
       var separator=document.getElementById(pair[0]);
       if(!separator){separator=document.createElement('hr');separator.id=pair[0]}
       separator.className='drawer-separator manager-menu';
-      separator.classList.toggle('hidden',window.currentUser?.role!=='yonetici');
+      // currentUser is a top-level let, not a property of window.
+      separator.classList.toggle('hidden',typeof currentUser==='undefined'||currentUser?.role!=='yonetici');
       drawer.insertBefore(separator,target);
     });
     drawer.querySelectorAll('#appVersion,[data-app-version]').forEach(function(node){node.remove()});
