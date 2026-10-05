@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
 
 const index = fs.readFileSync('salon-modern.html', 'utf8');
 const shell = fs.readFileSync('salon-modern.html', 'utf8');
@@ -34,4 +35,12 @@ for (const file of ['appointment-debt-warning-2.3.28.js','appointment-cancel-but
 
 const html=fs.readFileSync('salon-modern.html','utf8');assert.match(actions,/panel\.onpointerdown=pick/,'Müşteri seçimi mobil blur öncesinde işlenmeli');assert.match(actions,/applyCustomerHistory\(client\)/,'Seçilen müşterinin telefon ve geçmiş bilgileri doldurulmalı');
 
-const customerHtml=fs.readFileSync('salon-modern.html','utf8');const historyFn=customerHtml.match(/function applyCustomerHistory\(client\)\{[\s\S]*?\n\}/)?.[0]||'';assert.match(historyFn,/client\.phone/,'Müşteri seçimi telefonu doldurmalı');assert.match(historyFn,/lastAppointmentForClient/,'Müşteri seçimi son randevuyu bulmalı');assert.match(historyFn,/appointmentOperation/,'Son hizmet otomatik seçilmeli');assert.match(historyFn,/appointmentStaff/,'Son hizmeti veren çalışan otomatik seçilmeli');
+const customerHtml=fs.readFileSync('salon-modern.html','utf8');const historyFn=customerHtml.match(/function applyCustomerHistory\(client\)\{[\s\S]*?\n\}/)?.[0]||'';assert.match(historyFn,/client\.phone/,'Müşteri seçimi telefonu doldurmalı');assert.match(historyFn,/lastAppointmentForClient/,'Müşteri seçimi son randevuyu bulmalı');assert.match(historyFn,/appointmentOperation/,'Son hizmet otomatik seçilmeli');assert.doesNotMatch(historyFn,/appointmentStaff|last\.staff/,'Son hizmeti veren çalışan otomatik seçilmemeli');
+assert.match(actions,/calendarSelectedStaff=!id&&staffName\?String\(staffName\):''/,'Takvimde seçilen çalışan yeni randevu boyunca korunmalı');
+assert.match(actions,/enforceCalendarStaff\(\);if\(form\.reportValidity/,'Kaydetmeden hemen önce takvim çalışanı yeniden uygulanmalı');
+
+const fields={appointmentCustomer:{value:''},appointmentPhone:{value:''},appointmentOperation:{value:'Başlangıç'},appointmentStaff:{value:'Takvim Çalışanı'},appointmentAmount:{value:0}};
+const historyContext={document:{getElementById:id=>fields[id]},lastAppointmentForClient:()=>({operation:'Son Hizmet',staff:'Önceki Çalışan',amount:450}),renderServiceOptions(){},serviceByName:()=>({price:500})};
+vm.createContext(historyContext);vm.runInContext(historyFn,historyContext);historyContext.applyCustomerHistory({full_name:'Müşteri',phone:'05000000000'});
+assert.equal(fields.appointmentOperation.value,'Son Hizmet','Son hizmet formda kalmalı');
+assert.equal(fields.appointmentStaff.value,'Takvim Çalışanı','Takvimde seçilen çalışan müşteri geçmişiyle değişmemeli');
