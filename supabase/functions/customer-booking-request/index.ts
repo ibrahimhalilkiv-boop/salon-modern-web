@@ -20,6 +20,7 @@ function cors(req: Request) {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Vary': 'Origin',
+    'Cache-Control': 'no-store',
     'Content-Type': 'application/json; charset=utf-8',
   }
 }
@@ -68,6 +69,8 @@ function minuteLabel(minutes: number) {
 // Online customers may start no later than 19:00. The management calendar
 // deliberately remains independent and can accept later manual appointments.
 const ONLINE_LAST_START_MINUTES = 19 * 60
+const CUSTOMER_CONTACT_MESSAGE = 'Online randevu oluşturma işleminiz için lütfen Salon Modern ile iletişime geçiniz.'
+const CUSTOMER_CHANGE_CUTOFF_MESSAGE = 'Randevunuza 2 saat veya daha az kaldığı için online değişiklik veya iptal yapılamamaktadır. Lütfen Salon Modern ile iletişime geçiniz.'
 const ONLINE_HOUR_SERVICE_IDS = new Set([
   '2638b0ff-a6e0-412c-b212-0f4d238d9be1', // Saç sakal ağda maske yıkama
   '620dbf23-22f9-4362-85a4-eed7c377e9be', // Saç sakal maske yıkama
@@ -159,7 +162,7 @@ async function availability(req: Request, url: URL, own?: { id: string, service_
   const duration = service.online_duration_minutes
   const now = Date.now()
   const slots = []
-  const cadence = 15
+  const cadence = 30
   const first = Math.ceil(schedule.open / cadence) * cadence
   for (let minutes = first; minutes <= ONLINE_LAST_START_MINUTES && minutes + duration <= schedule.close; minutes += cadence) {
     const time = minuteLabel(minutes)
@@ -200,6 +203,9 @@ async function createRequest(req: Request) {
       if (row.status === 'approved') return reply(req, { requestNumber: row.id.slice(0, 8).toUpperCase(), statusToken: row.public_token, status: 'approved' }, 200)
     }
   }
+  const permission = await db.rpc('can_create_online_booking', { p_phone: customerPhone })
+  if (permission.error) throw permission.error
+  if (permission.data !== true) return reply(req, { error: CUSTOMER_CONTACT_MESSAGE }, 403)
   if (new Date(startAt).getTime() <= Date.now()) return reply(req, { error: 'Geçmiş tarih seçilemez.' }, 400)
   const max = Date.now() + 90 * 86400000
   if (new Date(startAt).getTime() > max) return reply(req, { error: 'En fazla 90 gün sonrası seçilebilir.' }, 400)
@@ -252,11 +258,13 @@ async function publicStatus(req: Request, token: string) {
   if (!row.data) return reply(req, { error: 'Talep bulunamadı.' }, 404)
   const item = row.data.appointment
   const starts = item?.scheduled_at || row.data.scheduled_at
+  const outsideCutoff = new Date(starts).getTime() > Date.now() + 2 * 60 * 60 * 1000
   return reply(req, { status: item?.status === 'cancelled' ? 'cancelled' : row.data.status,
     requested_date: starts, requested_start_at: starts, revision: row.data.customer_revision,
     appointment: item ? { customer: item.client_name, service: item.service_name, employee: item.employee?.full_name,
       scheduledAt: starts, durationMinutes: item.duration_minutes, amount: item.amount,
-      canManage: item.status === 'confirmed' && row.data.status === 'approved' && new Date(starts).getTime() > Date.now() } : null })
+      canManage: item.status === 'confirmed' && row.data.status === 'approved' && outsideCutoff } : null,
+    managementMessage: item?.status === 'confirmed' && row.data.status === 'approved' && !outsideCutoff ? CUSTOMER_CHANGE_CUTOFF_MESSAGE : null })
 }
 
 function validUuid(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }
@@ -274,7 +282,8 @@ async function customerAvailability(req: Request, url: URL) {
   const token = url.searchParams.get('token') || ''
   if (!validUuid(token)) return reply(req, { error: 'Geçersiz takip kodu.' }, 400)
   const row = await customerBooking(token), item = row.data?.appointment
-  if (!item || item.status !== 'confirmed' || row.data?.status !== 'approved' || new Date(item.scheduled_at).getTime() <= Date.now()) return reply(req, { error: 'Randevu değiştirilemez.' }, 409)
+  if (!item || item.status !== 'confirmed' || row.data?.status !== 'approved') return reply(req, { error: 'Randevu değiştirilemez.' }, 409)
+  if (new Date(item.scheduled_at).getTime() <= Date.now() + 2 * 60 * 60 * 1000) return reply(req, { error: CUSTOMER_CHANGE_CUTOFF_MESSAGE }, 409)
   return availability(req, url, item)
 }
 async function customerAction(req: Request, action: string) {
@@ -282,9 +291,12 @@ async function customerAction(req: Request, action: string) {
   if (body.appointmentId || body.employeeId || body.serviceId || body.staff_overlap_override) return reply(req, { error: 'Yalnız bağlı randevunun tarihi ve saati değiştirilebilir.' }, 400)
   if (!validUuid(body.token || '') || !validUuid(body.operation || '') || !Number.isInteger(body.revision)) return reply(req, { error: 'Geçersiz işlem bilgileri.' }, 400)
   if (action === 'update' && (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '') || !/^\d{2}:\d{2}$/.test(body.time || ''))) return reply(req, { error: 'Tarih ve saat seçin.' }, 400)
+  const booking = await customerBooking(body.token), appointment = booking.data?.appointment
+  if (!appointment || appointment.status !== 'confirmed' || booking.data?.status !== 'approved') return reply(req, { error: 'Randevu değiştirilemez.' }, 409)
+  if (new Date(appointment.scheduled_at).getTime() <= Date.now() + 2 * 60 * 60 * 1000) return reply(req, { error: CUSTOMER_CHANGE_CUTOFF_MESSAGE }, 409)
   const result = await db.rpc('manage_customer_online_booking', { p_token: body.token, p_operation: body.operation,
     p_revision: body.revision, p_action: action, p_start: action === 'update' ? slotIso(body.date, body.time) : null })
-  if (result.error) return reply(req, { error: 'Randevu değiştirilemedi. Bilgileri ve müsait saatleri yenileyin.' }, 409)
+  if (result.error) return reply(req, { error: String(result.error.message || '').includes('2 saat') ? CUSTOMER_CHANGE_CUTOFF_MESSAGE : 'Randevu değiştirilemedi. Bilgileri ve müsait saatleri yenileyin.' }, 409)
   return reply(req, result.data)
 }
 

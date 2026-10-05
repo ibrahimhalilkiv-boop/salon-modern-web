@@ -31,7 +31,7 @@ assert.match(edge, /eq\('role', 'manager'\)/, 'Yönetici rolü server-side kontr
 assert.match(edge, /action === 'availability'/, 'Public müsaitlik endpointi olmalı');
 assert.match(edge, /booking_settings/, 'Varsayılan online çalışma saatleri okunmalı');
 assert.match(edge, /booking_schedule_overrides/, 'Tarih bazlı çalışma saati okunmalı');
-assert.match(edge, /const cadence = 15/, 'Tüm hizmetler 15 dakika gridinde başlamalı');
+assert.match(edge, /const cadence = 30/, 'Online saatler yalnız saat ve yarım saatte başlamalı');
 assert.match(edge, /gt\('scheduled_end', from\)/, 'Önceki günden taşan randevular hesaba katılmalı');
 assert.doesNotMatch(edge, /const mustWaitForFullHour/, 'Gerçek bitiş dışında saat başı kuralı olmamalı');
 assert.doesNotMatch(edge, /appointmentEnd > currentHour/, 'İşlem ara saatten önce biterse ara saat gereksiz engellenmemeli');
@@ -57,7 +57,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v108/, 'PWA cache sürümü yükseltilmeli');
+assert.match(shell, /salon-modern-shell-pwa-v109/, 'PWA cache sürümü güncel yayın sürümünde kalmalı');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
