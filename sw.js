@@ -1,4 +1,7 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v108';
+const CACHE_NAME = 'salon-modern-shell-pwa-v109';
+const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
+const shownReminders = new Set();
+let reminderDisplayQueue = Promise.resolve();
 const APP_SHELL = [
   './',
   './salon-modern.html',
@@ -18,7 +21,7 @@ const APP_SHELL = [
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js',
   './appointment-management-2.3.26.js?v=89',
-  './salon-web-push.js?v=106',
+  './salon-web-push.js?v=109',
   './salon-menu-order.js?v=108',
   './pwa-stability-2.3.20.js?v=103',
   './pwa-recovery-2.3.21.js?v=81',
@@ -47,19 +50,91 @@ self.addEventListener('install', event => {
 
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'SALON_REMINDER_FALLBACK' && event.source?.url) {
+    const source = new URL(event.source.url);
+    const app = new URL('./salon-modern.html', self.registration.scope);
+    if (source.origin === app.origin && source.pathname === app.pathname &&
+        event.data.data?.kind === 'appointment_reminder' && event.data.data.notificationId) {
+      event.waitUntil(displayReminder(event.data.data, 'foreground-fallback'));
+    }
+  }
 });
+
+function receiptUrl(id) {
+  return new URL('./__salon_push_receipts__/' + encodeURIComponent(id), self.registration.scope).href;
+}
+
+async function readReceipt(id) {
+  try {
+    const response = await (await caches.open(PUSH_RECEIPT_CACHE)).match(receiptUrl(id));
+    return response ? await response.json() : {};
+  } catch (error) { console.warn('[salon-push] receipt read failed', error); return null; }
+}
+
+async function writeReceipt(data, record) {
+  try {
+    // Device-only diagnostic metadata; never store customer text or credentials.
+    await (await caches.open(PUSH_RECEIPT_CACHE)).put(receiptUrl(data.notificationId), new Response(JSON.stringify({
+      notificationId: data.notificationId, appointmentId: data.appointmentId || '',
+      reminderFor: data.reminderFor || '', ...record
+    }), { headers: { 'Content-Type': 'application/json' } }));
+  } catch (error) { console.warn('[salon-push] receipt write failed', error); }
+}
+
+function displayReminder(data, source) {
+  const task = reminderDisplayQueue.catch(() => {}).then(async () => {
+    const record = await readReceipt(data.notificationId) || {};
+    record.lastReceivedAt = new Date().toISOString();
+    if (source === 'push') record.pushReceivedAt = record.pushReceivedAt || record.lastReceivedAt;
+    record.lastSource = source;
+    if (source === 'foreground-fallback') {
+      const boundary = await readReceipt('__enabled__');
+      // Older versions did not record display. Do not replay pre-upgrade
+      // reminders that the user might already have seen and dismissed.
+      if (!boundary?.firstEnabledAt || !data.createdAt || Date.parse(data.createdAt) < Date.parse(boundary.firstEnabledAt)) return;
+    }
+    const tag = 'salon-' + data.notificationId;
+    if (record.shownAt || shownReminders.has(data.notificationId)) {
+      await writeReceipt(data, record); return;
+    }
+    try {
+      // Also recognize notifications displayed by the previous worker version.
+      let visible = [];
+      try {
+        if (self.registration.getNotifications) visible = await self.registration.getNotifications({ tag });
+      } catch (error) { console.warn('[salon-push] visible notification lookup failed', error); }
+      if (!visible.length) await displayNotification({ ...data, tag });
+      shownReminders.add(data.notificationId);
+      record.shownAt = new Date().toISOString();
+      record.shownBy = visible.length ? 'existing-notification' : source;
+      record.lastError = null;
+      await writeReceipt(data, record);
+    } catch (error) {
+      record.failedAt = new Date().toISOString();
+      record.lastError = String(error?.name || 'showNotification failed');
+      await writeReceipt(data, record);
+      throw error; // Failure must remain retryable, never marked as displayed.
+    }
+  });
+  reminderDisplayQueue = task;
+  return task;
+}
 
 self.addEventListener('push', event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; }
   catch (_) { try { data = { body: event.data ? event.data.text() : '' }; } catch (_) { data = {}; } }
   if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
+  event.waitUntil(data.kind === 'appointment_reminder' && data.notificationId
+    ? displayReminder(data, 'push') : displayNotification(data));
+});
+
+async function displayNotification(data) {
   // Contract: dispatcher sends title/body and routing metadata at the top level.
   // Showing a notification must not depend on a page, login or network request.
   const title = typeof data.title === 'string' && data.title ? data.title : 'Salon Modern';
   const body = typeof data.body === 'string' && data.body ? data.body : 'Yeni bir bildiriminiz var.';
   const tag = typeof data.tag === 'string' && data.tag ? data.tag : 'salon-' + (data.notificationId || Date.now());
-  event.waitUntil((async () => {
     try {
       await self.registration.showNotification(title, {
         body, icon: './salon-icon-192.png', badge: './salon-icon-192.png', tag, renotify: false, data
@@ -73,8 +148,7 @@ self.addEventListener('push', event => {
         throw fallbackError;
       }
     }
-  })());
-});
+}
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
@@ -98,8 +172,11 @@ self.addEventListener('notificationclick', event => {
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+    readReceipt('__enabled__').then(async boundary => {
+      if (!boundary?.firstEnabledAt) await writeReceipt({ notificationId: '__enabled__' }, { firstEnabledAt: new Date().toISOString() });
+      return caches.keys();
+    })
+      .then(keys => Promise.all(keys.filter(key => key.startsWith('salon-modern-shell-pwa-') && key !== CACHE_NAME).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
       .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
       .then(clients => Promise.all(clients.map(client => client.postMessage({ type: 'SALON_SHELL_UPDATED', cache: CACHE_NAME }))))

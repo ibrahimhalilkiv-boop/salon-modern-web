@@ -2,6 +2,52 @@
 'use strict';
 var API='https://oxuwwjsakhcqimjsfris.supabase.co/functions/v1/web-push-dispatch',subscription=null,syncBusy=false,deviceSynced=false,pendingOpen=null,opening=false,explicitLogout=false;
 var PENDING_KEY='salonPendingWebPushOpenV1',HANDLED_KEY='salonHandledWebPushOpenV1';
+var reminderCheckBusy=false;
+async function reminderDiagnostics(){
+  if(!authReady())return [];
+  var userId=currentUser.id,since=new Date(Date.now()-6*60*60*1000).toISOString();
+  var result=await salonDb.from('notifications').select('id').eq('recipient_id',userId).eq('kind','appointment_reminder').gte('created_at',since).order('created_at',{ascending:false}).limit(100);
+  if(result.error)throw result.error;
+  var cache=await caches.open('salon-modern-push-receipts-v1'),registration=await navigator.serviceWorker.ready,records=[];
+  for(var note of result.data||[]){
+    if(!authReady()||currentUser.id!==userId)return [];
+    var response=await cache.match(new URL('./__salon_push_receipts__/'+encodeURIComponent(note.id),registration.scope).href);
+    records.push(response?await response.json():{notificationId:note.id,status:'no-device-receipt'});
+  }
+  return records;
+}
+async function catchUpReminders(){
+  if(reminderCheckBusy||document.hidden||!authReady()||!supported()||Notification.permission!=='granted')return;
+  reminderCheckBusy=true;
+  var userId=currentUser.id;
+  try{
+    var since=new Date(Date.now()-6*60*60*1000).toISOString();
+    // RLS and explicit ownership both apply. Do not use read_at as proof of display.
+    var result=await salonDb.from('notifications').select('id,recipient_id,appointment_id,kind,title,body,reminder_for,created_at,appointment:appointments(id,scheduled_at,status)').eq('recipient_id',userId).eq('kind','appointment_reminder').gte('created_at',since).order('created_at',{ascending:false}).limit(100);
+    if(result.error)throw result.error;
+    var registration=await navigator.serviceWorker.ready;
+    if(!registration.active)return;
+    for(var note of result.data||[]){
+      if(!authReady()||currentUser.id!==userId)return;
+      var item=note.appointment,starts=Date.parse(item?.scheduled_at);
+      if(note.recipient_id!==userId||note.kind!=='appointment_reminder'||!note.reminder_for||item?.status!=='confirmed'||!Number.isFinite(starts)||starts<=Date.now()||starts!==Date.parse(note.reminder_for))continue;
+      var date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Istanbul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(starts));
+      // Push and foreground fallback share one durable worker dedup identity.
+      registration.active.postMessage({type:'SALON_REMINDER_FALLBACK',data:{notificationId:note.id,appointmentId:note.appointment_id,appointmentDate:date,reminderFor:note.reminder_for,createdAt:note.created_at,kind:'appointment_reminder',type:'appointment_reminder',title:note.title,body:note.body,tag:'salon-'+note.id}});
+    }
+  }catch(error){console.warn('[salon-reminder] catch-up failed',error)}
+  finally{reminderCheckBusy=false}
+}
+var previousAssignmentDelivery=window.deliverAssignmentNotification;
+if(typeof previousAssignmentDelivery==='function')window.deliverAssignmentNotification=function(item){
+  if(item?.kind==='appointment_reminder'&&item.recipient_id===currentUser?.id)return catchUpReminders();
+  return previousAssignmentDelivery.apply(this,arguments)
+};
+window.addEventListener('salon:auth-state',function(event){if(event.detail?.state==='AUTHENTICATED')catchUpReminders()});
+window.addEventListener('online',catchUpReminders);
+window.addEventListener('focus',catchUpReminders);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)catchUpReminders()});
+setInterval(catchUpReminders,60*1000);
 function supported(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window}
 function decode(value){var raw=atob((value+'='.repeat((4-value.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/')),out=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
 function toast(a,b){if(typeof showAppToast==='function')showAppToast(a,b)}
@@ -83,5 +129,5 @@ var enter=window.enterApp;window.enterApp=function(){var result=enter.apply(this
 var leave=window.logout;window.logout=async function(){explicitLogout=true;pendingOpen=null;sessionStorage.removeItem(PENDING_KEY);clearNotificationUrl();try{var sub=await existing();if(sub&&currentUser)await salonDb.from('web_push_subscriptions').update({active:false,updated_at:new Date().toISOString()}).eq('endpoint',sub.endpoint).eq('user_id',currentUser.id)}catch(_){}deviceSynced=false;return leave.apply(this,arguments)};
 if(salonDb?.auth?.onAuthStateChange)salonDb.auth.onAuthStateChange(function(event,session){if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION')&&session?.user)setTimeout(sync,0)});
 setInterval(function(){if(!document.hidden&&Notification.permission==='granted')sync()},5*60*1000);
-window.SalonWebPush={enable:enable,disable:disable,test:test,sync:sync,render:render};
+window.SalonWebPush={enable:enable,disable:disable,test:test,sync:sync,render:render,catchUpReminders:catchUpReminders,reminderDiagnostics:reminderDiagnostics};
 })();
