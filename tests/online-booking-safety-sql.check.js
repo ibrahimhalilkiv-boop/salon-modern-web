@@ -26,6 +26,7 @@ const fs=require('node:fs');
    create function private.online_booking_duration(uuid) returns integer language sql stable as 'select 30';
    set test.role='service_role';`);
   await db.exec(fs.readFileSync('supabase/migrations/20261004223000_online_booking_no_show_and_two_hour_cutoff.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261006110804_allow_exact_two_hour_customer_changes.sql','utf8'));
 
   await db.query(`insert into clients values
    ($1,'Two no-shows','+90 500 000 00 01'),
@@ -57,7 +58,17 @@ const fs=require('node:fs');
      values($1,'Boundary','905000000010',$2,'Hizmet',$3,now()+interval '2 hours',now()+interval '2 hours 30 minutes',30,'confirmed','online')`,[uuid(401),service,employee]);
    await db.query(`insert into online_booking_requests(id,client_name,phone,phone_normalized,service_id,service_name,employee_id,scheduled_at,duration_minutes,public_token,status,appointment_id)
      values($1,'Boundary','905000000010','905000000010',$2,'Hizmet',$3,now()+interval '2 hours',30,$4,'approved',$5)`,[uuid(402),service,employee,uuid(403),uuid(401)]);
-   await assert.rejects(db.query("select public.manage_customer_online_booking($1,$2,0,'cancel',null)",[uuid(403),uuid(404)]),/2 saat veya daha az/,'Exactly two hours must be rejected by SQL');
+   const exact=(await db.query("select public.manage_customer_online_booking($1,$2,0,'cancel',null) result",[uuid(403),uuid(404)])).rows[0].result;
+   assert.equal(exact.status,'cancelled','Exactly two hours must be allowed by SQL');
+  }finally{await db.exec('rollback')}
+
+  await db.exec('begin');
+  try{
+   await db.query(`insert into appointments(id,client_name,client_phone,service_id,service_name,employee_id,scheduled_at,scheduled_end,duration_minutes,status,source)
+     values($1,'Below boundary','905000000012',$2,'Hizmet',$3,now()+interval '1 hour 59 minutes',now()+interval '2 hours 29 minutes',30,'confirmed','online')`,[uuid(421),service,employee]);
+   await db.query(`insert into online_booking_requests(id,client_name,phone,phone_normalized,service_id,service_name,employee_id,scheduled_at,duration_minutes,public_token,status,appointment_id)
+     values($1,'Below boundary','905000000012','905000000012',$2,'Hizmet',$3,now()+interval '1 hour 59 minutes',30,$4,'approved',$5)`,[uuid(422),service,employee,uuid(423),uuid(421)]);
+   await assert.rejects(db.query("select public.manage_customer_online_booking($1,$2,0,'cancel',null)",[uuid(423),uuid(424)]),/2 saatten az/,'One hour 59 minutes must be rejected by SQL');
   }finally{await db.exec('rollback')}
 
   await db.query(`insert into appointments(id,client_name,client_phone,service_id,service_name,employee_id,scheduled_at,scheduled_end,duration_minutes,status,source)

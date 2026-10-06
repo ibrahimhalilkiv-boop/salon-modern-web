@@ -2,6 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 
 const migration=fs.readFileSync('supabase/migrations/20261004223000_online_booking_no_show_and_two_hour_cutoff.sql','utf8');
+const cutoffMigration=fs.readFileSync('supabase/migrations/20261006110804_allow_exact_two_hour_customer_changes.sql','utf8');
 const edge=fs.readFileSync('supabase/functions/customer-booking-request/index.ts','utf8');
 const manage=fs.readFileSync('randevu/durum/manage.js','utf8');
 
@@ -13,7 +14,7 @@ assert.match(migration,/normalize_tr_phone/,'Phone variants must use one server-
 assert.match(migration,/private\.normalize_tr_phone\(a\.client_phone\)=i\.phone[\s\S]*exists[\s\S]*c\.id=a\.client_id[\s\S]*private\.normalize_tr_phone\(c\.phone\)=i\.phone/,'No-show identity must match either the appointment snapshot or linked customer phone');
 assert.match(migration,/single-business database[\s\S]*tenant boundary/,'Business scope must be documented as this isolated Supabase project');
 assert.match(migration,/if not public\.can_create_online_booking/,'Atomic create RPC must enforce no-show denial');
-assert.match(migration,/appointment\.scheduled_at<=now\(\)\+interval '2 hours'/,'Exactly two hours and less must be denied');
+assert.match(cutoffMigration,/appointment\.scheduled_at<now\(\)\+interval '2 hours'/,'Only less than two hours must be denied');
 assert.match(migration,/extract\(minute from local_start\)::integer%30<>0/,'Backend must accept only hour and half-hour starts');
 assert.match(migration,/p_start at time zone 'Europe\/Istanbul'/,'Database schedule validation must use Istanbul local time');
 assert.match(edge,/return `\$\{date\}T\$\{time\}:00\+03:00`/,'Edge Function must encode customer selections with Turkey UTC offset');
@@ -22,8 +23,8 @@ assert.match(migration,/p_revision is distinct from request\.customer_revision/,
 assert.doesNotMatch(migration,/update public\.services|update public\.appointments set status='no_show'/i,'Migration must not alter services, existing appointments or create no-shows');
 assert.match(edge,/can_create_online_booking/,'Public create endpoint must check only the boolean decision');
 assert.match(edge,/CUSTOMER_CHANGE_CUTOFF_MESSAGE/,'Public endpoints must return the two-hour explanation');
-assert.match(edge,/const outsideCutoff = [^\n]+ > Date\.now\(\) \+ 2 \* 60 \* 60 \* 1000/,'UI eligibility must require strictly more than two hours');
-assert.equal((edge.match(/getTime\(\) <= Date\.now\(\) \+ 2 \* 60 \* 60 \* 1000/g)||[]).length,2,'Availability and action endpoints must reject the exact two-hour boundary');
+assert.match(edge,/const outsideCutoff = [^\n]+ >= Date\.now\(\) \+ 2 \* 60 \* 60 \* 1000/,'UI eligibility must include the exact two-hour boundary');
+assert.equal((edge.match(/getTime\(\) < Date\.now\(\) \+ 2 \* 60 \* 60 \* 1000/g)||[]).length,2,'Availability and action endpoints must reject only times below two hours');
 assert.match(edge,/'Cache-Control': 'no-store'/,'Token-scoped customer data must not be cached');
 assert.match(manage,/managementMessage/,'Customer page must show the backend cutoff explanation');
 
