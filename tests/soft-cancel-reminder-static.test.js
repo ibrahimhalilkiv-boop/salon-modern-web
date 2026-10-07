@@ -20,6 +20,9 @@ assert.match(performance,/row\.status==='cancelled'/);
 assert.equal((fixes.match(/\.neq\('status','cancelled'\)/g)||[]).length,2);
 assert.match(push,/appointment_cancelled_or_missing/);
 assert.match(push,/Date\.parse\(notification\.reminder_for\) !== Date\.parse\(appointment\.scheduled_at\)/);
+assert.match(push,/notification:\s*\{\s*title: notification\.title,\s*body: notification\.body,/,'Android reminder must include a system notification payload for background/closed display');
+assert.doesNotMatch(push,/notification\.kind === "appointment_reminder" \? \{\} : \{ notification/,'Reminder must not fall back to unreliable data-only delivery');
+assert.match(push,/salon_notification_id: notification\.id/,'Automatic Android notification taps must retain native routing metadata');
 assert.match(whatsapp,/Date\.parse\(delivery\.scheduled_for\) !== Date\.parse\(appointment\.reminder_target_at\)/);
 assert.doesNotMatch(migration,/grant execute on function public\.cancel_appointment\(uuid,text\) to (?:public|anon)/,'Cancel RPC must not be opened to public or anon');
 

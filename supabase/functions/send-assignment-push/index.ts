@@ -157,14 +157,17 @@ Deno.serve(async (request: Request) => {
               // Keep data for in-app routing, and also include a notification
               // payload so Android/OEM firmware can show it while the app is
               // backgrounded or fully closed.
-              ...(notification.kind === "appointment_reminder" ? {} : { notification: {
+              notification: {
                 title: notification.title,
                 body: notification.body,
-              }}),
+              },
               data: {
                 notification_id: notification.id,
                 appointment_id: notification.appointment_id ?? "",
                 appointment_date: appointmentDate,
+                salon_notification_id: notification.id,
+                salon_appointment_id: notification.appointment_id ?? "",
+                salon_appointment_date: appointmentDate,
                 title: notification.title,
                 body: notification.body,
                 kind: notification.kind || "",
@@ -177,11 +180,11 @@ Deno.serve(async (request: Request) => {
                 // window so a momentary mobile-network interruption does not
                 // make an assignment/update alert disappear completely.
                 ttl: notification.kind === "appointment_reminder" ? "300s" : "60s",
-                ...(notification.kind === "appointment_reminder" ? {} : { notification: {
+                notification: {
                   notification_priority: "PRIORITY_MAX",
                   default_sound: true,
                   default_vibrate_timings: true,
-                }}),
+                },
               },
             },
           }),

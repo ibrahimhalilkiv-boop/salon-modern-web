@@ -11,6 +11,7 @@
   var authRequest = 0;
   var retryTimer = null;
   var updateRequested = false;
+  var updateReloading = false;
   var startupPromise = null;
   var sessionLoadPromise = null;
   var startupCount = 0;
@@ -295,13 +296,14 @@
 
   function showUpdate(registration) {
     if (!registration || !registration.waiting || document.getElementById('pwaUpdateBanner')) return;
+    var waitingWorker = registration.waiting;
+    if (waitingWorker.state && waitingWorker.state !== 'installed') return;
     var banner = document.createElement('div');
     banner.id = 'pwaUpdateBanner';
     banner.style.cssText = 'position:fixed;left:12px;right:12px;bottom:18px;z-index:100000;padding:12px 14px;background:#12352f;color:#fff;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 8px 28px #0004';
     banner.innerHTML = '<span>Yeni sürüm hazır.</span><button type="button" style="min-height:42px;padding:8px 16px;border:0;border-radius:10px;font-weight:700">Güncelle</button>';
       banner.querySelector('button').addEventListener('click', function () {
-        var waitingWorker = registration.waiting;
-        if (!waitingWorker || waitingWorker.state === 'activated' || waitingWorker.state === 'redundant') {
+        if (registration.waiting !== waitingWorker || waitingWorker.state === 'activated' || waitingWorker.state === 'redundant') {
           banner.remove();
           updateRequested = false;
           return;
@@ -310,9 +312,12 @@
       var button=banner.querySelector('button');
       updateRequested = true;
       if(button){button.disabled=true;button.textContent='Güncelleniyor…'}
-        var fallback=setTimeout(function(){
+      var fallback=setTimeout(function(){
+        if (registration.waiting !== waitingWorker || waitingWorker.state === 'activated' || waitingWorker.state === 'redundant') {
+          banner.remove();
           updateRequested=false;
-          if (!registration.waiting) { banner.remove(); return; }
+          return;
+        }
         if(button){button.disabled=false;button.textContent='Güncelle'}
         banner.querySelector('span').textContent='Güncelleme hazır. Sayfayı yenileyin.';
       },8000);
@@ -321,6 +326,12 @@
         navigator.serviceWorker.removeEventListener('controllerchange',onControllerChange);
       };
       navigator.serviceWorker.addEventListener('controllerchange',onControllerChange);
+      waitingWorker.addEventListener?.('statechange',function(){
+        if (waitingWorker.state !== 'activated' && waitingWorker.state !== 'redundant') return;
+        clearTimeout(fallback);
+        banner.remove();
+        if (waitingWorker.state === 'redundant') updateRequested=false;
+      });
         waitingWorker.postMessage({ type: 'SKIP_WAITING' });
     });
     document.body.appendChild(banner);
@@ -330,14 +341,20 @@
       navigator.serviceWorker.addEventListener('controllerchange', function () {
         var banner = document.getElementById('pwaUpdateBanner');
         if (banner) banner.remove();
-        if (updateRequested) location.reload();
+        if (updateRequested && !updateReloading) {
+          updateRequested = false;
+          updateReloading = true;
+          location.reload();
+        }
     });
     navigator.serviceWorker.ready.then(function (registration) {
-      if (registration.waiting) showUpdate(registration);
+      if (registration.waiting && (!registration.waiting.state || registration.waiting.state === 'installed')) showUpdate(registration);
+      else document.getElementById('pwaUpdateBanner')?.remove();
       registration.addEventListener('updatefound', function () {
         var worker = registration.installing;
         worker?.addEventListener('statechange', function () {
           if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(registration);
+          if (worker.state === 'activated' || worker.state === 'redundant') document.getElementById('pwaUpdateBanner')?.remove();
         });
       });
       registration.update().catch(function () {});
