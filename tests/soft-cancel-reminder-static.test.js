@@ -1,0 +1,31 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const migration=fs.readFileSync('supabase/migrations/20261007153000_soft_cancel_and_configurable_reminders.sql','utf8');
+const html=fs.readFileSync('salon-modern.html','utf8');
+const management=fs.readFileSync('appointment-management-2.3.26.js','utf8');
+const performance=fs.readFileSync('salon-performance-2.3.14.js','utf8');
+const fixes=fs.readFileSync('salon-ui-fixes-2.3.16.js','utf8');
+const push=fs.readFileSync('supabase/functions/send-assignment-push/index.ts','utf8');
+const whatsapp=fs.readFileSync('supabase/functions/whatsapp-outbound-dispatch/index.ts','utf8');
+
+assert.doesNotMatch(html,/from\('appointments'\)\.delete\(\)/,'No legacy remote cancellation may physically delete an appointment');
+assert.doesNotMatch(management,/from\('appointments'\)\.delete\(\)/,'Active cancellation may not physically delete an appointment');
+assert.match(management,/rpc\('cancel_appointment'/);
+assert.match(migration,/revoke delete on public\.appointments from authenticated/);
+assert.match(migration,/cancellation_source in \('admin','staff','customer','system'\)/);
+assert.match(migration,/if v_row\.status='cancelled'[\s\S]*'replayed',true/,'Repeated cancellation must be idempotent');
+assert.match(html,/\.neq\('status','cancelled'\)\.order\('scheduled_at'\)/);
+assert.match(performance,/\.neq\('status','cancelled'\)/);
+assert.match(performance,/row\.status==='cancelled'/);
+assert.equal((fixes.match(/\.neq\('status','cancelled'\)/g)||[]).length,2);
+assert.match(push,/appointment_cancelled_or_missing/);
+assert.match(push,/Date\.parse\(notification\.reminder_for\) !== Date\.parse\(appointment\.scheduled_at\)/);
+assert.match(whatsapp,/Date\.parse\(delivery\.scheduled_for\) !== Date\.parse\(appointment\.reminder_target_at\)/);
+assert.doesNotMatch(migration,/grant execute on function public\.cancel_appointment\(uuid,text\) to (?:public|anon)/,'Cancel RPC must not be opened to public or anon');
+
+const customerManage=fs.readFileSync('randevu/durum/manage.js','utf8');
+const customerBackend=fs.readFileSync('supabase/functions/customer-booking-request/index.ts','utf8');
+assert.match(customerBackend,/2 saatten az/,'Existing customer portal cutoff remains visible');
+assert.doesNotMatch(customerManage+customerBackend,/60 dakika|1 saatten az/,'This task must not introduce the postponed 60-minute policy');
+assert.match(html,/https:\/\/wa\.me\//,'Manual wa.me flow remains present');
+console.log('PASS soft-cancel, active calendar filtering, final reminder guards, unchanged customer cutoff and wa.me presence');

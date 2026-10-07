@@ -141,7 +141,7 @@ var preferAppointmentOnlyReload=false;
 
 async function refreshAppointmentsOnly(){
   if(!currentUser)return;
-  var response=await salonDb.from('appointments').select('id,client_id,client_name,client_phone,service_id,service_name,amount,employee_id,scheduled_at,duration_minutes,status,note,created_by,updated_by,recurrence_group_id,recurrence_interval_weeks,tariff_price_snapshot,debt_original_amount').order('scheduled_at');
+  var response=await salonDb.from('appointments').select('id,client_id,client_name,client_phone,service_id,service_name,amount,employee_id,scheduled_at,duration_minutes,status,note,created_by,updated_by,recurrence_group_id,recurrence_interval_weeks,tariff_price_snapshot,debt_original_amount,reminder_eligible,reminder_target_at').neq('status','cancelled').order('scheduled_at');
   if(response.error)throw response.error;
   appts=(response.data||[]).map(function(row){var mapped=remoteAppointment(row);mapped.status=row.status;mapped.note=row.note||'';mapped.updatedBy=row.updated_by||null;mapped.debtOriginalAmount=Number(row.debt_original_amount||0);return mapped});
   renderHomeSummary();render();renderCalendar();renderStatistics();
@@ -174,7 +174,7 @@ function applyRealtimeAppointment(payload,renderNow){
   var row=payload&&payload.new&&payload.new.id?payload.new:payload&&payload.old;
   if(!row||!row.id)return;
   var index=appts.findIndex(function(item){return String(item.id)===String(row.id)});
-  if(payload.eventType==='DELETE'){if(index>=0)appts.splice(index,1);}else{
+  if(payload.eventType==='DELETE'||row.status==='cancelled'){if(index>=0)appts.splice(index,1);}else{
     var mapped=remoteAppointment(row);mapped.status=row.status;mapped.note=row.note||'';mapped.updatedBy=row.updated_by||null;mapped.debtOriginalAmount=Number(row.debt_original_amount||0);
     if(index>=0)appts[index]=mapped;else appts.push(mapped);
     appts.sort(function(a,b){return (appointmentDate(a)+' '+a.time).localeCompare(appointmentDate(b)+' '+b.time)});

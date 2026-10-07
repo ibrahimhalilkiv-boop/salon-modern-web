@@ -11,7 +11,7 @@ document.querySelectorAll('.auth small').forEach(function(node){if(/^v\d+\.\d+\.
   var previousShowPage=showPage, previousReload=reloadRemoteData;
   var fastLoadInFlight=null, fastLoadDate=null, backgroundLoadInFlight=null;
   var calendarRequestSequence=0;
-  var appointmentColumns='id,client_id,client_name,client_phone,service_id,service_name,amount,employee_id,scheduled_at,duration_minutes,status,note,created_by,recurrence_group_id,tariff_price_snapshot';
+  var appointmentColumns='id,client_id,client_name,client_phone,service_id,service_name,amount,employee_id,scheduled_at,duration_minutes,status,note,created_by,recurrence_group_id,tariff_price_snapshot,reminder_eligible,reminder_target_at';
   if(typeof previousShowPage!=='function') return;
 
   function calendarDebug(event,detail){
@@ -39,7 +39,7 @@ document.querySelectorAll('.auth small').forEach(function(node){if(/^v\d+\.\d+\.
     var results=await Promise.all([
       salonDb.from('profiles').select('id,username,full_name,role,commission_pct,active').order('full_name'),
       salonDb.from('services').select('id,name,price,duration_minutes,active').order('name'),
-      salonDb.from('appointments').select(appointmentColumns).gte('scheduled_at',start).lt('scheduled_at',end).order('scheduled_at',{ascending:true}),
+      salonDb.from('appointments').select(appointmentColumns).neq('status','cancelled').gte('scheduled_at',start).lt('scheduled_at',end).order('scheduled_at',{ascending:true}),
       salonDb.from('closed_time_slots').select('id,employee_id,starts_at,ends_at,note').lt('starts_at',end).gt('ends_at',start).order('starts_at',{ascending:true})
     ]);
     var failed=results.find(function(result){return result&&result.error});
@@ -63,7 +63,7 @@ document.querySelectorAll('.auth small').forEach(function(node){if(/^v\d+\.\d+\.
     var appointmentRows=[],pageSize=1000,offset=0;
     calendarDebug('background-appointments-start');
     while(offset<10000){
-      var page=await salonDb.from('appointments').select(appointmentColumns).order('scheduled_at',{ascending:true}).range(offset,offset+pageSize-1);
+      var page=await salonDb.from('appointments').select(appointmentColumns).neq('status','cancelled').order('scheduled_at',{ascending:true}).range(offset,offset+pageSize-1);
       if(page.error)throw page.error;
       var rows=page.data||[];
       appointmentRows=appointmentRows.concat(rows);

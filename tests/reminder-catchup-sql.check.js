@@ -12,6 +12,7 @@ create table appointments(id uuid primary key,created_by uuid,client_name text,s
 create table online_booking_requests(appointment_id uuid);
 create table notifications(recipient_id uuid,appointment_id uuid,kind text,title text,body text,reminder_for timestamptz,unique(recipient_id,appointment_id,kind,reminder_for));`);
 await db.query(fs.readFileSync('supabase/migrations/20261002183432_online_booking_reminder_recipient.sql','utf8'));
+await db.query(fs.readFileSync('supabase/migrations/20261004211051_extend_push_reminder_catchup.sql','utf8'));
 await db.query('begin');
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 await db.query('insert into profiles values($1,true),($2,false)',[uuid(1),uuid(2)]);
@@ -36,4 +37,4 @@ const online=(await db.query('select appointment_id,recipient_id from notificati
 assert.equal(online.find(n=>n.appointment_id===uuid(20)).recipient_id,uuid(3));assert.equal(online.find(n=>n.appointment_id===uuid(21)).recipient_id,uuid(1));assert.equal(online.length,2);
 await db.query('rollback');console.log('PASS reminders: catchup, dedup, creator routing, automatic online employee fallback, cancellation and missing manual creator exclusion');
 }finally{if(db)await db.end();await server.stop()}
-})().catch(e=>{console.error(e);process.exitCode=1});
+})().catch(e=>{console.error(e);process.exit(1)});

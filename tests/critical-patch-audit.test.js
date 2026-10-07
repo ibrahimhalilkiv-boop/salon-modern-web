@@ -36,10 +36,11 @@ assert.match(actions, /back\.onclick=cancelNow/, 'Vazgeç düğmesi tek doğruda
 assert.match(actions, /panel\.onpointerdown=pick/, 'Mobil müşteri seçimi blur öncesinde yapılmalı');
 assert.doesNotMatch(actions, /subtree\s*:\s*true/, 'Form observer alt ağaçta tekrar tekrar binding yapmamalı');
 
-assert.match(management, /if\(!pendingId\|\|deleting\)return/, 'Çift silme isteği kilitlenmeli');
-assert.match(management, /\.delete\(\)\.eq\('id',id\)\.select\('id'\)/, 'Silme yalnız seçilen randevu ID ile yapılmalı');
-assert.doesNotMatch(management, /Randevuyu iptal et/, 'Eski iptal eylemi geri gelmemeli');
-assert.doesNotMatch(deleteButton, /Randevuyu iptal et/, 'Modal düğmesi eski iptal davranışını üretmemeli');
+assert.match(management, /if\(!pendingId\|\|cancelling\)return/, 'Çift iptal isteği kilitlenmeli');
+assert.match(management, /rpc\('cancel_appointment',\{p_appointment_id:id,p_reason:null\}\)/, 'İptal yalnız seçilen randevu için güvenli RPC kullanmalı');
+assert.doesNotMatch(management, /\.delete\(\)/, 'Normal iptal fiziksel silme yapmamalı');
+assert.match(management, /Randevuyu iptal et/, 'Soft-cancel eylemi görünür olmalı');
+assert.match(deleteButton, /Randevuyu iptal et/, 'Modal düğmesi soft-cancel davranışını göstermeli');
 assert.doesNotMatch(debtWarning, /subtree\s*:\s*true/, 'Borç uyarısı recursive observer kurmamalı');
 
 assert.match(pushMigration, /select a\.created_by,a\.id,'appointment_reminder'/, 'Bir saatlik hatırlatma randevuyu oluşturana gitmeli');
