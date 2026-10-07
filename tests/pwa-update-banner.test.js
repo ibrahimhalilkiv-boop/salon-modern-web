@@ -7,7 +7,7 @@ const snippet=source.slice(source.indexOf('  function showUpdate(registration)')
 const installBlock=workerSource.slice(workerSource.indexOf("self.addEventListener('install'"),workerSource.indexOf("self.addEventListener('message'"));
 assert.doesNotMatch(installBlock,/skipWaiting/,'A new worker must wait for the explicit update action');
 assert.match(workerSource,/type === 'SKIP_WAITING'\) self\.skipWaiting\(\)/,'Update action must still activate the waiting worker');
-assert.match(workerSource,/salon-modern-shell-pwa-v111/,'The corrected lifecycle must publish through a fresh shell cache');
+assert.ok(Number(workerSource.match(/salon-modern-shell-pwa-v(\d+)/)?.[1])>=111,'The corrected lifecycle must publish through a fresh shell cache');
 assert.match(workerSource,/pwa-stability-2\.3\.20\.js\?v=104/);
 assert.match(htmlSource,/pwa-stability-2\.3\.20\.js\?v=104/);
 
