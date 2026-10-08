@@ -1,0 +1,18 @@
+const fs=require('node:fs'),assert=require('node:assert/strict');
+const sql=fs.readFileSync('supabase/migrations/20261008152000_manual_whatsapp_thank_you_queue.sql','utf8');
+const ui=fs.readFileSync('manual-whatsapp-thank-you-2.4.6.js','utf8');
+const html=fs.readFileSync('salon-modern.html','utf8');
+assert.match(sql,/a\.status='completed'/);
+assert.match(sql,/whatsapp_marketing_opt_in/);
+assert.match(sql,/whatsapp_marketing_opt_out_at is null/);
+assert.match(sql,/appointment_thank_you:'\|\|a\.id::text/);
+assert.match(sql,/status,attempt_count,sent_at,status_at,metadata/);
+assert.match(sql,/manual_wa_me/);
+assert.match(sql,/not exists[\s\S]*whatsapp_message_logs/);
+assert.match(ui,/https:\/\/wa\.me\//);
+assert.match(ui,/encodeURIComponent\(messageFor\(row\)\)/);
+assert.match(ui,/WhatsApp\\'tan Teşekkür Et/);
+assert.match(ui,/Gönderildi Olarak İşaretle/);
+assert.match(ui,/whatsapp_marketing_opt_in_at:now/);
+assert.match(html,/manual-whatsapp-thank-you-2\.4\.6\.js\?v=114/);
+console.log('PASS manual WhatsApp thank-you queue, consent, wa.me draft and shared dedupe');

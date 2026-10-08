@@ -13,6 +13,8 @@ create schema auth; create schema private; create schema net;
 create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('salon.test_uid',true),'')::uuid$$;
 create function auth.role() returns text language sql stable as $$select coalesce(nullif(current_setting('salon.test_auth_role',true),''),'authenticated')$$;
 create function private.is_manager() returns boolean language sql stable as $$select current_setting('salon.test_role',true)='manager'$$;
+create function private.is_active_salon_user() returns boolean language sql stable as $$select auth.uid() is not null$$;
+create function private.normalize_tr_phone(p_raw text) returns text language sql immutable as $$select regexp_replace(coalesce(p_raw,''),'[^0-9]','','g')$$;
 create function private.check_online_booking_window(timestamptz,integer) returns void language plpgsql as $$begin return;end$$;
 create function net.http_post(url text,headers jsonb,body jsonb,timeout_milliseconds integer) returns bigint language sql as $$select 1::bigint$$;
 
@@ -55,6 +57,7 @@ grant all on public.appointments to authenticated,service_role;
 `);
 await db.query(fs.readFileSync('supabase/migrations/20261007153000_soft_cancel_and_configurable_reminders.sql','utf8'));
 await db.query(fs.readFileSync('supabase/migrations/20261008123000_whatsapp_links_and_thank_you.sql','utf8'));
+await db.query(fs.readFileSync('supabase/migrations/20261008152000_manual_whatsapp_thank_you_queue.sql','utf8'));
 await db.query('begin');
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const manager=uuid(1),employee=uuid(2),service=uuid(3);
@@ -132,7 +135,19 @@ await db.query('alter table appointments disable trigger appointments_set_comple
 await db.query("update appointments set completed_at=now()-interval '61 minutes' where id=$1",[uuid(402)]);
 await db.query('alter table appointments enable trigger appointments_set_completion_metadata');
 assert.equal((await db.query('select public.whatsapp_enqueue_due_thank_yous() value')).rows[0].value.appointment_thank_yous_enqueued,0,'No marketing consent means no thank-you');
+
+const manualClient=uuid(410),manualAppointment=uuid(411);
+await db.query("insert into clients(id,full_name,phone,whatsapp_marketing_opt_in,whatsapp_marketing_opt_in_at) values($1,'Manual Opt In','05321112233',true,now())",[manualClient]);
+await insert(411,180);await db.query("update appointments set client_id=$1,status='completed' where id=$2",[manualClient,manualAppointment]);
+await db.query('alter table appointments disable trigger appointments_set_completion_metadata');
+await db.query("update appointments set completed_at=now()-interval '61 minutes' where id=$1",[manualAppointment]);
+await db.query('alter table appointments enable trigger appointments_set_completion_metadata');
+let manualRows=(await db.query('select * from public.list_manual_whatsapp_thank_yous()')).rows;
+assert.equal(manualRows.length,1);assert.equal(manualRows[0].appointment_id,manualAppointment);
+assert.equal((await db.query('select public.mark_manual_whatsapp_thank_you_sent($1) value',[manualAppointment])).rows[0].value.status,'sent');
+assert.equal((await db.query('select count(*)::int n from public.list_manual_whatsapp_thank_yous()')).rows[0].n,0,'Marked appointments leave the manual queue');
+assert.equal((await db.query('select public.whatsapp_enqueue_due_thank_yous() value')).rows[0].value.appointment_thank_yous_enqueued,0,'Manual mark blocks future automatic duplicate');
 await db.query('rollback');
-console.log('PASS PostgreSQL soft cancel, 60-minute reminders, completion metadata, opt-in thank-you scheduling and dedupe');
+console.log('PASS PostgreSQL soft cancel, 60-minute reminders, opt-in automatic/manual thank-you scheduling and shared dedupe');
 }finally{if(db)await db.end();await server.stop()}
 })().catch(e=>{console.error(e);process.exitCode=1});
