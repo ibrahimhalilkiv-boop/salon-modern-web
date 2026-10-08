@@ -108,10 +108,20 @@ async function dispatch() {
       const result = await admin.from("appointments").select("id,scheduled_at,status").eq("id", note.appointment_id).maybeSingle();
       appointment = result.data;
     }
+    if (note.kind === "appointment_thank_you") {
+      const { data: current, error: validityError } = await admin.rpc("manual_thank_you_push_is_current", {
+        p_notification_id: note.id,
+      });
+      if (validityError) throw validityError;
+      if (!current) {
+        await admin.from("web_push_deliveries").update({ status: "expired", last_error: "Teşekkür artık uygun değil." }).eq("id", item.id);
+        expired++; continue;
+      }
+    }
     const cancellation = note.kind === "appointment_cancelled" || note.kind === "appointment_reassigned_from";
     const reminderValid = note.kind !== "appointment_reminder" ||
       (appointment?.status === "confirmed" && appointment?.scheduled_at === note.reminder_for && Date.parse(appointment.scheduled_at) > Date.now());
-    const eventValid = cancellation || !note.appointment_id ||
+    const eventValid = note.kind === "appointment_thank_you" || cancellation || !note.appointment_id ||
       (appointment?.status === "confirmed" && Date.parse(appointment.scheduled_at) > Date.now());
     if (!reminderValid || !eventValid) {
       await admin.from("web_push_deliveries").update({ status: "expired", last_error: "Randevu değişti, iptal oldu veya geçmişte kaldı." }).eq("id", item.id);

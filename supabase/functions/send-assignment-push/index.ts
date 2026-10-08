@@ -82,6 +82,16 @@ Deno.serve(async (request: Request) => {
           .maybeSingle()
       : { data: null, error: null };
     if (appointmentError) throw appointmentError;
+    if (notification.kind === "appointment_thank_you") {
+      const { data: current, error } = await supabase.rpc("manual_thank_you_push_is_current", {
+        p_notification_id: notification.id,
+      });
+      if (error) throw error;
+      if (!current) {
+        await supabase.from("notifications").update({ last_push_error: "thank_you_no_longer_eligible" }).eq("id", notification.id);
+        return Response.json({ ignored: true, reason: "thank_you_no_longer_eligible" });
+      }
+    }
     if (notification.kind === "appointment_reminder") {
       const invalidReason = !appointment || appointment.status !== "confirmed"
         ? "appointment_cancelled_or_missing"
@@ -93,7 +103,7 @@ Deno.serve(async (request: Request) => {
         return Response.json({ ignored: true, reason: invalidReason });
       }
     }
-    if (appointment && Date.parse(appointment.scheduled_at) <= Date.now()) {
+    if (notification.kind !== "appointment_thank_you" && appointment && Date.parse(appointment.scheduled_at) <= Date.now()) {
       return Response.json({ ignored: true, reason: "past_appointment" });
     }
 
