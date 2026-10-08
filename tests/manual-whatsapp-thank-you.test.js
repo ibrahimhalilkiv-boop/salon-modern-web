@@ -16,7 +16,7 @@ assert.match(ui,/encodeURIComponent\(messageFor\(row\)\)/);
 assert.match(ui,/WhatsApp\\'tan Teşekkür Et/);
 assert.match(ui,/Gönderildi Olarak İşaretle/);
 assert.match(ui,/whatsapp_marketing_opt_in_at:now/);
-assert.match(html,/manual-whatsapp-thank-you-2\.4\.6\.js\?v=118/);
+assert.match(html,/manual-whatsapp-thank-you-2\.4\.6\.js\?v=119/);
 assert.match(migration,/notifications_one_thank_you_per_appointment/);
 assert.match(migration,/private\.enqueue_due_manual_thank_you_pushes/);
 assert.match(migration,/a\.completed_at\+make_interval\(mins=>s\.whatsapp_thank_you_delay_minutes\)/);

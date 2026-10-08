@@ -8,7 +8,7 @@ try{
   const page=await browser.newPage();
   await page.setContent('<div id="app"><section id="managedAppointments" class="page"><div class="content"><button class="back">Geri</button><h1 class="page-title">Randevu Yönetimi</h1><div id="managedList">Mevcut randevu listesi</div></div></section></div><div id="drawerLayer"><div class="drawer"><button id="drawerManualThankYous">Eski seçenek</button><button id="drawerManagedAppointments"></button></div></div>');
   await page.evaluate(()=>{
-    window.currentUser={id:'staff-1',role:'calisan'};
+    window.currentUser={id:'manager-1',role:'yonetici'};
     window.selectedCustomerId=null;
     window.showPage=id=>{window.lastPage=id};
     window.enterApp=()=>{};window.toggleDrawer=()=>{};window.renderCustomerDetail=()=>{};
@@ -21,8 +21,9 @@ try{
       {appointment_id:'other',client_name:'Başka Kişi',client_phone:'05321111111',scheduled_at:'2026-10-08T10:00:00Z'},
       {appointment_id:'target',client_name:'Ayşe Yılmaz',client_phone:'05322222222',scheduled_at:'2026-10-08T11:00:00Z'}
     ];
+    window.listCalls=0;
     window.salonDb={rpc:async(name,args)=>{
-      if(name==='list_manual_whatsapp_thank_yous')return {data:window.fixtureRows};
+      if(name==='list_manual_whatsapp_thank_yous'){window.listCalls++;return {data:window.fixtureRows}}
       if(name==='mark_manual_whatsapp_thank_you_sent'){window.marked=args.p_appointment_id;window.fixtureRows=[];return {data:{status:'sent'}}}
       throw Error(name)
     }};
@@ -37,6 +38,11 @@ try{
   await page.evaluate(()=>window.showPage('manualThankYous'));
   assert.equal(await page.evaluate(()=>window.lastPage),'managedAppointments','Legacy route opens appointment management');
   assert.equal(await page.locator('#managedThankYousTab').getAttribute('aria-selected'),'true');
+  await page.evaluate(()=>window.openManualThankYouAfterCompletion('target'));
+  const immediate=new URL(await page.evaluate(()=>window.openedDraft));
+  assert.equal(immediate.pathname,'/905322222222','Manager completion opens the right draft');
+  assert.equal(await page.evaluate(()=>window.marked),undefined,'Opening never marks sent');
+  await page.evaluate(()=>{window.openedDraft=undefined});
   await page.evaluate(()=>window.openManualThankYouFromNotification('target'));
   assert.equal(await page.evaluate(()=>window.lastPage),'managedAppointments');
   assert.equal(await page.locator('#managedThankYousTab').getAttribute('aria-selected'),'true');
@@ -51,9 +57,18 @@ try{
   assert.match(await page.locator('.manual-thank-focused').innerText(),/Mesajı gönderdiniz mi/);
   await page.locator('.manual-thank-focused .manual-thank-confirm [data-sent]').click();
   assert.equal(await page.evaluate(()=>window.marked),'target');
+  await page.evaluate(async()=>{window.openedDraft=undefined;await window.openManualThankYouAfterCompletion('target')});
+  assert.equal(await page.evaluate(()=>window.openedDraft),undefined,'Sent appointment does not reopen');
   await page.evaluate(()=>window.showPage('managedAppointments'));
   assert.equal(await page.locator('#managedAppointmentsTab').getAttribute('aria-selected'),'true');
   assert.equal(await page.locator('#managedList').innerText(),'Mevcut randevu listesi');
-  console.log('PASS browser thank-you tap, correct customer/central template, explicit send confirmation');
+  const calls=await page.evaluate(()=>window.listCalls);
+  await page.evaluate(()=>{window.currentUser={id:'staff-2',role:'calisan'};window.showPage('managedAppointments')});
+  assert.equal(await page.locator('#managedThankYousTab').isVisible(),false);
+  assert.equal(await page.locator('#manualThankYouList').innerText(),'');
+  await page.evaluate(()=>window.openManualThankYouAfterCompletion('target'));
+  await page.evaluate(()=>window.openManualThankYouFromNotification('target'));
+  assert.equal(await page.evaluate(()=>window.listCalls),calls,'Staff never calls thank-you list RPC');
+  console.log('PASS manager-only immediate draft, legacy tap, central template, explicit send and staff hiding');
 }finally{await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1});
