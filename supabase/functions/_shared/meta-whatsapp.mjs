@@ -1,10 +1,11 @@
 
 // Shared server-only Meta Cloud API helpers. No credential belongs in the APK.
 export const META_TEMPLATE_TOKENS = {
-  appointment_confirmation: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"],
+  appointment_confirmation: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}", "{islem_adi}", "{google_haritalar_url}"],
   appointment_update: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"],
-  appointment_reminder: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"],
+  appointment_reminder: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}", "{google_haritalar_url}"],
   appointment_cancelled: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"],
+  appointment_thank_you: ["{musteri_adi}", "{google_yorum_url}", "{instagram_url}"],
 };
 
 export async function sha256(value) {

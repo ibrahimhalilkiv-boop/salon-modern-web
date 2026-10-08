@@ -48,10 +48,13 @@ create table public.whatsapp_message_logs(
  attempt_count integer not null default 0,provider_message_id text,template_content_hash text,rendered_message text,metadata jsonb default '{}',
  last_error text,sent_at timestamptz,status_at timestamptz,created_at timestamptz default now(),updated_at timestamptz default now()
 );
+create table public.message_templates(template_key text primary key,title text,content text,updated_by uuid,created_at timestamptz default now(),updated_at timestamptz default now());
+create table public.whatsapp_meta_template_mappings(template_key text primary key,meta_template_name text,language_code text default 'tr',placeholder_order jsonb default '[]',approved_content_hash text,approval_status text default 'unconfigured',approved_at timestamptz,updated_by uuid,created_at timestamptz default now(),updated_at timestamptz default now());
 create table public.customer_debts(id uuid primary key,appointment_id uuid,amount numeric,status text);
 grant all on public.appointments to authenticated,service_role;
 `);
 await db.query(fs.readFileSync('supabase/migrations/20261007153000_soft_cancel_and_configurable_reminders.sql','utf8'));
+await db.query(fs.readFileSync('supabase/migrations/20261008123000_whatsapp_links_and_thank_you.sql','utf8'));
 await db.query('begin');
 const uuid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const manager=uuid(1),employee=uuid(2),service=uuid(3);
@@ -61,12 +64,12 @@ const insert=async(id,minutes,creator=manager)=>{
   await db.query(`insert into appointments(id,client_name,service_id,service_name,employee_id,created_by,scheduled_at,scheduled_end,status)
     values($1,'Fixture',$2,'Service',$3,$4,now()+make_interval(mins=>$5),now()+make_interval(mins=>$5+30),'confirmed')`,[uuid(id),service,employee,creator,minutes]);
 };
-await insert(10,90);
-await insert(11,89);
+await insert(10,60);
+await insert(11,59);
 let rows=(await db.query('select id,reminder_eligible,round(extract(epoch from (scheduled_at-reminder_target_at))/60) lead from appointments order by id')).rows;
-assert.equal(rows.find(r=>r.id===uuid(10)).reminder_eligible,true,'Exactly 90 minutes is eligible');
-assert.equal(Number(rows.find(r=>r.id===uuid(10)).lead),90);
-assert.equal(rows.find(r=>r.id===uuid(11)).reminder_eligible,false,'Less than 90 minutes is not eligible');
+assert.equal(rows.find(r=>r.id===uuid(10)).reminder_eligible,true,'Exactly 60 minutes is eligible');
+assert.equal(Number(rows.find(r=>r.id===uuid(10)).lead),60);
+assert.equal(rows.find(r=>r.id===uuid(11)).reminder_eligible,false,'Less than 60 minutes is not eligible');
 
 await insert(12,150);await db.query("update appointments set reminder_eligible=true,reminder_target_at=now()-interval '20 minutes' where id=$1",[uuid(12)]);
 await insert(13,150);await db.query("update appointments set reminder_eligible=true,reminder_target_at=now()-interval '31 minutes' where id=$1",[uuid(13)]);
@@ -109,7 +112,27 @@ assert.equal((await db.query("select status from whatsapp_message_logs where ide
 assert.equal((await db.query("select has_table_privilege('authenticated','public.appointments','DELETE') allowed")).rows[0].allowed,false,'Authenticated clients cannot physically delete appointments');
 assert.equal((await db.query("select has_function_privilege('authenticated','public.cancel_appointment(uuid,text)','EXECUTE') allowed")).rows[0].allowed,true);
 assert.equal((await db.query("select has_function_privilege('anon','public.cancel_appointment(uuid,text)','EXECUTE') allowed")).rows[0].allowed,false);
+
+const thankClient=uuid(400),thankAppointment=uuid(401);
+await db.query("insert into clients(id,full_name,phone,whatsapp_marketing_opt_in,whatsapp_marketing_opt_in_at) values($1,'Opt In','05320000000',true,now())",[thankClient]);
+await db.query("update whatsapp_meta_template_mappings set approval_status='approved',approved_content_hash='fixture' where template_key='appointment_thank_you'");
+await insert(401,180);await db.query('update appointments set client_id=$1 where id=$2',[thankClient,thankAppointment]);
+await db.query("select set_config('salon.test_uid',$1,false),set_config('salon.test_role','manager',false)",[manager]);
+assert.equal((await db.query('select public.complete_appointment($1) value',[thankAppointment])).rows[0].value.status,'completed');
+assert.equal(Number((await db.query("select count(*) n from whatsapp_message_logs where template_key='appointment_thank_you'")).rows[0].n),0,'Thank-you remains disabled by default');
+await db.query("update booking_settings set whatsapp_thank_you_enabled=true,whatsapp_thank_you_delay_minutes=60");
+await db.query('alter table appointments disable trigger appointments_set_completion_metadata');
+await db.query("update appointments set completed_at=now()-interval '61 minutes' where id=$1",[thankAppointment]);
+await db.query('alter table appointments enable trigger appointments_set_completion_metadata');
+assert.equal((await db.query('select public.whatsapp_enqueue_due_thank_yous() value')).rows[0].value.appointment_thank_yous_enqueued,1);
+assert.equal((await db.query('select public.whatsapp_enqueue_due_thank_yous() value')).rows[0].value.appointment_thank_yous_enqueued,0,'Thank-you dedupe is appointment-scoped');
+await db.query("update clients set whatsapp_marketing_opt_in=false,whatsapp_marketing_opt_in_at=null where id=$1",[thankClient]);
+await insert(402,180);await db.query("update appointments set client_id=$1,status='completed' where id=$2",[thankClient,uuid(402)]);
+await db.query('alter table appointments disable trigger appointments_set_completion_metadata');
+await db.query("update appointments set completed_at=now()-interval '61 minutes' where id=$1",[uuid(402)]);
+await db.query('alter table appointments enable trigger appointments_set_completion_metadata');
+assert.equal((await db.query('select public.whatsapp_enqueue_due_thank_yous() value')).rows[0].value.appointment_thank_yous_enqueued,0,'No marketing consent means no thank-you');
 await db.query('rollback');
-console.log('PASS PostgreSQL soft cancel, metadata, debt preservation, 90-minute eligibility, 30-minute catch-up, dedupe and cancel/reschedule invalidation');
+console.log('PASS PostgreSQL soft cancel, 60-minute reminders, completion metadata, opt-in thank-you scheduling and dedupe');
 }finally{if(db)await db.end();await server.stop()}
 })().catch(e=>{console.error(e);process.exitCode=1});

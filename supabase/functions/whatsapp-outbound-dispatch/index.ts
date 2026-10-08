@@ -22,7 +22,7 @@ function istanbulParts(iso: string) {
   const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return { date: new Intl.DateTimeFormat("tr-TR", { timeZone: "Europe/Istanbul", day: "numeric", month: "long", weekday: "long" }).format(new Date(iso)), time: `${byType.hour}:${byType.minute}` };
 }
-function valuesFor(appointment: any, client: any, employee: any) {
+function valuesFor(appointment: any, client: any, employee: any, settings: any) {
   const time = istanbulParts(appointment.scheduled_at);
   return {
     "{musteri_adi}": client?.full_name ?? appointment.client_name ?? "",
@@ -31,6 +31,9 @@ function valuesFor(appointment: any, client: any, employee: any) {
     "{calisan_adi}": employee?.full_name ?? "",
     "{islem_adi}": appointment.service_name ?? "",
     "{ucret}": Number(appointment.amount ?? 0).toLocaleString("tr-TR"),
+    "{google_haritalar_url}": settings?.google_maps_url ?? "",
+    "{google_yorum_url}": settings?.google_review_url ?? "",
+    "{instagram_url}": settings?.instagram_url ?? "",
   };
 }
 
@@ -111,7 +114,7 @@ async function diagnoseMeta(expectedPhone: string) {
 }
 
 async function processDelivery(db: any, delivery: any) {
-  const appointmentResult = await db.from("appointments").select("id,client_id,client_name,client_phone,service_name,amount,employee_id,scheduled_at,status,reminder_eligible,reminder_target_at").eq("id", delivery.appointment_id).maybeSingle();
+  const appointmentResult = await db.from("appointments").select("id,client_id,client_name,client_phone,service_name,amount,employee_id,scheduled_at,status,reminder_eligible,reminder_target_at,completed_at").eq("id", delivery.appointment_id).maybeSingle();
   const appointment = appointmentResult.data;
   if (appointmentResult.error || !appointment) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: appointmentResult.error?.message ?? "appointment_not_found", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   if (delivery.template_key !== "appointment_cancelled" && appointment.status === "cancelled") return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "appointment_cancelled", updated_at: new Date().toISOString() }).eq("id", delivery.id);
@@ -119,18 +122,25 @@ async function processDelivery(db: any, delivery: any) {
     appointment.status !== "confirmed" || !appointment.reminder_eligible || !appointment.reminder_target_at ||
     Date.parse(delivery.scheduled_for) !== Date.parse(appointment.reminder_target_at)
   )) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "appointment_rescheduled", updated_at: new Date().toISOString() }).eq("id", delivery.id);
-  const [clientResult, employeeResult, templateResult, mappingResult] = await Promise.all([
-    appointment.client_id ? db.from("clients").select("id,full_name,phone").eq("id", appointment.client_id).maybeSingle() : Promise.resolve({ data: null }),
+  const [clientResult, employeeResult, templateResult, mappingResult, settingsResult] = await Promise.all([
+    appointment.client_id ? db.from("clients").select("id,full_name,phone,whatsapp_marketing_opt_in,whatsapp_marketing_opt_in_at,whatsapp_marketing_opt_out_at").eq("id", appointment.client_id).maybeSingle() : Promise.resolve({ data: null }),
     appointment.employee_id ? db.from("profiles").select("id,full_name").eq("id", appointment.employee_id).maybeSingle() : Promise.resolve({ data: null }),
     db.from("message_templates").select("template_key,content").eq("template_key", delivery.template_key).maybeSingle(),
     db.from("whatsapp_meta_template_mappings").select("template_key,meta_template_name,language_code,placeholder_order,approved_content_hash,approval_status").eq("template_key", delivery.template_key).maybeSingle(),
+    db.from("booking_settings").select("instagram_url,google_maps_url,google_review_url,whatsapp_thank_you_enabled,whatsapp_thank_you_delay_minutes").eq("id", true).maybeSingle(),
   ]);
   const client = clientResult.data;
+  const settings = settingsResult.data;
+  if (delivery.template_key === "appointment_thank_you" && (
+    appointment.status !== "completed" || !appointment.completed_at || !settings?.whatsapp_thank_you_enabled ||
+    !client?.whatsapp_marketing_opt_in || !client?.whatsapp_marketing_opt_in_at || client?.whatsapp_marketing_opt_out_at ||
+    Date.parse(delivery.scheduled_for) !== Date.parse(new Date(Date.parse(appointment.completed_at) + Number(settings?.whatsapp_thank_you_delay_minutes ?? 120) * 60_000).toISOString())
+  )) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "thank_you_not_eligible", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const phone = normalizeTrPhone(client?.phone ?? appointment.client_phone ?? "");
   if (!phone) return db.from("whatsapp_message_logs").update({ status: "skipped_no_phone", last_error: "invalid_or_missing_phone", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   if (templateResult.error || !templateResult.data?.content?.trim()) return db.from("whatsapp_message_logs").update({ status: templateResult.data ? "skipped_template_invalid" : "skipped_template_missing", last_error: templateResult.error?.message ?? "template_missing", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const allowed = META_TEMPLATE_TOKENS[delivery.template_key as keyof typeof META_TEMPLATE_TOKENS] ?? [];
-  const values = valuesFor(appointment, client, employeeResult.data);
+  const values = valuesFor(appointment, client, employeeResult.data, settings);
   const rendered = renderMessageTemplate(templateResult.data.content, values, allowed);
   if (!rendered.ok) return db.from("whatsapp_message_logs").update({ status: "skipped_template_invalid", last_error: `template_${rendered.reason}`, updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const currentHash = await sha256(templateResult.data.content);
@@ -158,13 +168,16 @@ Deno.serve(async (request) => {
   const url = Deno.env.get("SUPABASE_URL") ?? "", key = getAdminKey();
   if (!url || !key) return json({ ok: false, error: "server_not_configured" }, 503);
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const queued = await db.rpc("whatsapp_enqueue_due_reminders");
+  const [reminders, thankYous] = await Promise.all([
+    db.rpc("whatsapp_enqueue_due_reminders"),
+    db.rpc("whatsapp_enqueue_due_thank_yous"),
+  ]);
   const claimed = await db.rpc("whatsapp_claim_message_logs", { p_limit: 25 });
-  if (queued.error || claimed.error) return json({ ok: false, error: queued.error?.message ?? claimed.error?.message }, 500);
+  if (reminders.error || thankYous.error || claimed.error) return json({ ok: false, error: reminders.error?.message ?? thankYous.error?.message ?? claimed.error?.message }, 500);
   const outcomes = [];
   for (const delivery of claimed.data ?? []) {
     try { await processDelivery(db, delivery); outcomes.push({ id: delivery.id, ok: true }); }
     catch (error) { await db.from("whatsapp_message_logs").update({ status: "failed", last_error: error instanceof Error ? error.message : String(error), updated_at: new Date().toISOString() }).eq("id", delivery.id); outcomes.push({ id: delivery.id, ok: false }); }
   }
-  return json({ ok: true, safe_mode: SAFE_MODE, queued: queued.data, processed: outcomes });
+  return json({ ok: true, safe_mode: SAFE_MODE, queued: { reminders: reminders.data, thank_yous: thankYous.data }, processed: outcomes });
 });
