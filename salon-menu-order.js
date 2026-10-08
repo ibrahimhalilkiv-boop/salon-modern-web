@@ -2,7 +2,7 @@
   'use strict';
   function arrange(){
     var drawer=document.querySelector('#drawerLayer .drawer');if(!drawer)return;
-    var selectors=["[onclick=\"drawerPage('home')\"]","[onclick=\"drawerPage('calendar')\"]",'#drawerManualThankYous',"[onclick=\"drawerPage('statistics')\"]",'#drawerEmployeePerformance','#finance230Menu','#drawerProducts','#drawerProductSale','#drawerDebts','#drawerCustomers','#drawerSmartAnalysis'];
+    var selectors=["[onclick=\"drawerPage('home')\"]","[onclick=\"drawerPage('calendar')\"]","[onclick=\"drawerPage('statistics')\"]",'#drawerEmployeePerformance','#finance230Menu','#drawerProducts','#drawerProductSale','#drawerDebts','#drawerCustomers','#drawerSmartAnalysis'];
     var buttons=selectors.map(function(selector){return drawer.querySelector(selector)}).filter(Boolean);
     if(!buttons.length)return;
     var marker=document.createComment('primary menu order');drawer.insertBefore(marker,buttons[0]);
@@ -12,6 +12,8 @@
       drawer.insertBefore(button,marker);
     });
     marker.remove();
+    var thankYous=document.getElementById('drawerManualThankYous'),managed=document.getElementById('drawerManagedAppointments');
+    if(thankYous&&managed&&thankYous.nextElementSibling!==managed)drawer.insertBefore(thankYous,managed);
     [['drawerCashSeparator','finance230Menu'],['drawerCustomersSeparator','drawerDebts']].forEach(function(pair){
       var target=document.getElementById(pair[1]);if(!target)return;
       var separator=document.getElementById(pair[0]);
