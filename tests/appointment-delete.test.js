@@ -20,7 +20,9 @@ global.document = {
   body: { appendChild(modal) {
     elements[modal.id] = modal;
     elements.appointmentDeleteDetails = { innerHTML: '' };
-    elements.appointmentDeleteConfirm = { disabled: false, textContent: '' };
+    elements.appointmentDeleteConfirm = { disabled: false, hidden: false, textContent: '' };
+    elements.appointmentCancelWhatsApp = { hidden: true };
+    elements.appointmentDeleteClose = { textContent: '' };
   } },
 };
 global.renderHomeSummary = () => {};
@@ -34,6 +36,7 @@ global.showAppToast = () => {};
 let cancelCalls = 0;
 let cancelError = null;
 global.salonDb = { async rpc(name, args) {
+  if (name === 'get_manual_cancel_whatsapp') return { data: { status: 'unavailable' } };
   assert.equal(name, 'cancel_appointment');
   assert.equal(args.p_reason, null);
   assert.ok(['a-1', 'b-2'].includes(args.p_appointment_id));
