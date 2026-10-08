@@ -6,7 +6,7 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
 const browser=await chromium.launch({channel:'chrome',headless:true});
 try{
   const page=await browser.newPage();
-  await page.setContent('<div id="app"></div><div id="drawerLayer"><div class="drawer"><button id="drawerMessages"></button></div></div>');
+  await page.setContent('<div id="app"><section id="managedAppointments" class="page"><div class="content"><button class="back">Geri</button><h1 class="page-title">Randevu Yönetimi</h1><div id="managedList">Mevcut randevu listesi</div></div></section></div><div id="drawerLayer"><div class="drawer"><button id="drawerManualThankYous">Eski seçenek</button><button id="drawerManagedAppointments"></button></div></div>');
   await page.evaluate(()=>{
     window.currentUser={id:'staff-1',role:'calisan'};
     window.selectedCustomerId=null;
@@ -28,8 +28,18 @@ try{
     }};
   });
   await page.addScriptTag({content:fs.readFileSync('manual-whatsapp-thank-you-2.4.6.js','utf8')});
+  assert.equal(await page.locator('#drawerManualThankYous').count(),0);
+  await page.evaluate(()=>window.showPage('managedAppointments'));
+  assert.equal(await page.locator('#managedAppointmentsTab').getAttribute('aria-selected'),'true');
+  assert.equal(await page.locator('#managedList').innerText(),'Mevcut randevu listesi');
+  await page.locator('#managedThankYousTab').click();
+  assert.equal(await page.locator('#managedThankYousTab').innerText(),'Teşekkürler (2)');
+  await page.evaluate(()=>window.showPage('manualThankYous'));
+  assert.equal(await page.evaluate(()=>window.lastPage),'managedAppointments','Legacy route opens appointment management');
+  assert.equal(await page.locator('#managedThankYousTab').getAttribute('aria-selected'),'true');
   await page.evaluate(()=>window.openManualThankYouFromNotification('target'));
-  assert.equal(await page.evaluate(()=>window.lastPage),'manualThankYous');
+  assert.equal(await page.evaluate(()=>window.lastPage),'managedAppointments');
+  assert.equal(await page.locator('#managedThankYousTab').getAttribute('aria-selected'),'true');
   assert.equal(await page.locator('.manual-thank-focused strong').first().innerText(),'Ayşe Yılmaz');
   assert.equal(await page.evaluate(()=>window.openedDraft),undefined,'Tap alone never opens or sends');
   await page.locator('.manual-thank-focused [data-open]').click();
@@ -41,6 +51,9 @@ try{
   assert.match(await page.locator('.manual-thank-focused').innerText(),/Mesajı gönderdiniz mi/);
   await page.locator('.manual-thank-focused .manual-thank-confirm [data-sent]').click();
   assert.equal(await page.evaluate(()=>window.marked),'target');
+  await page.evaluate(()=>window.showPage('managedAppointments'));
+  assert.equal(await page.locator('#managedAppointmentsTab').getAttribute('aria-selected'),'true');
+  assert.equal(await page.locator('#managedList').innerText(),'Mevcut randevu listesi');
   console.log('PASS browser thank-you tap, correct customer/central template, explicit send confirmation');
 }finally{await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1});

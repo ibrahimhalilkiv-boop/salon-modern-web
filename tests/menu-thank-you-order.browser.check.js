@@ -7,7 +7,6 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
     await page.setContent(`<div id="drawerLayer" class="open"><div class="drawer">
       <button id="home" onclick="drawerPage('home')">Ana sayfa</button>
       <button id="calendar" onclick="drawerPage('calendar')">Takvim</button>
-      <button id="drawerManualThankYous" onclick="drawerPage('manualThankYous')">✦ Teşekkür Gönderilecekler</button>
       <button id="statistics" onclick="drawerPage('statistics')">İstatistikler</button>
       <button id="drawerManagedAppointments" onclick="drawerPage('managedAppointments')">▤ Randevu Yönetimi</button>
       <button id="admin" onclick="drawerPage('admin')">Yönetim</button>
@@ -15,12 +14,12 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
     await page.evaluate(()=>{window.drawerPage=id=>{window.clicked=id};window.enterApp=()=>{};window.toggleDrawer=()=>{};window.simplifyNavigation=()=>{}});
     await page.addScriptTag({content:fs.readFileSync('salon-menu-order.js','utf8')});
     const order=()=>page.locator('#drawerLayer .drawer > button').evaluateAll(nodes=>nodes.map(node=>node.id));
-    assert.deepEqual(await order(),['home','calendar','statistics','drawerManualThankYous','drawerManagedAppointments','admin']);
-    await page.locator('#drawerManualThankYous').click();assert.equal(await page.evaluate(()=>window.clicked),'manualThankYous');
+    assert.deepEqual(await order(),['home','calendar','statistics','drawerManagedAppointments','admin']);
+    assert.equal(await page.locator('#drawerManualThankYous').count(),0);
     await page.locator('#drawerManagedAppointments').click();assert.equal(await page.evaluate(()=>window.clicked),'managedAppointments');
-    await page.evaluate(()=>{document.getElementById('drawerManagedAppointments').after(document.getElementById('drawerManualThankYous'));window.toggleDrawer()});
-    assert.deepEqual(await order(),['home','calendar','statistics','drawerManualThankYous','drawerManagedAppointments','admin']);
+    await page.evaluate(()=>window.toggleDrawer());
+    assert.deepEqual(await order(),['home','calendar','statistics','drawerManagedAppointments','admin']);
     assert.match(await page.locator('style').last().textContent(),/overflow-y:auto/);
-    console.log('PASS thank-you menu directly above management, clicks and dynamic reorder');
+    console.log('PASS appointment management menu remains in place and mobile scrolling works');
   }finally{await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1});

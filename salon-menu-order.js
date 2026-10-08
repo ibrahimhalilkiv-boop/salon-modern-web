@@ -12,8 +12,6 @@
       drawer.insertBefore(button,marker);
     });
     marker.remove();
-    var thankYous=document.getElementById('drawerManualThankYous'),managed=document.getElementById('drawerManagedAppointments');
-    if(thankYous&&managed&&thankYous.nextElementSibling!==managed)drawer.insertBefore(thankYous,managed);
     [['drawerCashSeparator','finance230Menu'],['drawerCustomersSeparator','drawerDebts']].forEach(function(pair){
       var target=document.getElementById(pair[1]);if(!target)return;
       var separator=document.getElementById(pair[0]);

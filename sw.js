@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v117';
+const CACHE_NAME = 'salon-modern-shell-pwa-v118';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownReminders = new Set();
 let reminderDisplayQueue = Promise.resolve();
@@ -11,7 +11,7 @@ const APP_SHELL = [
   './salon-icon-512.png',
   './supabase-2.49.1.js',
   './whatsapp-messages-2.4.5.js?v=113',
-  './manual-whatsapp-thank-you-2.4.6.js?v=116',
+  './manual-whatsapp-thank-you-2.4.6.js?v=118',
   './smart-customer-analysis-1.7.0.js',
   './salon-phase2-1.8.0.js?v=112',
   './salon-assistant-2.0.0.js',
@@ -24,7 +24,7 @@ const APP_SHELL = [
   './salon-ui-fixes-2.3.16.js',
   './appointment-management-2.3.26.js?v=90',
   './salon-web-push.js?v=116',
-  './salon-menu-order.js?v=117',
+  './salon-menu-order.js?v=118',
   './pwa-stability-2.3.20.js?v=104',
   './pwa-recovery-2.3.21.js?v=81',
   './pwa-device-session-2.3.22.js?v=96',

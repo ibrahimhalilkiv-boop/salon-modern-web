@@ -27,7 +27,7 @@ const row=(id,employee='employee1')=>({id,employee_id:employee,client_name:'Test
  let resolveOld;pending=new Promise(resolve=>resolveOld=resolve);const old=api.load();pending=null;records=[row('latest')];await api.load();resolveOld({data:[row('stale')]});await old;assert.match(elems.managedList.innerHTML,/1 randevu/);assert.doesNotMatch(elems.managedList.innerHTML,/stale/);
  failure={message:'TEST_LOAD_ERROR'};await api.load();assert.match(elems.managedList.innerHTML,/TEST_LOAD_ERROR/);failure=null;
  ctx.logout();ctx.currentUser=null;const before=calls.length;await api.load();assert.equal(calls.length,before);
-assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=100/);
+assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=113/);
  assert.match(source,/window.toggleDrawer=function\(\)\{ensure\(\)/,'Install the menu even when session restoration skips the enter wrapper');
  const adminAnchor={id:'admin'},oldRequest={remove(){this.removed=true}};elems.drawerBookingRequests=oldRequest;
  let positioned=null;const drawer={querySelector:()=>adminAnchor,insertBefore(button,anchor){elems[button.id]=button;positioned=anchor}};
