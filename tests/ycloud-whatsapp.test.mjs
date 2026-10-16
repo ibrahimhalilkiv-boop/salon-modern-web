@@ -7,6 +7,8 @@ import {
   ycloudStatusTransition, ycloudTemplateApproved, ycloudTemplatePayload,
   YCLOUD_APPOINTMENT_BODIES, YCLOUD_APPOINTMENT_PARAMETERS,
   YCLOUD_APPOINTMENT_TEMPLATES, YCLOUD_REMINDER_URL, ycloudExpectedMessage,
+  YCLOUD_LEGACY_APPOINTMENT_BODIES, YCLOUD_LEGACY_APPOINTMENT_PARAMETERS,
+  YCLOUD_LEGACY_APPOINTMENT_TEMPLATES, ycloudLegacyExpectedMessage,
 } from "../supabase/functions/_shared/ycloud-whatsapp.mjs";
 
 globalThis.crypto ??= webcrypto;
@@ -14,6 +16,23 @@ const env = new Map([["YCLOUD_API_KEY", "fixture-secret"], ["YCLOUD_WABA_ID", "1
 const tokens = YCLOUD_APPOINTMENT_PARAMETERS.appointment_update;
 const values = { "{musteri_adi}": "Çağrı 👋", "{randevu_tarihi}": "15 Ekim 2026", "{randevu_saati}": "14:30", "{calisan_adi}": "Şefik", "{islem_adi}": "Saç kesimi" };
 const templates = Object.values(YCLOUD_APPOINTMENT_TEMPLATES);
+
+test("legacy mode uses the four actual approved bodies without changing pending manual content", async () => {
+  for (const [key, name] of Object.entries(YCLOUD_LEGACY_APPOINTMENT_TEMPLATES)) {
+    const parameterTokens = YCLOUD_LEGACY_APPOINTMENT_PARAMETERS[key];
+    assert.equal(parameterTokens.length, 4);
+    assert.deepEqual(parameterTokens, ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"]);
+    const approval = await ycloudTemplateApproved(name, "tr", 4, ycloudLegacyExpectedMessage(key, values), parameterTokens, values, env,
+      async () => Response.json({ wabaId: env.get("YCLOUD_WABA_ID"), name, language: "tr", category: "UTILITY", status: "APPROVED", components: [{ type: "BODY", text: YCLOUD_LEGACY_APPOINTMENT_BODIES[key] }] }), []);
+    assert.equal(approval.ok, true, key);
+    assert.equal(approval.renderedMessage, ycloudLegacyExpectedMessage(key, values));
+    assert.notEqual(name, YCLOUD_APPOINTMENT_TEMPLATES[key]);
+  }
+  const edge = readFileSync("supabase/functions/whatsapp-outbound-dispatch/index.ts", "utf8");
+  assert.match(edge, /WHATSAPP_TEMPLATE_VERSION/);
+  assert.match(edge, /ycloudLegacyExpectedMessage/);
+  assert.match(edge, /ycloudDeliveryFresh/);
+});
 
 test("four approved Turkish utility templates preserve their own body, variable order and static URL button", async () => {
   for (const [key, name] of Object.entries(YCLOUD_APPOINTMENT_TEMPLATES)) {

@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.49.1";
 import { normalizeTrPhone } from "../_shared/whatsapp-assistant-core.mjs";
 import { META_TEMPLATE_TOKENS, metaTemplatePayload, postMetaMessage, renderMessageTemplate, sha256 } from "../_shared/meta-whatsapp.mjs";
-import { postYCloudMessage, YCLOUD_APPOINTMENT_PARAMETERS, YCLOUD_APPOINTMENT_TEMPLATES, YCLOUD_REMINDER_URL, ycloudDeliveryFresh, ycloudExpectedMessage, ycloudTemplateApproved, ycloudTemplatePayload } from "../_shared/ycloud-whatsapp.mjs";
+import { postYCloudMessage, YCLOUD_APPOINTMENT_PARAMETERS, YCLOUD_APPOINTMENT_TEMPLATES, YCLOUD_LEGACY_APPOINTMENT_BODIES, YCLOUD_LEGACY_APPOINTMENT_PARAMETERS, YCLOUD_LEGACY_APPOINTMENT_TEMPLATES, YCLOUD_REMINDER_URL, ycloudDeliveryFresh, ycloudExpectedMessage, ycloudLegacyExpectedMessage, ycloudTemplateApproved, ycloudTemplatePayload } from "../_shared/ycloud-whatsapp.mjs";
 
 const SAFE_MODE = (Deno.env.get("SAFE_MODE") ?? "true").toLowerCase() !== "false";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -140,14 +140,21 @@ async function processDelivery(db: any, delivery: any) {
   )) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "thank_you_not_eligible", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const phone = normalizeTrPhone(client?.phone ?? appointment.client_phone ?? "");
   if (!phone) return db.from("whatsapp_message_logs").update({ status: "skipped_no_phone", last_error: "invalid_or_missing_phone", updated_at: new Date().toISOString() }).eq("id", delivery.id);
-  if (templateResult.error || !templateResult.data?.content?.trim()) return db.from("whatsapp_message_logs").update({ status: templateResult.data ? "skipped_template_invalid" : "skipped_template_missing", last_error: templateResult.error?.message ?? "template_missing", updated_at: new Date().toISOString() }).eq("id", delivery.id);
-  const allowed = META_TEMPLATE_TOKENS[delivery.template_key as keyof typeof META_TEMPLATE_TOKENS] ?? [];
-  const values = valuesFor(appointment, client, employeeResult.data, settings);
-  const rendered = renderMessageTemplate(templateResult.data.content, values, allowed as any);
-  if (!rendered.ok) return db.from("whatsapp_message_logs").update({ status: "skipped_template_invalid", last_error: `template_${rendered.reason}`, updated_at: new Date().toISOString() }).eq("id", delivery.id);
-  const currentHash = await sha256(templateResult.data.content);
-  const mapping = mappingResult.data;
   const provider = (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
+  const legacy = provider === "ycloud" && Deno.env.get("WHATSAPP_TEMPLATE_VERSION") === "legacy";
+  const legacyKey = delivery.template_key as keyof typeof YCLOUD_LEGACY_APPOINTMENT_TEMPLATES;
+  if (!legacy && (templateResult.error || !templateResult.data?.content?.trim())) return db.from("whatsapp_message_logs").update({ status: templateResult.data ? "skipped_template_invalid" : "skipped_template_missing", last_error: templateResult.error?.message ?? "template_missing", updated_at: new Date().toISOString() }).eq("id", delivery.id);
+  const allowed = legacy ? (YCLOUD_LEGACY_APPOINTMENT_PARAMETERS[legacyKey] ?? []) : (META_TEMPLATE_TOKENS[delivery.template_key as keyof typeof META_TEMPLATE_TOKENS] ?? []);
+  const values = valuesFor(appointment, client, employeeResult.data, settings);
+  const rendered = legacy
+    ? { ok: !!YCLOUD_LEGACY_APPOINTMENT_BODIES[legacyKey], content: ycloudLegacyExpectedMessage(legacyKey, values), reason: "legacy_template_missing" }
+    : renderMessageTemplate(templateResult.data.content, values, allowed as any);
+  if (!rendered.ok) return db.from("whatsapp_message_logs").update({ status: "skipped_template_invalid", last_error: `template_${rendered.reason}`, updated_at: new Date().toISOString() }).eq("id", delivery.id);
+  const currentHash = await sha256(legacy ? YCLOUD_LEGACY_APPOINTMENT_BODIES[legacyKey] : templateResult.data.content);
+  const mapping = legacy ? {
+    meta_template_name: YCLOUD_LEGACY_APPOINTMENT_TEMPLATES[legacyKey],
+    language_code: "tr", placeholder_order: allowed, approved_content_hash: currentHash,
+  } : mappingResult.data;
   // A text edit changes the mapping status to pending, but its previously
   // approved Meta template/hash remains usable until the replacement is
   // approved. A mapping with no approved hash has nothing safe to send.
@@ -156,12 +163,13 @@ async function processDelivery(db: any, delivery: any) {
   if (parameterTokens.some((token: string) => !allowed.includes(token) || !String((values as Record<string, string>)[token] ?? "").trim())) return db.from("whatsapp_message_logs").update({ status: "skipped_template_invalid", last_error: "invalid_meta_placeholder_order", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   if (SAFE_MODE) return db.from("whatsapp_message_logs").update({ status: "suppressed_safe_mode", template_content_hash: currentHash, rendered_message: rendered.content, metadata: { safe_mode: true, meta_template_name: mapping.meta_template_name, content_changed_pending_meta_approval: mapping.approved_content_hash !== currentHash }, updated_at: new Date().toISOString() }).eq("id", delivery.id);
   if (provider === "ycloud") {
-    const expectedParameters = YCLOUD_APPOINTMENT_PARAMETERS[delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_PARAMETERS];
-    if (YCLOUD_APPOINTMENT_TEMPLATES[delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_TEMPLATES] !== mapping.meta_template_name || mapping.language_code !== "tr" || !expectedParameters || JSON.stringify(parameterTokens) !== JSON.stringify(expectedParameters)) return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "ycloud_template_mapping_mismatch", updated_at: new Date().toISOString() }).eq("id", delivery.id);
+    const expectedParameters = legacy ? YCLOUD_LEGACY_APPOINTMENT_PARAMETERS[legacyKey] : YCLOUD_APPOINTMENT_PARAMETERS[delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_PARAMETERS];
+    const expectedTemplate = legacy ? YCLOUD_LEGACY_APPOINTMENT_TEMPLATES[legacyKey] : YCLOUD_APPOINTMENT_TEMPLATES[delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_TEMPLATES];
+    if (expectedTemplate !== mapping.meta_template_name || mapping.language_code !== "tr" || !expectedParameters || JSON.stringify(parameterTokens) !== JSON.stringify(expectedParameters)) return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "ycloud_template_mapping_mismatch", updated_at: new Date().toISOString() }).eq("id", delivery.id);
     if ((Deno.env.get("YCLOUD_ACCOUNT_READY") ?? "").toLowerCase() !== "true") return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "ycloud_account_not_ready", updated_at: new Date().toISOString() }).eq("id", delivery.id);
     if (!ycloudDeliveryFresh(delivery, appointment, Number(settings?.appointment_reminder_catchup_minutes ?? 30))) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "ycloud_stale_delivery", updated_at: new Date().toISOString() }).eq("id", delivery.id);
-    const expectedMessage = ycloudExpectedMessage(delivery.template_key, values);
-    const expectedButtons = delivery.template_key === "appointment_reminder"
+    const expectedMessage = legacy ? ycloudLegacyExpectedMessage(legacyKey, values) : ycloudExpectedMessage(delivery.template_key, values);
+    const expectedButtons = !legacy && delivery.template_key === "appointment_reminder"
       ? [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["📍 Yol Tarifi", "Yol Tarifi"] }]
       : [];
     const approval = await ycloudTemplateApproved(mapping.meta_template_name, mapping.language_code, parameterTokens.length, expectedMessage, parameterTokens, values, Deno.env, fetch, expectedButtons);
@@ -189,6 +197,7 @@ Deno.serve(async (request) => {
   if (requestBody?.mode === "diagnose") return json(await diagnoseMeta(String(requestBody?.expected_phone ?? "")));
   const provider = (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
   if (provider !== "meta" && provider !== "ycloud") return json({ ok: false, error: "unknown_whatsapp_provider" }, 503);
+  if (provider === "ycloud" && !["legacy", "current"].includes(Deno.env.get("WHATSAPP_TEMPLATE_VERSION") ?? "")) return json({ ok: false, error: "unknown_whatsapp_template_version" }, 503);
   if (provider === "ycloud" && ((Deno.env.get("YCLOUD_ACCOUNT_READY") ?? "").toLowerCase() !== "true" || !Deno.env.get("YCLOUD_API_KEY") || !Deno.env.get("YCLOUD_WABA_ID") || !Deno.env.get("YCLOUD_PHONE_NUMBER"))) return json({ ok: false, error: "ycloud_not_ready" }, 503);
   const url = Deno.env.get("SUPABASE_URL") ?? "", key = getAdminKey();
   if (!url || !key) return json({ ok: false, error: "server_not_configured" }, 503);

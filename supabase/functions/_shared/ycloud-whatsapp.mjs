@@ -21,6 +21,32 @@ export const YCLOUD_APPOINTMENT_BODIES = Object.freeze({
   appointment_reminder: "Merhaba {{1}} 👋\n\n⏰ Salon Modern randevunuzu hatırlatmak isteriz.\n\nRandevu saatiniz yaklaşıyor.\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n👤 Berber: {{4}}\n\n📍 Konumumuza ulaşmak için aşağıdaki Yol Tarifi butonunu kullanabilirsiniz.\n\nGörüşmek üzere! 💈\nSalon Modern",
   appointment_cancelled: "Merhaba {{1}},\n\nSalon Modern randevunuz iptal edilmiştir.\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n👤 Berber: {{4}}\n\nBilginize sunarız.\n\nSalon Modern",
 });
+// The currently approved Meta templates. Keep these separate from the newer
+// manual messages and pending template mappings in the database.
+export const YCLOUD_LEGACY_APPOINTMENT_TEMPLATES = Object.freeze({
+  appointment_confirmation: "salon_modern_randevu_onayi",
+  appointment_update: "salon_modern_randevu_guncelleme_v2",
+  appointment_reminder: "salon_modern_randevu_hatirlatma",
+  appointment_cancelled: "salon_modern_randevu_iptal",
+});
+export const YCLOUD_LEGACY_APPOINTMENT_PARAMETERS = Object.freeze({
+  appointment_confirmation: commonParameters,
+  appointment_update: commonParameters,
+  appointment_reminder: commonParameters,
+  appointment_cancelled: commonParameters,
+});
+export const YCLOUD_LEGACY_APPOINTMENT_BODIES = Object.freeze({
+  appointment_confirmation: "Merhaba {{1}},\n\nSalon Modern randevu bilgileriniz:\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n👤 Çalışan: {{4}}\n\nRandevunuz oluşturulmuştur.",
+  appointment_update: "Merhaba {{1}},\n\nRandevu bilgileriniz değiştirildi.\n\n📅 Yeni tarih: {{2}}\n🕒 Yeni saat: {{3}}\n👤 Yeni çalışan: {{4}}\n\nGüncel randevu bilgileriniz yukarıdaki gibidir.",
+  appointment_reminder: "Merhaba {{1}},\n\nSalon Modern randevunuzu hatırlatmak isteriz.\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n👤 Çalışan: {{4}}\n\nRandevunuza 1 saat kalmıştır.",
+  appointment_cancelled: "Merhaba {{1}},\n\nSalon Modern randevunuz iptal edilmiştir.\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n👤 Çalışan: {{4}}\n\nBilginize sunarız.",
+});
+export function ycloudLegacyExpectedMessage(templateKey, values) {
+  const body = YCLOUD_LEGACY_APPOINTMENT_BODIES[templateKey];
+  const tokens = YCLOUD_LEGACY_APPOINTMENT_PARAMETERS[templateKey];
+  if (!body || !tokens) return null;
+  return body.replace(/\{\{(\d+)\}\}/g, (_, index) => String(values[tokens[Number(index) - 1]] ?? ""));
+}
 export function ycloudExpectedMessage(templateKey, values) {
   const body = YCLOUD_APPOINTMENT_BODIES[templateKey];
   const tokens = YCLOUD_APPOINTMENT_PARAMETERS[templateKey];
