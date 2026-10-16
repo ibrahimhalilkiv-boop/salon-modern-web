@@ -57,7 +57,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v127/, 'PWA cache sürümü güncel yayın sürümünde kalmalı');
+assert.match(shell, /salon-modern-shell-pwa-v128/, 'PWA cache sürümü güncel yayın sürümünde kalmalı');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -66,7 +66,7 @@ assert.match(publicJs, /Bugün salon kapalı/, 'Bugün kapalıysa müşteri ilk 
 assert.match(publicJs, /Bugün için randevu saatleri sona erdi/, 'Bugünün çalışma saati bittiyse ilk adımda bilgi verilmeli');
 assert.match(edge, /hasRemainingWindow/, 'Katalog bugünün kalan çalışma penceresini bildirmeli');
 assert.match(publicJs, /Bu tarihte uygun saat kalmadı/, 'Slotsuz tarih kullanıcıyı saat adımına taşımamalı');
-assert.match(publicJs, /if\(!available\)return/, 'Kapalı tarih seçildiğinde saat adımına geçilmemeli');
+assert.match(publicJs, /if\(available&&step===3&&state\.date===selectedDate\)show\(4\)/, 'Kapalı tarih seçildiğinde saat adımına geçilmemeli');
 assert.match(shell, /\.\/randevu\//, 'Public sayfa çevrimdışı shell ayrımında tanınmalı');
 assert.match(publicHtml, /\.\.\/salon-modern\.html/, 'Randevu sayfasında personel girişi bulunmalı');
 assert.doesNotMatch(publicJs, /dakika<\/small>/, 'Hizmet kartında süre yazmamalı');

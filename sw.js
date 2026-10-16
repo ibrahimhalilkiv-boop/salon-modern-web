@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v127';
+const CACHE_NAME = 'salon-modern-shell-pwa-v128';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownReminders = new Set();
 let reminderDisplayQueue = Promise.resolve();
