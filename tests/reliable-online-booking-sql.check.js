@@ -8,14 +8,15 @@ const { pathToFileURL } = require('node:url');
 
 (async () => {
   const { default: EmbeddedPostgres } = await import(pathToFileURL(path.join(process.argv[2], 'embedded-postgres/dist/index.js')).href);
-  const server = new EmbeddedPostgres({ databaseDir: fs.mkdtempSync(path.join(os.tmpdir(), 'salon-online-pg-')), port: 55453,
+  const testPort = 55000 + Math.floor(Math.random() * 1000);
+  const server = new EmbeddedPostgres({ databaseDir: fs.mkdtempSync(path.join(os.tmpdir(), 'salon-online-pg-')), port: testPort,
     user: 'postgres', password: 'local-test-only', persistent: true, initdbFlags: ['--locale=C', '--encoding=UTF8'],
     postgresFlags: ['-h', '127.0.0.1'], onLog: () => {}, onError: () => {} });
   let db;
   const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   try {
     await server.initialise(); await server.start();
-    db = new Client({ host: '127.0.0.1', port: 55453, user: 'postgres', password: 'local-test-only', database: 'postgres' });
+    db = new Client({ host: '127.0.0.1', port: testPort, user: 'postgres', password: 'local-test-only', database: 'postgres' });
     await db.connect();
     await db.query(`
       create extension btree_gist;
@@ -67,6 +68,7 @@ const { pathToFileURL } = require('node:url');
       select set_config('test.role','service_role',false);
     `);
     await db.query(fs.readFileSync('supabase/migrations/20261016193740_reliable_online_booking_durations_and_slots.sql', 'utf8'));
+    await db.query(fs.readFileSync('supabase/migrations/20261016194451_refresh_online_slot_snapshot_after_staff_lock.sql', 'utf8'));
     const old = (await db.query("select duration_minutes,scheduled_end,online_reserved_end from appointments where client_name='Eski müşteri'")).rows[0];
     assert.equal(old.duration_minutes, 30);
     assert.equal(new Date(old.scheduled_end).toISOString(), '2026-11-02T06:30:00.000Z');
@@ -121,7 +123,7 @@ const { pathToFileURL } = require('node:url');
     const cancelled = (await db.query("select public.manage_customer_online_booking($1,$2,1,'cancel',null) as result", [uuid(51), uuid(72)])).rows[0].result;
     assert.equal(cancelled.status, 'cancelled');
     assert.equal((await db.query('select status from appointments where id=$1', [any.appointment_id])).rows[0].status, 'cancelled');
-    const second = new Client({ host: '127.0.0.1', port: 55453, user: 'postgres', password: 'local-test-only', database: 'postgres' });
+    const second = new Client({ host: '127.0.0.1', port: testPort, user: 'postgres', password: 'local-test-only', database: 'postgres' });
     await second.connect();
     try {
       await second.query("select set_config('test.role','service_role',false)");
@@ -132,7 +134,30 @@ const { pathToFileURL } = require('node:url');
       assert.equal(contenders.filter(result => result.status === 'fulfilled').length, 1, 'Only one customer may take the last slot');
       assert.equal((await db.query("select count(*)::integer as count from appointments where employee_id=$1 and scheduled_at='2026-11-02T19:00:00+03:00'", [uuid(11)])).rows[0].count, 1);
     } finally { await second.end(); }
+    const concurrent = new Client({ host: '127.0.0.1', port: testPort, user: 'postgres', password: 'local-test-only', database: 'postgres' });
+    await concurrent.connect();
+    try {
+      await concurrent.query("select set_config('test.role','service_role',false)");
+      await db.query('begin');
+      await db.query(`insert into appointments(client_name,client_phone,service_id,employee_id,scheduled_at,status,source)
+        values('Kilidi tutan manuel randevu','905000000009',$1,$2,'2026-11-02T16:00:00+03:00','confirmed','staff')`, [uuid(2), uuid(11)]);
+      const onlineDuringManual = concurrent.query('select public.create_confirmed_online_booking($1) as result',
+        [JSON.stringify(makeBooking('905000000010', uuid(11), '16:00', uuid(83)))]);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await db.query('commit');
+      await assert.rejects(onlineDuringManual, /müsait değil/, 'Online create must see a manual booking committed while it waited for the staff lock');
+    } finally {
+      await db.query('rollback').catch(() => {});
+      await concurrent.end();
+    }
     assert.equal((await db.query("select has_function_privilege('anon','public.online_booking_slots(uuid,date,uuid,uuid,integer)','execute') as allowed")).rows[0].allowed, false);
     console.log('PASS isolated PostgreSQL: durations, legacy guard, Fark etmez, manual flexibility, closures, day-end, Sunday, approval, reschedule, cancel, concurrent last slot and privilege');
-  } finally { if (db) await db.end(); await server.stop().catch(() => {}); }
+  } finally {
+    if (db) await db.end();
+    if (process.platform === 'win32' && server.process) {
+      const child = server.process;
+      if (child.exitCode === null) child.kill('SIGTERM');
+      await Promise.race([new Promise(resolve => child.once('exit', resolve)), new Promise(resolve => setTimeout(resolve, 2000))]);
+    } else await server.stop().catch(() => {});
+  }
 })().catch(error => { console.error(error); process.exitCode = 1; });
