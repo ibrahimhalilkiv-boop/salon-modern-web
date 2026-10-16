@@ -2,12 +2,31 @@
 // before the dispatcher is explicitly switched to this provider.
 const API = "https://api.ycloud.com/v2";
 export const YCLOUD_APPOINTMENT_TEMPLATES = Object.freeze({
-  appointment_confirmation: "salon_modern_randevu_onayi",
-  appointment_update: "salon_modern_randevu_guncelleme_v2",
-  appointment_reminder: "salon_modern_randevu_hatirlatma",
-  appointment_cancelled: "salon_modern_randevu_iptal",
+  appointment_confirmation: "salon_modern_randevu_onayi_v2",
+  appointment_update: "salon_modern_randevu_guncelleme_v3",
+  appointment_reminder: "salon_modern_randevu_hatirlatma_v2",
+  appointment_cancelled: "salon_modern_randevu_iptal_v2",
 });
-export const YCLOUD_APPOINTMENT_PARAMETERS = ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"];
+const commonParameters = ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"];
+export const YCLOUD_APPOINTMENT_PARAMETERS = Object.freeze({
+  appointment_confirmation: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{islem_adi}", "{calisan_adi}"],
+  appointment_update: commonParameters,
+  appointment_reminder: commonParameters,
+  appointment_cancelled: commonParameters,
+});
+export const YCLOUD_REMINDER_URL = "https://salonmodern.com.tr/konum";
+export const YCLOUD_APPOINTMENT_BODIES = Object.freeze({
+  appointment_confirmation: "Merhaba {{1}} 👋\n\n💈 Salon Modern randevunuz oluşturuldu.\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n✂️ Hizmet: {{4}}\n👤 Berber: {{5}}\n\nSizi bekliyoruz.\nSalon Modern",
+  appointment_update: "Merhaba {{1}},\n\nSalon Modern randevunuzun bilgileri güncellendi.\n\n📅 Yeni tarih: {{2}}\n🕒 Yeni saat: {{3}}\n👤 Berber: {{4}}\n\nGüncel randevu bilgileriniz yukarıdaki gibidir.\n\nSalon Modern",
+  appointment_reminder: "Merhaba {{1}} 👋\n\n⏰ Salon Modern randevunuzu hatırlatmak isteriz.\n\nRandevu saatiniz yaklaşıyor.\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n👤 Berber: {{4}}\n\n📍 Konumumuza ulaşmak için aşağıdaki Yol Tarifi butonunu kullanabilirsiniz.\n\nGörüşmek üzere! 💈\nSalon Modern",
+  appointment_cancelled: "Merhaba {{1}},\n\nSalon Modern randevunuz iptal edilmiştir.\n\n📅 Tarih: {{2}}\n🕒 Saat: {{3}}\n👤 Berber: {{4}}\n\nBilginize sunarız.\n\nSalon Modern",
+});
+export function ycloudExpectedMessage(templateKey, values) {
+  const body = YCLOUD_APPOINTMENT_BODIES[templateKey];
+  const tokens = YCLOUD_APPOINTMENT_PARAMETERS[templateKey];
+  if (!body || !tokens) return null;
+  return body.replace(/\{\{(\d+)\}\}/g, (_, index) => String(values[tokens[Number(index) - 1]] ?? ""));
+}
 
 function configuration(env) {
   const apiKey = env.get("YCLOUD_API_KEY") ?? "";
@@ -31,7 +50,7 @@ export function ycloudTemplatePayload({ from, to, name, languageCode = "tr", par
   };
 }
 
-export async function ycloudTemplateApproved(name, languageCode, parameterCount, expectedContent = null, parameterTokens = [], values = {}, env = Deno.env, fetcher = fetch) {
+export async function ycloudTemplateApproved(name, languageCode, parameterCount, expectedContent = null, parameterTokens = [], values = {}, env = Deno.env, fetcher = fetch, expectedButtons = undefined) {
   const config = configuration(env);
   if (!config) return { ok: false, reason: "missing_ycloud_configuration" };
   const url = `${API}/whatsapp/templates/${encodeURIComponent(config.wabaId)}/${encodeURIComponent(name)}/${encodeURIComponent(languageCode)}`;
@@ -47,6 +66,13 @@ export async function ycloudTemplateApproved(name, languageCode, parameterCount,
     }
     const rendered = String(body.text).replace(/\{\{(\d+)\}\}/g, (_, index) => String(values[parameterTokens[Number(index) - 1]] ?? ""));
     if (expectedContent !== null && rendered.replace(/\s+/g, " ").trim() !== String(expectedContent).replace(/\s+/g, " ").trim()) return { ok: false, reason: "template_content_mismatch" };
+    if (expectedButtons !== undefined) {
+      const buttons = template?.components?.find((component) => component.type === "BUTTONS")?.buttons ?? [];
+      if (buttons.length !== expectedButtons.length || buttons.some((button, index) =>
+        button.type !== expectedButtons[index].type || button.url !== expectedButtons[index].url ||
+        !expectedButtons[index].texts.includes(button.text)
+      )) return { ok: false, reason: "template_button_mismatch" };
+    }
     return { ok: true, from: config.from, renderedMessage: rendered };
   } catch {
     return { ok: false, reason: "template_status_unavailable", retryable: true };

@@ -5,30 +5,37 @@ import { readFileSync } from "node:fs";
 import {
   postYCloudMessage, verifyYCloudSignature, ycloudDeliveryFresh,
   ycloudStatusTransition, ycloudTemplateApproved, ycloudTemplatePayload,
+  YCLOUD_APPOINTMENT_BODIES, YCLOUD_APPOINTMENT_PARAMETERS,
+  YCLOUD_APPOINTMENT_TEMPLATES, YCLOUD_REMINDER_URL, ycloudExpectedMessage,
 } from "../supabase/functions/_shared/ycloud-whatsapp.mjs";
 
 globalThis.crypto ??= webcrypto;
 const env = new Map([["YCLOUD_API_KEY", "fixture-secret"], ["YCLOUD_WABA_ID", "1044769215039170"], ["YCLOUD_PHONE_NUMBER", "+905355038544"]]);
-const tokens = ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"];
-const values = { "{musteri_adi}": "Çağrı 👋", "{randevu_tarihi}": "15 Ekim 2026", "{randevu_saati}": "14:30", "{calisan_adi}": "Şefik" };
-const templates = ["salon_modern_randevu_onayi", "salon_modern_randevu_guncelleme_v2", "salon_modern_randevu_hatirlatma", "salon_modern_randevu_iptal"];
+const tokens = YCLOUD_APPOINTMENT_PARAMETERS.appointment_update;
+const values = { "{musteri_adi}": "Çağrı 👋", "{randevu_tarihi}": "15 Ekim 2026", "{randevu_saati}": "14:30", "{calisan_adi}": "Şefik", "{islem_adi}": "Saç kesimi" };
+const templates = Object.values(YCLOUD_APPOINTMENT_TEMPLATES);
 
-test("four approved Turkish utility templates use only YCloud and preserve parameters", async () => {
-  for (const name of templates) {
+test("four approved Turkish utility templates preserve their own body, variable order and static URL button", async () => {
+  for (const [key, name] of Object.entries(YCLOUD_APPOINTMENT_TEMPLATES)) {
+    const parameterTokens = YCLOUD_APPOINTMENT_PARAMETERS[key];
+    const button = key === "appointment_reminder" ? [{ type: "URL", text: "Yol Tarifi", url: YCLOUD_REMINDER_URL }] : [];
+    const expectedButtons = button.map(({ type, text, url }) => ({ type, texts: [text], url }));
     const calls = [];
     const fetcher = async (url, options) => {
       calls.push({ url, options });
-      if (options.method !== "POST") return Response.json({ wabaId: env.get("YCLOUD_WABA_ID"), name, language: "tr", category: "UTILITY", status: "APPROVED", components: [{ type: "BODY", text: "Merhaba {{1}} {{2}} {{3}} {{4}}" }] });
+      if (options.method !== "POST") return Response.json({ wabaId: env.get("YCLOUD_WABA_ID"), name, language: "tr", category: "UTILITY", status: "APPROVED", components: [{ type: "BODY", text: YCLOUD_APPOINTMENT_BODIES[key] }, ...(button.length ? [{ type: "BUTTONS", buttons: button }] : [])] });
       const payload = JSON.parse(options.body);
       return Response.json({ id: `id-${name}`, externalId: payload.externalId, wabaId: env.get("YCLOUD_WABA_ID"), from: env.get("YCLOUD_PHONE_NUMBER"), status: "accepted" });
     };
-    const approval = await ycloudTemplateApproved(name, "tr", 4, null, tokens, values, env, fetcher);
+    const approval = await ycloudTemplateApproved(name, "tr", parameterTokens.length, ycloudExpectedMessage(key, values), parameterTokens, values, env, fetcher, expectedButtons);
     assert.equal(approval.ok, true);
-    const payload = ycloudTemplatePayload({ from: approval.from, to: "905321234567", name, parameterTokens: tokens, values, externalId: `appointment_${name}` });
+    const payload = ycloudTemplatePayload({ from: approval.from, to: "905321234567", name, parameterTokens, values, externalId: `appointment_${name}` });
     const result = await postYCloudMessage(payload, env, fetcher);
     assert.deepEqual(result, { ok: true, providerMessageId: `id-${name}`, providerStatus: "accepted" });
     assert.equal(payload.to, "+905321234567");
-    assert.deepEqual(payload.template.components[0].parameters.map((item) => item.text), Object.values(values));
+    assert.deepEqual(payload.template.components[0].parameters.map((item) => item.text), parameterTokens.map((token) => values[token]));
+    assert.equal(payload.template.components.length, 1, "Static URL button needs no dynamic API parameter");
+    assert.equal(parameterTokens.length, key === "appointment_confirmation" ? 5 : 4);
     assert.equal(calls.length, 2);
     assert.equal(calls[1].options.headers["X-API-Key"], "fixture-secret");
     assert.equal(calls[1].url, "https://api.ycloud.com/v2/whatsapp/messages");
@@ -42,6 +49,7 @@ test("wrong WABA, pending templates, and missing key cannot send", async () => {
   }
   assert.equal((await ycloudTemplateApproved(templates[0], "tr", 4, null, tokens, values, new Map(), () => { throw Error("must not call"); })).ok, false);
   assert.equal((await ycloudTemplateApproved(templates[0], "tr", 4, "different content", tokens, values, env, async () => Response.json({ wabaId: env.get("YCLOUD_WABA_ID"), name: templates[0], language: "tr", category: "UTILITY", status: "APPROVED", components: [{ type: "BODY", text: "{{1}} {{2}} {{3}} {{4}}" }] }))).reason, "template_content_mismatch");
+  assert.equal((await ycloudTemplateApproved(templates[2], "tr", 4, ycloudExpectedMessage("appointment_reminder", values), tokens, values, env, async () => Response.json({ wabaId: env.get("YCLOUD_WABA_ID"), name: templates[2], language: "tr", category: "UTILITY", status: "APPROVED", components: [{ type: "BODY", text: YCLOUD_APPOINTMENT_BODIES.appointment_reminder }] }), [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["Yol Tarifi"] }])).reason, "template_button_mismatch");
   assert.equal((await ycloudTemplateApproved(templates[0], "tr", 4, null, tokens, values, env, async () => new Response("{}", { status: 503 }))).retryable, true);
 });
 

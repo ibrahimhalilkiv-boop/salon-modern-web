@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.49.1";
 import { normalizeTrPhone } from "../_shared/whatsapp-assistant-core.mjs";
 import { META_TEMPLATE_TOKENS, metaTemplatePayload, postMetaMessage, renderMessageTemplate, sha256 } from "../_shared/meta-whatsapp.mjs";
-import { postYCloudMessage, YCLOUD_APPOINTMENT_PARAMETERS, YCLOUD_APPOINTMENT_TEMPLATES, ycloudDeliveryFresh, ycloudTemplateApproved, ycloudTemplatePayload } from "../_shared/ycloud-whatsapp.mjs";
+import { postYCloudMessage, YCLOUD_APPOINTMENT_PARAMETERS, YCLOUD_APPOINTMENT_TEMPLATES, YCLOUD_REMINDER_URL, ycloudDeliveryFresh, ycloudExpectedMessage, ycloudTemplateApproved, ycloudTemplatePayload } from "../_shared/ycloud-whatsapp.mjs";
 
 const SAFE_MODE = (Deno.env.get("SAFE_MODE") ?? "true").toLowerCase() !== "false";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -33,6 +33,7 @@ function valuesFor(appointment: any, client: any, employee: any, settings: any) 
     "{islem_adi}": appointment.service_name ?? "",
     "{ucret}": Number(appointment.amount ?? 0).toLocaleString("tr-TR"),
     "{google_haritalar_url}": settings?.google_maps_url ?? "",
+    "{yol_tarifi_url}": YCLOUD_REMINDER_URL,
     "{google_yorum_url}": settings?.google_review_url ?? "",
     "{instagram_url}": settings?.instagram_url ?? "",
   };
@@ -155,10 +156,15 @@ async function processDelivery(db: any, delivery: any) {
   if (parameterTokens.some((token: string) => !allowed.includes(token) || !String((values as Record<string, string>)[token] ?? "").trim())) return db.from("whatsapp_message_logs").update({ status: "skipped_template_invalid", last_error: "invalid_meta_placeholder_order", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   if (SAFE_MODE) return db.from("whatsapp_message_logs").update({ status: "suppressed_safe_mode", template_content_hash: currentHash, rendered_message: rendered.content, metadata: { safe_mode: true, meta_template_name: mapping.meta_template_name, content_changed_pending_meta_approval: mapping.approved_content_hash !== currentHash }, updated_at: new Date().toISOString() }).eq("id", delivery.id);
   if (provider === "ycloud") {
-    if (YCLOUD_APPOINTMENT_TEMPLATES[delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_TEMPLATES] !== mapping.meta_template_name || mapping.language_code !== "tr" || JSON.stringify(parameterTokens) !== JSON.stringify(YCLOUD_APPOINTMENT_PARAMETERS)) return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "ycloud_template_mapping_mismatch", updated_at: new Date().toISOString() }).eq("id", delivery.id);
+    const expectedParameters = YCLOUD_APPOINTMENT_PARAMETERS[delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_PARAMETERS];
+    if (YCLOUD_APPOINTMENT_TEMPLATES[delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_TEMPLATES] !== mapping.meta_template_name || mapping.language_code !== "tr" || !expectedParameters || JSON.stringify(parameterTokens) !== JSON.stringify(expectedParameters)) return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "ycloud_template_mapping_mismatch", updated_at: new Date().toISOString() }).eq("id", delivery.id);
     if ((Deno.env.get("YCLOUD_ACCOUNT_READY") ?? "").toLowerCase() !== "true") return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "ycloud_account_not_ready", updated_at: new Date().toISOString() }).eq("id", delivery.id);
     if (!ycloudDeliveryFresh(delivery, appointment, Number(settings?.appointment_reminder_catchup_minutes ?? 30))) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "ycloud_stale_delivery", updated_at: new Date().toISOString() }).eq("id", delivery.id);
-    const approval = await ycloudTemplateApproved(mapping.meta_template_name, mapping.language_code, parameterTokens.length, rendered.content as any, parameterTokens, values);
+    const expectedMessage = ycloudExpectedMessage(delivery.template_key, values);
+    const expectedButtons = delivery.template_key === "appointment_reminder"
+      ? [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["📍 Yol Tarifi", "Yol Tarifi"] }]
+      : [];
+    const approval = await ycloudTemplateApproved(mapping.meta_template_name, mapping.language_code, parameterTokens.length, expectedMessage, parameterTokens, values, Deno.env, fetch, expectedButtons);
     if (!approval.ok && approval.retryable && Number(delivery.attempt_count) < 3) return db.from("whatsapp_message_logs").update({ status: "queued", next_attempt_at: new Date(Date.now() + 60_000 * Math.pow(2, Math.max(0, Number(delivery.attempt_count) - 1))).toISOString(), last_error: approval.reason, updated_at: new Date().toISOString() }).eq("id", delivery.id).eq("status", "sending");
     if (!approval.ok) return db.from("whatsapp_message_logs").update({ status: approval.retryable ? "failed" : "awaiting_meta_approval", last_error: approval.reason, updated_at: new Date().toISOString() }).eq("id", delivery.id);
     const payload = ycloudTemplatePayload({ from: approval.from, to: phone, name: mapping.meta_template_name, languageCode: mapping.language_code, parameterTokens, values, externalId: delivery.idempotency_key });
