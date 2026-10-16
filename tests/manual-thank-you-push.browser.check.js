@@ -6,7 +6,8 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
 const browser=await chromium.launch({channel:'chrome',headless:true});
 try{
   const page=await browser.newPage();
-  await page.setContent('<div id="app"><section id="managedAppointments" class="page"><div class="content"><button class="back">Geri</button><h1 class="page-title">Randevu Yönetimi</h1><div id="managedList">Mevcut randevu listesi</div></div></section></div><div id="drawerLayer"><div class="drawer"><button id="drawerManualThankYous">Eski seçenek</button><button id="drawerManagedAppointments"></button></div></div>');
+  await page.route('https://salon.test/',route=>route.fulfill({body:'<div id="app"><section id="managedAppointments" class="page"><div class="content"><button class="back">Geri</button><h1 class="page-title">Randevu Yönetimi</h1><div id="managedList">Mevcut randevu listesi</div></div></section></div><div id="drawerLayer"><div class="drawer"><button id="drawerManualThankYous">Eski seçenek</button><button id="drawerManagedAppointments"></button></div></div>'}));
+  await page.goto('https://salon.test/');
   await page.evaluate(()=>{
     window.currentUser={id:'manager-1',role:'yonetici'};
     window.selectedCustomerId=null;
@@ -24,11 +25,13 @@ try{
     window.listCalls=0;
     window.salonDb={rpc:async(name,args)=>{
       if(name==='list_manual_whatsapp_thank_yous'){window.listCalls++;return {data:window.fixtureRows}}
-      if(name==='mark_manual_whatsapp_thank_you_sent'){window.marked=args.p_appointment_id;window.fixtureRows=[];return {data:{status:'sent'}}}
+      if(name==='mark_manual_whatsapp_thank_you_handled'){window.marked=args.p_appointment_id;window.fixtureRows=[];return {data:{status:'manual_handled'}}}
       throw Error(name)
     }};
   });
-  await page.addScriptTag({content:fs.readFileSync('manual-whatsapp-thank-you-2.4.6.js','utf8')});
+  // Intercept the cross-origin draft navigation inside this isolated fixture.
+  const thankYouSource=fs.readFileSync('manual-whatsapp-thank-you-2.4.6.js','utf8').replace('window.location.assign(whatsappUrl(row))','window.open(whatsappUrl(row))');
+  await page.addScriptTag({content:thankYouSource});
   assert.equal(await page.locator('#drawerManualThankYous').count(),0);
   await page.evaluate(()=>window.showPage('managedAppointments'));
   assert.equal(await page.locator('#managedAppointmentsTab').getAttribute('aria-selected'),'true');
@@ -54,8 +57,8 @@ try{
   assert.equal(url.searchParams.get('text'),'Merhaba Ayşe Yılmaz 👋 Teşekkürler ✂️');
   assert.equal(await page.evaluate(()=>window.templateUsed),'appointment_thank_you');
   assert.equal(await page.evaluate(()=>window.marked),undefined,'Opening draft is not marking sent');
-  assert.match(await page.locator('.manual-thank-focused').innerText(),/Mesajı gönderdiniz mi/);
-  await page.locator('.manual-thank-focused .manual-thank-confirm [data-sent]').click();
+  await page.evaluate(()=>{window.dispatchEvent(new Event('blur'));window.dispatchEvent(new Event('focus'))});
+  await page.waitForFunction(()=>window.marked==='target');
   assert.equal(await page.evaluate(()=>window.marked),'target');
   await page.evaluate(async()=>{window.openedDraft=undefined;await window.openManualThankYouAfterCompletion('target')});
   assert.equal(await page.evaluate(()=>window.openedDraft),undefined,'Sent appointment does not reopen');
@@ -69,6 +72,6 @@ try{
   await page.evaluate(()=>window.openManualThankYouAfterCompletion('target'));
   await page.evaluate(()=>window.openManualThankYouFromNotification('target'));
   assert.equal(await page.evaluate(()=>window.listCalls),calls,'Staff never calls thank-you list RPC');
-  console.log('PASS manager-only immediate draft, legacy tap, central template, explicit send and staff hiding');
+  console.log('PASS manager-only immediate draft, legacy tap, central template, return handoff and staff hiding');
 }finally{await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1});

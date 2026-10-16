@@ -1,0 +1,67 @@
+// Isolated PostgreSQL fixture; never connects to production.
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
+const runtime=process.argv[2],{Client}=require(path.join(runtime,'pg'));
+(async()=>{
+const {default:EmbeddedPostgres}=await import(require('node:url').pathToFileURL(path.join(runtime,'embedded-postgres/dist/index.js')).href);
+const server=new EmbeddedPostgres({databaseDir:fs.mkdtempSync(path.join(os.tmpdir(),'salon-wa-auto-pg-')),port:55452,user:'postgres',password:'local-test-only',persistent:true,initdbFlags:['--locale=C','--encoding=UTF8'],postgresFlags:['-h','127.0.0.1'],onLog:()=>{},onError:()=>{}});
+let db;
+try{
+  await server.initialise();await server.start();db=new Client({host:'127.0.0.1',port:55452,user:'postgres',password:'local-test-only',database:'postgres'});await db.connect();
+  await db.query(`
+    create role anon; create role authenticated;
+    create schema auth; create schema private;
+    grant usage on schema public,auth to authenticated;
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('salon.test_uid',true),'')::uuid$$;
+    create function private.is_active_salon_user() returns boolean language sql stable as $$select auth.uid() is not null$$;
+    create function private.is_manager() returns boolean language sql stable as $$select current_setting('salon.test_role',true)='manager'$$;
+    create function private.normalize_tr_phone(p_raw text) returns text language sql immutable as $$select case when p_raw ~ '^05[0-9]{9}$' then '90'||substring(p_raw from 2) when p_raw ~ '^905[0-9]{9}$' then p_raw else null end$$;
+    create table public.profiles(id uuid primary key,full_name text);
+    create table public.clients(id uuid primary key,phone text,whatsapp_marketing_opt_out_at timestamptz);
+    create table public.appointments(id uuid primary key,client_id uuid,client_name text,client_phone text,employee_id uuid,scheduled_at timestamptz,status text default 'confirmed',cancellation_source text,service_name text,amount numeric);
+    create table public.whatsapp_message_logs(id uuid primary key default gen_random_uuid(),idempotency_key text unique,template_key text,appointment_id uuid,client_id uuid,scheduled_for timestamptz default now(),next_attempt_at timestamptz default now(),status text default 'queued',attempt_count integer default 0,metadata jsonb default '{}'::jsonb,sent_at timestamptz,status_at timestamptz,updated_at timestamptz default now(),created_at timestamptz default now());
+    create function private.enqueue_whatsapp_message(p_key text,p_template_key text,p_appointment_id uuid,p_client_id uuid,p_scheduled_for timestamptz default now()) returns void language sql security definer as $$insert into public.whatsapp_message_logs(idempotency_key,template_key,appointment_id,client_id,scheduled_for,next_attempt_at) values(p_key,p_template_key,p_appointment_id,p_client_id,p_scheduled_for,now()) on conflict(idempotency_key) do nothing$$;
+  `);
+  const client='00000000-0000-4000-8000-000000000001',staff='00000000-0000-4000-8000-000000000002',appt='00000000-0000-4000-8000-000000000003',other='00000000-0000-4000-8000-000000000004';
+  await db.query('insert into clients(id,phone) values($1,$2)',[client,'05321234567']);
+  await db.query('insert into profiles(id,full_name) values($1,$2)',[staff,'Halil Kıv']);
+  await db.query("insert into whatsapp_message_logs(idempotency_key,template_key,status) values('historical-failed','appointment_confirmation','failed')");
+  const sql=fs.readFileSync('supabase/migrations/20261016175625_automate_appointment_whatsapp_and_manager_status.sql','utf8');
+  await db.query(sql);
+  await db.query(fs.readFileSync('supabase/migrations/20261016180617_label_manual_cancellation_status.sql','utf8'));
+  await db.query("create trigger appointment_whatsapp after insert or update on public.appointments for each row execute function private.enqueue_appointment_whatsapp_message()");
+  await db.query('insert into appointments(id,client_id,client_name,client_phone,employee_id,scheduled_at,service_name,amount) values($1,$2,$3,$4,$5,now()+interval \'1 day\',$6,500)',[appt,client,'Çağrı Çığ','05321234567',staff,'Saç kesimi']);
+  await db.query("update appointments set status='cancelled',cancellation_source='admin' where id=$1",[appt]);
+  assert.deepEqual((await db.query("select status from whatsapp_message_logs where idempotency_key=$1",['appointment_cancelled:'+appt])).rows.map(x=>x.status),['queued']);
+  assert.equal((await db.query("select status from whatsapp_message_logs where idempotency_key='historical-failed'")).rows[0].status,'failed','Historical failures remain untouched');
+  await db.query('insert into appointments(id,client_id,client_name,client_phone,employee_id,scheduled_at,service_name,amount) values($1,$2,$3,$4,$5,now()+interval \'1 day\',$6,500)',[other,client,'Çağrı Çığ','05321234567',staff,'Saç kesimi']);
+  await db.query("update whatsapp_message_logs set status='failed',metadata='{\"provider\":\"ycloud\"}'::jsonb where idempotency_key=$1",['appointment_confirmation:'+other]);
+  await db.query("select set_config('salon.test_uid',$1,false),set_config('salon.test_role','manager',false)",[staff]);
+  await db.query('set role authenticated');
+  let status=(await db.query('select public.appointment_whatsapp_status($1) as rows',[other])).rows[0].rows;
+  assert.equal(status[0].can_manual,true,'Terminal YCloud failure offers manager fallback');
+  await db.query('reset role');
+  await db.query("insert into whatsapp_message_logs(idempotency_key,template_key,appointment_id,status) values('concurrent-pending','appointment_confirmation',$1,'delivery_unknown')",[other]);
+  await db.query('set role authenticated');
+  status=(await db.query('select public.appointment_whatsapp_status($1) as rows',[other])).rows[0].rows;
+  assert.equal(status[0].can_manual,false,'Unknown outcome suppresses fallback');
+  await db.query('reset role');await db.query("delete from whatsapp_message_logs where idempotency_key='concurrent-pending'");
+  await db.query('set role authenticated');
+  const failedId=(await db.query("select (public.appointment_whatsapp_status($1)->0->>'id')::uuid as id",[other])).rows[0].id;
+  const prepared=(await db.query('select public.prepare_manual_appointment_whatsapp($1) as result',[failedId])).rows[0].result;
+  assert.equal(prepared.phone,'905321234567');
+  status=(await db.query('select public.appointment_whatsapp_status($1) as rows',[other])).rows[0].rows;
+  assert.equal(status[0].status,'manual_pending');assert.equal(status[0].can_mark,true);
+  await db.query('select public.mark_manual_appointment_whatsapp_handled($1)',[failedId]);
+  await db.query('reset role');
+  const finished=(await db.query("select status,sent_at,metadata->>'manual_handled' as handled from whatsapp_message_logs where id=$1",[failedId])).rows[0];
+  assert.equal(finished.status,'failed','Webhook terminal guard remains intact');assert.equal(finished.handled,'true');assert.equal(finished.sent_at,null,'Opening and marking do not invent provider delivery');
+  await db.query("update whatsapp_message_logs set status='sent',metadata='{\"channel\":\"manual_wa_me\"}'::jsonb where idempotency_key=$1",['appointment_cancelled:'+appt]);
+  await db.query('set role authenticated');
+  assert.equal((await db.query('select public.appointment_whatsapp_status($1) as rows',[appt])).rows[0].rows.find(row=>row.template_key==='appointment_cancelled').status,'manual_handled','Legacy manual confirmation is not shown as provider delivery');
+  await db.query('reset role');
+  assert.equal((await db.query("select has_function_privilege('anon','public.appointment_whatsapp_status(uuid)','EXECUTE') as allowed")).rows[0].allowed,false);
+  await db.query("select set_config('salon.test_role','staff',false)");await db.query('set role authenticated');
+  await assert.rejects(()=>db.query('select public.appointment_whatsapp_status($1)',[other]),/Yönetici yetkisi gerekli/);
+  console.log('PASS queued cancellation, untouched history, manager-only status, unknown guard, manual reserve and explicit handled mark');
+}finally{if(db)await db.end();await server.stop().catch(()=>{})}
+})().catch(error=>{console.error(error);process.exitCode=1});

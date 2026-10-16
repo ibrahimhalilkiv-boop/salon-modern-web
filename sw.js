@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v126';
+const CACHE_NAME = 'salon-modern-shell-pwa-v127';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownReminders = new Set();
 let reminderDisplayQueue = Promise.resolve();
@@ -14,7 +14,7 @@ const APP_SHELL = [
   './manual-whatsapp-thank-you-2.4.6.js?v=123',
   './smart-customer-analysis-1.7.0.js',
   './salon-phase2-1.8.0.js?v=120',
-  './salon-assistant-2.0.0.js?v=124',
+  './salon-assistant-2.0.0.js?v=127',
   './salon-voice-2.1.0.js?v=124',
   './salon-finance-2.3.0.js?v=98',
   './appointment-list-management-2.4.4.js?v=119',
@@ -22,7 +22,7 @@ const APP_SHELL = [
   './salon-performance-2.3.14.js',
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js',
-  './appointment-management-2.3.26.js?v=121',
+  './appointment-management-2.3.26.js?v=127',
   './salon-web-push.js?v=116',
   './salon-menu-order.js?v=118',
   './pwa-stability-2.3.20.js?v=104',
@@ -34,8 +34,9 @@ const APP_SHELL = [
   './appointment-cancel-button-2.3.27.js?v=90',
   './appointment-debt-warning-2.3.28.js',
   './debt-account-groups-2.3.29.js'
-  ,'./appointment-form-actions-2.3.30.js?v=98'
-  ,'./booking-requests-admin-2.4.0.js?v=100'
+  ,'./appointment-form-actions-2.3.30.js?v=127'
+  ,'./booking-requests-admin-2.4.0.js?v=127'
+  ,'./appointment-whatsapp-status.js?v=127'
   ,'./booking-schedule-admin-2.4.1.js?v=96'
   ,'./booking-schedule-controls-2.4.3.js?v=100'
   ,'./randevu/'

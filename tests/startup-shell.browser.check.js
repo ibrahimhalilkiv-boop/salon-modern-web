@@ -61,7 +61,7 @@ const {chromium}=require(path.join(process.argv[2],'playwright'));
     for(const method of ['select','eq','neq','gte','gt','lte','lt','in','order','limit','range','is','or'])q[method]=()=>q;
     q.maybeSingle=q.single=()=>Promise.resolve({data:null,error:null});
     for(const method of ['insert','update','delete','upsert'])q[method]=()=>{fixtureWrites.push(method);throw Error('Unexpected fixture mutation')};return q};
-   window.salonDb={from:()=>query(),rpc:()=>Promise.resolve({data:{},error:null}),auth:{getSession:()=>Promise.resolve({data:{session:{access_token:'fixture'}},error:null})}};
+   window.salonDb={from:()=>query(),rpc:name=>Promise.resolve({data:name==='list_manual_whatsapp_thank_yous'?[]:{},error:null}),auth:{getSession:()=>Promise.resolve({data:{session:{access_token:'fixture'}},error:null})}};
   });
   for(const viewport of [{width:430,height:850},{width:1440,height:900}]){
    await page.setViewportSize(viewport);

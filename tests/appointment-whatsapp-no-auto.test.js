@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const html=fs.readFileSync('salon-modern.html','utf8');
+const booking=fs.readFileSync('booking-requests-admin-2.4.0.js','utf8');
+const movement=fs.readFileSync('appointment-form-actions-2.3.30.js','utf8');
+const cancellation=fs.readFileSync('appointment-management-2.3.26.js','utf8');
+const assistant=fs.readFileSync('salon-assistant-2.0.0.js','utf8');
+const thankYou=fs.readFileSync('manual-whatsapp-thank-you-2.4.6.js','utf8');
+const save=html.slice(html.indexOf('saveAppointment=async function(event){'),html.indexOf('async function loadV151Supplement'));
+assert.ok(save.includes("salonDb.from('appointments').insert(rows)"));
+assert.doesNotMatch(save,/savedWhatsAppUrl|window\.location\.href|window\.open\(/,'Save must not open WhatsApp');
+assert.doesNotMatch(booking.match(/async function approve\(id\)[^\n]*/)[0],/window\.location|window\.open|approvedWhatsappUrl/);
+assert.doesNotMatch(movement.match(/async function moveConfirmed\(id,date,time,staffName\)[\s\S]*?\n  function requestMove/)[0],/window\.location|window\.open/);
+assert.doesNotMatch(assistant.match(/window\.confirmSalonAssistantAction=async function\(\)[^\n]*/)[0],/window\.open|whatsappAppointmentUpdateUrl/);
+assert.doesNotMatch(cancellation,/try\{window\.open\(url|prepareCancelWhatsApp/);
+assert.match(cancellation,/showCancelWhatsAppStatus\(id\)/);
+assert.match(thankYou,/function openWhatsapp\(row\)/,'Manager thank-you draft remains available');
+assert.match(html,/function openReturnWhatsApp\(clientId\)/,'Customer-specific manual chat remains available');
+console.log('PASS create, approve, move, cancel and assistant do not auto-open WhatsApp; thank-you and customer chat remain');
