@@ -50,11 +50,6 @@ function slotIso(date: string, time: string) {
   return `${date}T${time}:00+03:00`
 }
 
-function overlaps(start: number, end: number, otherStart: string, minutes: number) {
-  const a = new Date(otherStart).getTime()
-  return start < a + minutes * 60000 && end > a
-}
-
 function timeMinutes(value: unknown, fallback: number) {
   const match = String(value || '').match(/^(\d{1,2}):(\d{2})/)
   if (!match) return fallback
@@ -66,21 +61,8 @@ function minuteLabel(minutes: number) {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 }
 
-// Online customers may start no later than 19:00. The management calendar
-// deliberately remains independent and can accept later manual appointments.
-const ONLINE_LAST_START_MINUTES = 19 * 60
 const CUSTOMER_CONTACT_MESSAGE = 'Online randevu oluşturma işleminiz için lütfen Salon Modern ile iletişime geçiniz.'
 const CUSTOMER_CHANGE_CUTOFF_MESSAGE = 'Randevunuza 2 saatten az kaldığı için online değişiklik veya iptal yapılamamaktadır. Lütfen Salon Modern ile iletişime geçiniz.'
-const ONLINE_HOUR_SERVICE_IDS = new Set([
-  '2638b0ff-a6e0-412c-b212-0f4d238d9be1', // Saç sakal ağda maske yıkama
-  '620dbf23-22f9-4362-85a4-eed7c377e9be', // Saç sakal maske yıkama
-  '0cdc2d09-b75e-4545-ba73-1c01665400c7', // Saç,sakal kesim yıkama
-  '65f7f4ae-77ff-4409-b10a-5607a05aceee', // Saç sakal kesim
-])
-
-function onlineDuration(serviceId: string) {
-  return ONLINE_HOUR_SERVICE_IDS.has(serviceId) ? 60 : 30
-}
 
 async function bookingSchedule(date: string) {
   const [settings, override] = await Promise.all([
@@ -88,8 +70,8 @@ async function bookingSchedule(date: string) {
     db.from('booking_schedule_overrides').select('open_time,close_time,is_closed').eq('schedule_date', date).maybeSingle(),
   ])
   if (settings.error || override.error) throw settings.error || override.error
-  const defaultOpen = timeMinutes(settings.data?.default_open_time, 9 * 60)
-  const defaultClose = timeMinutes(settings.data?.default_close_time, 19 * 60)
+  const defaultOpen = timeMinutes(settings.data?.default_open_time, 8 * 60 + 30)
+  const defaultClose = timeMinutes(settings.data?.default_close_time, 20 * 60)
   const open = timeMinutes(override.data?.open_time, defaultOpen)
   const close = timeMinutes(override.data?.close_time, defaultClose)
   const sunday = new Date(`${date}T12:00:00+03:00`).getUTCDay() === 0
@@ -109,11 +91,11 @@ async function manager(req: Request) {
 }
 
 async function onlineServices() {
-  const result = await db.from('services').select('id,name,price,duration_minutes').eq('active', true)
+  const result = await db.from('services').select('id,name,price,duration_minutes,online_duration_minutes').eq('active', true)
   if (result.error) throw result.error
   return (result.data || [])
     .sort((a, b) => Number(b.price || 0) - Number(a.price || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'tr') || String(a.id).localeCompare(String(b.id)))
-    .map((item) => ({ ...item, online_duration_minutes: onlineDuration(item.id) }))
+    .map((item) => ({ ...item, online_duration_minutes: Math.max(Number(item.duration_minutes), Number(item.online_duration_minutes)) }))
 }
 
 async function catalogue(req: Request) {
@@ -125,11 +107,11 @@ async function catalogue(req: Request) {
     bookingSchedule(today),
   ])
   if (profiles.error) throw profiles.error
-  const hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) < Math.min(todaySchedule.close, ONLINE_LAST_START_MINUTES)
+  const hasRemainingWindow = !todaySchedule.closed && timeMinutes(currentTime, 0) + 30 <= todaySchedule.close
   return reply(req, { services, employees: profiles.data, onlineBookingEnabled: todaySchedule.onlineBookingEnabled, today, todaySchedule: { ...todaySchedule, hasRemainingWindow } })
 }
 
-async function availability(req: Request, url: URL, own?: { id: string, service_id: string, employee_id: string, duration_minutes: number }) {
+async function availability(req: Request, url: URL, own?: { id: string, service_id: string, employee_id: string, duration_minutes: number, online_protection_minutes: number | null }) {
   const date = url.searchParams.get('date') || ''
   const serviceId = own?.service_id || url.searchParams.get('service') || ''
   const requestedEmployeeId = own?.employee_id || url.searchParams.get('employee') || ''
@@ -137,46 +119,20 @@ async function availability(req: Request, url: URL, own?: { id: string, service_
   const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date())
   if (date < today) return reply(req, { error: 'Geçmiş tarih seçilemez.' }, 400)
 
-  const service = own
-    ? { id: own.service_id, online_duration_minutes: own.duration_minutes }
-    : (await onlineServices()).find((item) => item.id === serviceId)
-  if (!service) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
-  if (!Number.isSafeInteger(service.online_duration_minutes) || service.online_duration_minutes <= 0) return reply(req, { error: 'Bu hizmetin online süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
+  const service = (await onlineServices()).find((item) => item.id === serviceId)
+  if (!service && !own) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
+  const duration = own
+    ? Math.max(own.duration_minutes, own.online_protection_minutes || service?.online_duration_minutes || own.duration_minutes)
+    : service!.online_duration_minutes
+  if (!Number.isSafeInteger(duration) || duration <= 0) return reply(req, { error: 'Bu hizmetin online süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
   const schedule = await bookingSchedule(date)
-  if (schedule.closed) return reply(req, { date, durationMinutes: service.online_duration_minutes, slots: [], schedule })
-  let employeeQuery = db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern')
-  if (requestedEmployeeId) employeeQuery = employeeQuery.eq('id', requestedEmployeeId)
-  const employees = await employeeQuery.order('full_name')
-  if (employees.error || !employees.data?.length) return reply(req, { slots: [] })
-
-  const from = `${date}T00:00:00+03:00`
-  const to = `${date}T23:59:59+03:00`
-  const ids = employees.data.map((item) => item.id)
-  const [appointments, closures] = await Promise.all([
-    db.from('appointments').select('id,employee_id,scheduled_at,duration_minutes,status')
-      .in('employee_id', ids).lt('scheduled_at', to).gt('scheduled_end', from).neq('status', 'cancelled'),
-    db.from('closed_time_slots').select('employee_id,starts_at,ends_at')
-      .in('employee_id', ids).lt('starts_at', to).gt('ends_at', from),
-  ])
-  if (appointments.error || closures.error) throw appointments.error || closures.error
-  const duration = service.online_duration_minutes
-  const now = Date.now()
-  const slots = []
-  const cadence = 30
-  const first = Math.ceil(schedule.open / cadence) * cadence
-  for (let minutes = first; minutes <= ONLINE_LAST_START_MINUTES && minutes + duration <= schedule.close; minutes += cadence) {
-    const time = minuteLabel(minutes)
-    const start = new Date(slotIso(date, time)).getTime()
-    const end = start + duration * 60000
-    if (start <= now) continue
-    const employeeIds = employees.data.filter((employee) => {
-      const busy = (appointments.data || []).some((item) => (!own || item.id !== own.id) && item.employee_id === employee.id && overlaps(start, end, item.scheduled_at, Number(item.duration_minutes || 60)))
-      const closed = (closures.data || []).some((item) => item.employee_id === employee.id && start < new Date(item.ends_at).getTime() && end > new Date(item.starts_at).getTime())
-      return !busy && !closed
-    }).map((employee) => employee.id)
-    if (employeeIds.length) slots.push({ time, employeeIds })
-  }
-  return reply(req, { date, durationMinutes: duration, slots, schedule })
+  if (schedule.closed) return reply(req, { date, durationMinutes: duration, slots: [], schedule })
+  const available = await db.rpc('online_booking_slots', {
+    p_service: serviceId, p_day: date, p_employee: requestedEmployeeId || null,
+    p_exclude: own?.id || null, p_duration_override: own ? duration : null,
+  })
+  if (available.error) throw available.error
+  return reply(req, { date, durationMinutes: available.data.durationMinutes, slots: available.data.slots, schedule })
 }
 
 async function createRequest(req: Request) {
@@ -199,7 +155,7 @@ async function createRequest(req: Request) {
     if (existing.error) throw existing.error
     if (existing.data) {
       const row = existing.data
-      if (row.phone_normalized !== customerPhone || row.service_id !== serviceId || row.employee_id !== employeeId || new Date(row.scheduled_at).getTime() !== new Date(startAt).getTime()) return reply(req, { error: 'Kayıt bilgileri değişti. Sayfayı yenileyin.' }, 409)
+      if (row.phone_normalized !== customerPhone || row.service_id !== serviceId || (employeeId && row.employee_id !== employeeId) || new Date(row.scheduled_at).getTime() !== new Date(startAt).getTime()) return reply(req, { error: 'Kayıt bilgileri değişti. Sayfayı yenileyin.' }, 409)
       if (row.status === 'approved') return reply(req, { requestNumber: row.id.slice(0, 8).toUpperCase(), statusToken: row.public_token, status: 'approved' }, 200)
     }
   }
@@ -217,7 +173,7 @@ async function createRequest(req: Request) {
   const [phoneCount, ipCount, service] = await Promise.all([
     db.from('online_booking_requests').select('id', { count: 'exact', head: true }).eq('phone_normalized', customerPhone).gte('created_at', since),
     db.from('online_booking_requests').select('id', { count: 'exact', head: true }).eq('request_ip_hash', ipHash).gte('created_at', since),
-    db.from('services').select('id,name,price,duration_minutes').eq('id', serviceId).eq('active', true).maybeSingle(),
+    db.from('services').select('id,name,price,duration_minutes,online_duration_minutes').eq('id', serviceId).eq('active', true).maybeSingle(),
   ])
   if (phoneCount.error || ipCount.error || service.error) throw phoneCount.error || ipCount.error || service.error
   if ((phoneCount.count || 0) >= 3 || (ipCount.count || 0) >= 10) return reply(req, { error: 'Çok fazla talep gönderildi. Lütfen daha sonra deneyin.' }, 429)
@@ -237,7 +193,6 @@ async function createRequest(req: Request) {
   const chosen = (availabilityBody.slots || []).find((item: { time: string, employeeIds: string[] }) => item.time === time)
   if (!chosen || (employeeId && !chosen.employeeIds.includes(employeeId))) return reply(req, { error: 'Seçilen saat artık müsait değil.' }, 409)
 
-  if (!employeeId) return reply(req, { error: 'Bir çalışan seçin.' }, 400)
   const inserted = await db.rpc('create_confirmed_online_booking', { p_booking: {
     client_name: customerName, phone: customerPhone, phone_normalized: customerPhone,
     service_id: serviceId, service_name: service.data.name, amount: service.data.price,
@@ -270,10 +225,10 @@ async function publicStatus(req: Request, token: string) {
 function validUuid(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }
 type CustomerBookingRow = { status: string, scheduled_at: string, customer_revision: number,
   appointment: null | { id: string, client_name: string, service_name: string, service_id: string, employee_id: string,
-    scheduled_at: string, duration_minutes: number, amount: number, status: string, employee: null | { full_name: string } } }
+    scheduled_at: string, duration_minutes: number, online_protection_minutes: number | null, amount: number, status: string, employee: null | { full_name: string } } }
 async function customerBooking(token: string) {
   const result = await db.from('online_booking_requests')
-    .select('status,scheduled_at,customer_revision,appointment:appointments!online_booking_requests_appointment_id_fkey(id,client_name,service_name,service_id,employee_id,scheduled_at,duration_minutes,amount,status,employee:profiles!appointments_employee_id_fkey(full_name))')
+    .select('status,scheduled_at,customer_revision,appointment:appointments!online_booking_requests_appointment_id_fkey(id,client_name,service_name,service_id,employee_id,scheduled_at,duration_minutes,online_protection_minutes,amount,status,employee:profiles!appointments_employee_id_fkey(full_name))')
     .eq('public_token', token).maybeSingle().returns<CustomerBookingRow>()
   if (result.error) throw result.error
   return result

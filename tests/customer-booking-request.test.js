@@ -3,6 +3,7 @@ const fs = require('node:fs');
 
 const migration = fs.readFileSync('supabase/migrations/20260925120000_customer_booking_requests.sql', 'utf8');
 const edge = fs.readFileSync('supabase/functions/customer-booking-request/index.ts', 'utf8');
+const reliable = fs.readFileSync('supabase/migrations/20261016193740_reliable_online_booking_durations_and_slots.sql', 'utf8');
 const publicHtml = fs.readFileSync('randevu/index.html', 'utf8');
 const publicJs = fs.readFileSync('randevu/booking.js', 'utf8');
 const adminJs = fs.readFileSync('booking-requests-admin-2.4.0.js', 'utf8');
@@ -31,14 +32,13 @@ assert.match(edge, /eq\('role', 'manager'\)/, 'Yönetici rolü server-side kontr
 assert.match(edge, /action === 'availability'/, 'Public müsaitlik endpointi olmalı');
 assert.match(edge, /booking_settings/, 'Varsayılan online çalışma saatleri okunmalı');
 assert.match(edge, /booking_schedule_overrides/, 'Tarih bazlı çalışma saati okunmalı');
-assert.match(edge, /const cadence = 30/, 'Online saatler yalnız saat ve yarım saatte başlamalı');
-assert.match(edge, /gt\('scheduled_end', from\)/, 'Önceki günden taşan randevular hesaba katılmalı');
+assert.match(reliable, /generate_series\([\s\S]*?,30\s*\)/, 'Online saatler yalnız saat ve yarım saatte başlamalı');
+assert.match(reliable, /coalesce\(a\.online_reserved_end,[\s\S]*?\)>p_start/, 'Önceki günden taşan randevular ve online koruma süreleri hesaba katılmalı');
 assert.doesNotMatch(edge, /const mustWaitForFullHour/, 'Gerçek bitiş dışında saat başı kuralı olmamalı');
 assert.doesNotMatch(edge, /appointmentEnd > currentHour/, 'İşlem ara saatten önce biterse ara saat gereksiz engellenmemeli');
-assert.match(edge, /minutes <= ONLINE_LAST_START_MINUTES && minutes \+ duration <= schedule\.close/, 'Online başlangıç en geç 19.00 olmalı ve hizmet kapanıştan önce tamamen bitmeli');
-assert.match(edge, /ONLINE_LAST_START_MINUTES = 19 \* 60/, 'Online son başlangıç saati 19.00 olarak sabitlenmeli');
-assert.match(edge, /db\.from\('closed_time_slots'\)/, 'Online müsaitlik çalışan kapalı saatlerini okumalı');
-assert.match(edge, /start < new Date\(item\.ends_at\)\.getTime\(\) && end > new Date\(item\.starts_at\)\.getTime\(\)/, 'Hizmet kapalı aralıkla kısmen çakışsa bile online saat sunulmamalı');
+assert.match(reliable, /extract\(hour from closing\)[\s\S]*?-duration/, 'Son saat hizmetin koruma süresine göre hesaplanmalı');
+assert.match(reliable, /from public\.closed_time_slots c[\s\S]*?c\.starts_at<p_start\+make_interval\(mins=>p_duration\) and c\.ends_at>p_start/, 'Hizmet kapalı aralıkla kısmen çakışsa bile online saat sunulmamalı');
+assert.match(edge, /db\.rpc\('online_booking_slots'/, 'Online müsaitlik ortak veritabanı motorundan gelmeli');
 assert.match(edge, /Number\(b.price \|\| 0\) - Number\(a.price \|\| 0\)/, 'Hizmetler sunucuda fiyatı büyükten küçüğe sıralanmalı');
 assert.match(edge, /https:\/\/app\.salonmodern\.com\.tr/, 'Özel uygulama alan adı CORS izin listesinde olmalı');
 assert.match(edge, /action === 'status'/, 'Güvenli tokenlı durum endpointi olmalı');
@@ -57,7 +57,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v128/, 'PWA cache sürümü güncel yayın sürümünde kalmalı');
+assert.match(shell, /salon-modern-shell-pwa-v12[89]/, 'PWA cache sürümü güncel yayın sürümünde kalmalı');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
