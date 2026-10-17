@@ -188,6 +188,36 @@ async function processDelivery(db: any, delivery: any) {
   return db.from("whatsapp_message_logs").update({ status: result.kind === "unknown" ? "delivery_unknown" : "failed", last_error: result.error ?? `meta_${result.httpStatus}`, metadata: { provider_response: result.body ?? null }, updated_at: new Date().toISOString() }).eq("id", delivery.id);
 }
 
+// Read-only provider-side check. Never enqueue or send a message from this endpoint.
+async function diagnoseYCloudTemplates() {
+  const values: Record<string, string> = {
+    "{musteri_adi}": "Ornek Musteri",
+    "{randevu_tarihi}": "18 Ekim 2026",
+    "{randevu_saati}": "14:30",
+    "{calisan_adi}": "Ornek Calisan",
+    "{islem_adi}": "Sac kesimi",
+  };
+  const pairs = await Promise.all(
+    Object.entries(YCLOUD_APPOINTMENT_TEMPLATES).map(async ([templateKey, name]) => {
+      const key = templateKey as keyof typeof YCLOUD_APPOINTMENT_TEMPLATES;
+      const tokens = YCLOUD_APPOINTMENT_PARAMETERS[key];
+      const expectedButtons = key === "appointment_reminder"
+        ? [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["📍 Yol Tarifi", "Yol Tarifi"] }]
+        : [];
+      const check = await ycloudTemplateApproved(
+        name, "tr", tokens.length, ycloudExpectedMessage(key, values),
+        tokens, values, Deno.env, fetch, expectedButtons,
+      );
+      return [key, { name, ready: check.ok, reason: check.ok ? null : check.reason }] as const;
+    }),
+  );
+  return {
+    provider: (Deno.env.get("WHATSAPP_PROVIDER") ?? "").toLowerCase(),
+    template_version: Deno.env.get("WHATSAPP_TEMPLATE_VERSION") ?? "unset",
+    templates: Object.fromEntries(pairs),
+  };
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   const secret = Deno.env.get("WHATSAPP_DISPATCH_SECRET") ?? "";
@@ -195,6 +225,7 @@ Deno.serve(async (request) => {
   let requestBody: any = {};
   try { requestBody = await request.json(); } catch { requestBody = {}; }
   if (requestBody?.mode === "diagnose") return json(await diagnoseMeta(String(requestBody?.expected_phone ?? "")));
+  if (requestBody?.mode === "diagnose_ycloud_templates") return json(await diagnoseYCloudTemplates());
   const provider = (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
   if (provider !== "meta" && provider !== "ycloud") return json({ ok: false, error: "unknown_whatsapp_provider" }, 503);
   if (provider === "ycloud" && !["legacy", "current"].includes(Deno.env.get("WHATSAPP_TEMPLATE_VERSION") ?? "")) return json({ ok: false, error: "unknown_whatsapp_template_version" }, 503);
