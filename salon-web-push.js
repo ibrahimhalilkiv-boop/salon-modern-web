@@ -65,18 +65,28 @@ async function disable(){try{var sub=await existing();if(sub&&currentUser)await 
 async function test(){try{if(!subscription)throw new Error('Önce bildirimleri açın.');var result=await server('test');toast('Test bildirimi',result.dispatched?.sent?'Gönderildi.':'Birkaç saniye içinde gelmeli.')}catch(error){toast('Test gönderilemedi',error.message||String(error))}}
 function install(){if(document.getElementById('pushSettings'))return;var app=document.getElementById('app'),nav=app?.querySelector('.nav');if(!app)return;var page=document.createElement('section');page.id='pushSettings';page.className='page';page.innerHTML='<div class="content"><button class="back" onclick="showPage(\'home\')">‹ Ana sayfa</button><h1 class="page-title">Bildirim Ayarları</h1><div class="total"><small>Randevu bildirimleri</small><strong id="webPushStatus">Kontrol ediliyor…</strong><small>Yeni randevu, güncelleme ve otomatik hatırlatma</small></div><button id="webPushEnable" class="fab" onclick="SalonWebPush.enable()">Randevu bildirimlerini aç</button><button id="webPushTest" class="fab" onclick="SalonWebPush.test()">Test bildirimi gönder</button><button id="webPushDisable" class="fab danger" onclick="SalonWebPush.disable()">Bu cihazda kapat</button><div class="security">Her telefon bildirim sistemine bir kez bağlanmalıdır. İzin yalnız bu düğmeye bastığınızda istenir. iPhone/iPad’de önce Salon Modern’i ana ekrana ekleyin.</div></div>';if(nav)app.insertBefore(page,nav);else app.appendChild(page);var homeContent=document.querySelector('#home .content');if(homeContent&&!document.getElementById('webPushPrompt')){var prompt=document.createElement('div');prompt.id='webPushPrompt';prompt.className='total';prompt.style.cssText='border:2px solid #bd8a3e;box-shadow:0 8px 24px rgba(0,0,0,.12)';prompt.innerHTML='<small>ÖNEMLİ · BİLDİRİMLER KAPALI</small><strong>Randevu bildirimlerini bu telefonda açın</strong><small>Atanan randevular ve otomatik hatırlatmalar, uygulama kapalıyken de gelir.</small><button type="button" class="fab" onclick="SalonWebPush.enable()">Şimdi bildirimleri aç</button>';homeContent.insertBefore(prompt,homeContent.firstChild)}render()}
 function isOneHourReminder(data){return data?.kind==='appointment_reminder'||data?.type==='appointment_reminder'||String(data?.title||'').toLocaleLowerCase('tr').includes('1 saat')}
-function openReminderWhatsApp(data, resolvedItem){
-  if(!authReady())return false;
-  var id=data?.appointmentId||data?.appointment_id||data?.id;if(!id)return false;
-  var item=resolvedItem||((typeof appts!=='undefined'&&Array.isArray(appts))?appts.find(function(row){return String(row.id)===String(id)}):null);
-  if(!item||typeof whatsappReminderUrl!=='function')return false;
-  var client=(typeof remoteClients!=='undefined'&&Array.isArray(remoteClients))?remoteClients.find(function(row){return String(row.id)===String(item.clientId)||String(row.full_name||'').toLocaleLowerCase('tr')===String(item.customer||'').toLocaleLowerCase('tr')}):null;
-  var rawPhone=item.phone||client?.phone||'',phone=typeof whatsappPhone==='function'?whatsappPhone(rawPhone):String(rawPhone).replace(/\D/g,'');
-  if(!/^90\d{10}$/.test(phone)){toast('Telefon numarası bulunamadı','Müşterinin telefon numarasını kontrol edin.');return true}
-  var url=whatsappReminderUrl(item.customer,phone,typeof appointmentDate==='function'?appointmentDate(item):data?.appointmentDate,item.time,item.staff,item.amount);
-  var clean=new URL(location.href);['date','appointment','kind'].forEach(function(key){clean.searchParams.delete(key)});history.replaceState(history.state,'',clean.href);
-  remember(data);if(pendingOpen===data){sessionStorage.removeItem(PENDING_KEY);pendingOpen=null}
-  location.assign(url);return true
+async function openReminderAppointment(data){
+  if(!authReady())throw new Error('Oturum doğrulaması bekleniyor.');
+  var id=data.appointmentId||data.appointment_id;
+  if(!id){toast('Randevu açılamadı','İlgili randevu bulunamadı. Takvimi kontrol edin.');return}
+  if(typeof reloadRemoteData==='function')await reloadRemoteData();
+  // The authenticated query and existing role check both have to permit this appointment.
+  var result=await salonDb.from('appointments').select('*').eq('id',id).maybeSingle();
+  if(result.error)throw result.error;
+  if(!result.data||result.data.status!=='confirmed'){
+    toast('Randevu açılamadı','Randevu bulunamadı veya iptal edilmiş. Takvimi kontrol edin.');return
+  }
+  if(typeof remoteAppointment!=='function'||typeof canManageOwnAppointment!=='function')throw new Error('Takvim henüz hazır değil.');
+  var item=remoteAppointment(result.data);
+  if(!canManageOwnAppointment(item)){
+    toast('Randevu açılamadı','Bu randevuyu görüntüleme yetkiniz yok. Takvimi kontrol edin.');return
+  }
+  if(typeof appts!=='undefined'&&Array.isArray(appts)&&!appts.some(function(row){return String(row.id)===String(id)}))appts.push(item);
+  if(typeof appointmentDate==='function')teamCalendarDate=appointmentDate(item);
+  if(typeof teamCalendarMode!=='undefined')teamCalendarMode='day';
+  if(typeof renderCalendar==='function')renderCalendar();
+  if(typeof openAppointmentModal!=='function')throw new Error('Randevu ekranı henüz hazır değil.');
+  openAppointmentModal('',item.id);
 }
 async function openNotification(data){
   if(!data)return;
@@ -94,19 +104,8 @@ async function openNotification(data){
   if(data.appointmentDate)teamCalendarDate=data.appointmentDate;
   showPage('calendar');
   if(isOneHourReminder(data)){
-    if(openReminderWhatsApp(data))return;
-    if(typeof reloadRemoteData==='function')await reloadRemoteData();
-    if(!authReady())throw new Error('Oturum doğrulaması bekleniyor.');
-    if(openReminderWhatsApp(data))return;
-    // The calendar query may be paginated. Resolve only this notification's
-    // appointment via the authenticated client (RLS remains authoritative).
-    var id=data.appointmentId||data.appointment_id;
-    if(id&&typeof remoteAppointment==='function'){
-      var result=await salonDb.from('appointments').select('*').eq('id',id).maybeSingle();
-      if(result.error)throw result.error;
-      if(result.data&&openReminderWhatsApp(data,remoteAppointment(result.data)))return;
-    }
-    throw new Error('Hatırlatma randevusu henüz yüklenemedi.');
+    await openReminderAppointment(data);
+    return;
   }
   if(typeof reloadRemoteData==='function')await reloadRemoteData()
 }
@@ -135,5 +134,5 @@ var enter=window.enterApp;window.enterApp=function(){var result=enter.apply(this
 var leave=window.logout;window.logout=async function(){explicitLogout=true;pendingOpen=null;sessionStorage.removeItem(PENDING_KEY);clearNotificationUrl();try{var sub=await existing();if(sub&&currentUser)await salonDb.from('web_push_subscriptions').update({active:false,updated_at:new Date().toISOString()}).eq('endpoint',sub.endpoint).eq('user_id',currentUser.id)}catch(_){}deviceSynced=false;return leave.apply(this,arguments)};
 if(salonDb?.auth?.onAuthStateChange)salonDb.auth.onAuthStateChange(function(event,session){if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION')&&session?.user)setTimeout(sync,0)});
 setInterval(function(){if(!document.hidden&&Notification.permission==='granted')sync()},5*60*1000);
-window.SalonWebPush={enable:enable,disable:disable,test:test,sync:sync,render:render,catchUpReminders:catchUpReminders,reminderDiagnostics:reminderDiagnostics};
+window.SalonWebPush={enable:enable,disable:disable,test:test,sync:sync,render:render,catchUpReminders:catchUpReminders,reminderDiagnostics:reminderDiagnostics,openNotification:route};
 })();

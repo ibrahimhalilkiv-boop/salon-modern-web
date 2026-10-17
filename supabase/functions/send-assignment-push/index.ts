@@ -52,17 +52,6 @@ function firebaseErrorCode(value: unknown): string {
   return error?.details?.find((item) => item.errorCode)?.errorCode ?? "";
 }
 
-function whatsappPhone(value: string): string {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("0")) digits = `90${digits.slice(1)}`;
-  else if (digits.length === 10) digits = `90${digits}`;
-  return digits;
-}
-
-function renderTemplate(content: string, values: Record<string, string>): string {
-  return Object.entries(values).reduce((result, [token, value]) => result.split(token).join(value), content);
-}
-
 Deno.serve(async (request: Request) => {
   try {
     if (!projectId || !clientEmail || !privateKey || !serviceKey) {
@@ -123,30 +112,9 @@ Deno.serve(async (request: Request) => {
 
     const token = await accessToken();
     const appointmentDate = appointment?.scheduled_at?.slice(0, 10) ?? "";
-    let whatsappUrl = "";
     let reminderDedupeKey = "";
     if (notification.kind === "appointment_reminder" && appointment) {
-      const [{ data: employee }, { data: template }] = await Promise.all([
-        supabase.from("profiles").select("full_name").eq("id", appointment.employee_id).maybeSingle(),
-        supabase.from("message_templates").select("content").eq("template_key", "appointment_reminder").maybeSingle(),
-      ]);
       const scheduled = new Date(appointment.scheduled_at);
-      const dateText = new Intl.DateTimeFormat("tr-TR", {
-        timeZone: "Europe/Istanbul", day: "numeric", month: "long", weekday: "long",
-      }).format(scheduled);
-      const timeText = new Intl.DateTimeFormat("tr-TR", {
-        timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-      }).format(scheduled);
-      const defaultTemplate = "Merhaba {musteri_adi},\n\nSalon Modern randevunuzu hatırlatmak isteriz.\n\n📅 Tarih: {randevu_tarihi}\n🕒 Saat: {randevu_saati}\n👤 Çalışan: {calisan_adi}\n\nSizi bekliyoruz.";
-      const message = renderTemplate(template?.content || defaultTemplate, {
-        "{musteri_adi}": appointment.client_name || "",
-        "{randevu_tarihi}": dateText,
-        "{randevu_saati}": timeText,
-        "{calisan_adi}": employee?.full_name || "",
-        "{ucret}": Number(appointment.amount || 0).toLocaleString("tr-TR"),
-      });
-      const phone = whatsappPhone(appointment.client_phone || "");
-      if (phone) whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
       reminderDedupeKey = `appointment_reminder_${appointment.id}_${scheduled.getTime()}`;
     }
     let delivered = 0;
@@ -181,7 +149,6 @@ Deno.serve(async (request: Request) => {
                 title: notification.title,
                 body: notification.body,
                 kind: notification.kind || "",
-                whatsapp_url: whatsappUrl,
                 dedupe_key: reminderDedupeKey,
               },
               android: {

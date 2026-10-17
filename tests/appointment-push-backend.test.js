@@ -16,4 +16,9 @@ const creatorReminder = fs.readFileSync('supabase/migrations/20260921121500_rout
 assert.match(creatorReminder, /select a\.created_by,a\.id,'appointment_reminder'/, 'Bir saatlik hatırlatma randevuyu ekleyen kullanıcıya gitmeli');
 assert.match(creatorReminder, /a\.created_by is not null/, 'Sahipsiz randevu için hatırlatma oluşturulmamalı');
 
+const pushDispatcher = fs.readFileSync('supabase/functions/send-assignment-push/index.ts', 'utf8');
+assert.match(pushDispatcher, /notification:\s*\{\s*title: notification\.title,\s*body: notification\.body,/, 'Hatırlatma başlığı ve içeriği FCM bildiriminde korunmalı');
+assert.match(pushDispatcher, /reminderDedupeKey = `appointment_reminder_/, 'Hatırlatma tekrar koruması korunmalı');
+assert.doesNotMatch(pushDispatcher, /whatsapp_url|https:\/\/wa\.me\//, 'Çalışan push bildirimi WhatsApp adresi taşımamalı');
+
 console.log('PASS appointment assignment and reminder push backend');
