@@ -177,9 +177,21 @@ function phase2Periods(){
   return {today:phase2Today(),week:weekStart.getFullYear()+'-'+String(weekStart.getMonth()+1).padStart(2,'0')+'-'+String(weekStart.getDate()).padStart(2,'0'),month:phase2Today().slice(0,7)};
 }
 // Appointment amounts booked in the same period as the displayed count (not cash collected).
-function phase2PerformanceTotal(items){
+function phase2PerformanceTotal(items,profile){
   if(items.some(function(item){return item.amount==null||item.amount===''||!Number.isFinite(Number(item.amount))}))return null;
-  return items.reduce(function(sum,item){return sum+Number(item.amount)},0);
+  var isEmployee=profile.role==='employee',rate=Number(profile.commission_pct);
+  if(isEmployee&&(profile.commission_pct==null||profile.commission_pct===''||!Number.isFinite(rate)||rate<0||rate>100))return null;
+  return items.reduce(function(sum,item){
+    var amount=Number(item.amount);
+    // Same commission method as calculate_daily_cash_summary: round per appointment.
+    return sum+(isEmployee?Math.round((amount*rate/100+Number.EPSILON)*100)/100:amount);
+  },0);
+}
+function phase2PerformanceOrder(profile){
+  if(profile.role!=='employee')return 10;
+  if(profile.username==='cengiz.bavkir')return 0;
+  if(profile.username==='talip.kose')return 1;
+  return 2;
 }
 function phase2WeekEnd(start){
   var day=new Date(start+'T12:00:00');day.setDate(day.getDate()+6);
@@ -188,15 +200,15 @@ function phase2WeekEnd(start){
 function phase2RenderEmployeePerformance(){
   var holder=document.getElementById('employeePerformanceContent');if(!holder)return;if(!phase2IsManager()){holder.innerHTML='<div class="empty">Bu bölüm yalnızca yöneticilere açıktır.</div>';return}
   var p=phase2Periods(),now=Date.now();
-  holder.innerHTML=remoteProfiles.filter(function(profile){return profile.active&&profile.username!=='salon.modern'}).map(function(profile){
+  holder.innerHTML=remoteProfiles.filter(function(profile){return profile.active&&profile.username!=='salon.modern'}).slice().sort(function(a,b){var rank=phase2PerformanceOrder(a)-phase2PerformanceOrder(b);return rank||String(a.full_name||'').localeCompare(String(b.full_name||''),'tr')}).map(function(profile){
     var own=appts.filter(function(item){return String(item.employeeId)===String(profile.id)&&item.status!=='cancelled'}),past=own.filter(function(item){return Date.parse(remoteSchedule(appointmentDate(item),item.time))<=now&&item.status!=='no_show'}),customerCounts={};past.forEach(function(item){if(item.clientId)customerCounts[item.clientId]=(customerCounts[item.clientId]||0)+1});
     var unique=Object.keys(customerCounts),repeat=unique.filter(function(id){return customerCounts[id]>1}).length,monthItems=own.filter(function(item){return appointmentDate(item).startsWith(p.month)}),bookedMinutes=monthItems.reduce(function(sum,item){return sum+Number(item.duration||30)},0),elapsedDays=Math.max(1,new Date().getDate()),occupancy=Math.min(100,Math.round(bookedMinutes/(elapsedDays*16*60)*100));
     var todayItems=own.filter(function(item){return appointmentDate(item)===p.today});
     var weekEnd=phase2WeekEnd(p.week),weekItems=own.filter(function(item){var date=appointmentDate(item);return date>=p.week&&date<=weekEnd});
-    var todayAmount=phase2PerformanceTotal(todayItems),weekAmount=phase2PerformanceTotal(weekItems);
+    var todayAmount=phase2PerformanceTotal(todayItems,profile),weekAmount=phase2PerformanceTotal(weekItems,profile);
     var busy={};own.forEach(function(item){var key=appointmentDate(item)+' '+item.time.slice(0,2)+':00';busy[key]=(busy[key]||0)+1});var busiest=Object.keys(busy).sort(function(a,b){return busy[b]-busy[a]})[0]||'Yeterli veri yok';
-    var reliable=monthItems.every(function(item){return Number.isFinite(Number(item.amount))}),revenue=reliable?monthItems.reduce(function(sum,item){return sum+Number(item.amount||0)},0):null;
-    return '<section class="phase2-card"><div class="phase2-section-title"><h2>'+safe(profile.full_name)+'</h2><span class="role">'+(profile.role==='manager'?'Yönetici':'Çalışan')+'</span></div><div class="phase2-metrics phase2-performance"><div><strong>'+todayItems.length+'</strong><span>Bugün</span><small class="phase2-period-total">Toplam tutar<br>'+(todayAmount===null?'Yeterli veri yok':phase2Money(todayAmount))+'</small></div><div><strong>'+weekItems.length+'</strong><span>Bu hafta</span><small class="phase2-period-total">Toplam tutar<br>'+(weekAmount===null?'Yeterli veri yok':phase2Money(weekAmount))+'</small></div><div><strong>'+monthItems.length+'</strong><span>Bu ay</span></div><div><strong>'+past.length+'</strong><span>Tamamlanan</span></div><div><strong>'+unique.length+'</strong><span>Müşteri</span></div><div><strong>'+(unique.length?Math.round(repeat/unique.length*100):0)+'%</strong><span>Tekrar oranı</span></div><div><strong>'+occupancy+'%</strong><span>Doluluk</span></div><div><strong>'+(revenue==null?'Yeterli veri yok':phase2Money(revenue))+'</strong><span>Kayıtlı ciro</span></div></div><div class="notice">En yoğun zaman: '+safe(busiest)+'</div></section>';
+    var employeeRole=profile.role==='employee',monthAmount=phase2PerformanceTotal(monthItems,profile),amountLabel=employeeRole?'Prim toplamı':'Toplam tutar';
+    return '<section class="phase2-card"><div class="phase2-section-title"><h2>'+safe(profile.full_name)+'</h2><span class="role">'+(profile.role==='manager'?'Yönetici':'Çalışan')+'</span></div><div class="phase2-metrics phase2-performance"><div><strong>'+todayItems.length+'</strong><span>Bugün</span><small class="phase2-period-total">'+amountLabel+'<br>'+(todayAmount===null?'Yeterli veri yok':phase2Money(todayAmount))+'</small></div><div><strong>'+weekItems.length+'</strong><span>Bu hafta</span><small class="phase2-period-total">'+amountLabel+'<br>'+(weekAmount===null?'Yeterli veri yok':phase2Money(weekAmount))+'</small></div><div><strong>'+monthItems.length+'</strong><span>Bu ay</span></div><div><strong>'+past.length+'</strong><span>Tamamlanan</span></div><div><strong>'+unique.length+'</strong><span>Müşteri</span></div><div><strong>'+(unique.length?Math.round(repeat/unique.length*100):0)+'%</strong><span>Tekrar oranı</span></div><div><strong>'+occupancy+'%</strong><span>Doluluk</span></div><div><strong>'+(monthAmount===null?'Yeterli veri yok':phase2Money(monthAmount))+'</strong><span>'+(employeeRole?'Aylık prim':'Kayıtlı ciro')+'</span></div></div><div class="notice">En yoğun zaman: '+safe(busiest)+'</div></section>';
   }).join('')||'<div class="empty">Aktif çalışan yok.</div>';
 }
 
