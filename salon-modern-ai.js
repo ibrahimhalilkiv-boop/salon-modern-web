@@ -14,11 +14,11 @@
   }
   function draw() {
     var m = metric(), manager = typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'yonetici';
-    root.innerHTML = '<div class="sm-ai"><header class="sm-ai-header"><button type="button" class="sm-ai-back" onclick="showPage(\'home\')" aria-label="Ana sayfaya dön">‹</button><div><small>SALON MODERN</small><h1>Salon Modern AI</h1></div><button type="button" class="sm-ai-new" id="smAiNew" aria-label="Yeni sohbet">＋</button></header>' +
+    root.innerHTML = '<div class="sm-ai"><header class="sm-ai-header"><button type="button" class="sm-ai-back" onclick="showPage(\'home\')" aria-label="Ana sayfaya dön">‹</button><div><small>SALON MODERN</small><h1>MORİ</h1></div><button type="button" class="sm-ai-new" id="smAiNew" aria-label="Yeni sohbet">＋</button></header>' +
       '<section class="sm-ai-summary" aria-label="Günlük işletme özeti"><div><small>GÜNLÜK İŞLETME ÖZETİ</small><strong>' + (m ? m.appointments : '—') + ' randevu</strong><span>Bugünün akışı bir bakışta</span></div><div class="sm-ai-summary-icon">✦</div></section>' +
       '<nav class="sm-ai-tabs" aria-label="AI bölümleri"><button type="button" data-view="chat" class="' + (state.view === 'chat' ? 'active' : '') + '">Sohbet</button><button type="button" data-view="alerts" class="' + (state.view === 'alerts' ? 'active' : '') + '">Uyarılar</button><button type="button" data-view="history" class="' + (state.view === 'history' ? 'active' : '') + '">Geçmiş</button></nav>' +
       '<div class="sm-ai-body">' + (state.view === 'chat' ? chatHtml() : state.view === 'alerts' ? alertsHtml(m, manager) : historyHtml()) + '</div>' +
-      (state.view === 'chat' ? '<form class="sm-ai-composer" id="smAiForm"><label class="sr-only" for="smAiInput">Mesajınız</label><textarea id="smAiInput" rows="1" maxlength="1200" placeholder="Salon Modern AI’a yazın…" enterkeyhint="send"></textarea><button type="submit" id="smAiSend" ' + (state.busy ? 'disabled' : '') + ' aria-label="Mesajı gönder">➤</button></form>' : '') + '</div>';
+      (state.view === 'chat' ? '<form class="sm-ai-composer" id="smAiForm"><label class="sr-only" for="smAiInput">Mesajınız</label><textarea id="smAiInput" rows="1" maxlength="1200" placeholder="MORİ’ye yazın…" enterkeyhint="send"></textarea><button type="submit" id="smAiSend" ' + (state.busy ? 'disabled' : '') + ' aria-label="Mesajı gönder">➤</button></form>' : '') + '</div>';
     root.querySelectorAll('[data-view]').forEach(function (button) { button.onclick = function () { state.view = button.dataset.view; draw(); if (state.view === 'history') loadHistory(); }; });
     root.querySelector('#smAiNew').onclick = newChat;
     var mic = root.querySelector('#smAiMic'); if (mic) mic.onclick = toggleMic;

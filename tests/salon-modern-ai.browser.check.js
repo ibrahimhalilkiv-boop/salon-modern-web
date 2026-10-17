@@ -26,7 +26,7 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
       window.__messages = [];
     });
     await page.addScriptTag({ content: fs.readFileSync('salon-modern-ai.js', 'utf8') });
-    assert.equal(await page.locator('h1').innerText(), 'Salon Modern AI');
+    assert.equal(await page.locator('h1').innerText(), 'MORİ');
     assert.equal(await page.locator('.sm-ai-summary strong').innerText(), '5 randevu');
     assert.equal(await page.locator('#smAiMic').count(), 1);
     assert.equal(await page.locator('#salonAssistantInput, .assistant-examples, .salon-voice-controls').count(), 0);
@@ -40,6 +40,6 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     assert.match(await page.locator('.sm-ai-alerts').innerText(), /Geciken/);
     await page.locator('[data-view="history"]').click();
     assert.match(await page.locator('.sm-ai-history').innerText(), /30 gün/);
-    console.log('PASS Salon Modern AI: mobile shell, text chat, alerts, history, legacy UI absent');
+    console.log('PASS MORİ: mobile shell, text chat, alerts, history, legacy UI absent');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

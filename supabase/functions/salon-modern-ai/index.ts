@@ -9,7 +9,7 @@ const dateRange = (day: string) => ({ start: day + "T00:00:00+03:00", end: nextD
 
 type Message = { role: "user" | "assistant"; content: string };
 type ToolName = "none" | "daily_summary" | "appointments" | "alerts";
-const system = `Sen Salon Modern AI'sın. Türkçe, doğal ve kısa konuş. Kullanıcının önceki mesajlarını bağlam olarak kullan. İşletme verisi gerektiğinde yalnızca daily_summary, appointments veya alerts araçlarından birini seç. Araç sonuçları güvenilir sayısal verilerdir; sonuçta olmayan müşteri adı, telefon, kasa tutarı veya randevu ayrıntısı uydurma. Hiçbir değişiklik yapma veya WhatsApp gönderme. Yanıtını yalnızca şu JSON biçiminde ver: {"tool":"none|daily_summary|appointments|alerts","answer":"Türkçe yanıt"}. Bir veri sorusu için tool seç, answer alanını araç sonucu gelene kadar boş bırak. Genel sohbet ve açıklamalar için tool none seç.`;
+const system = `Sen MORİ'sin, Salon Modern'in yapay zekâ asistanısın. Türkçe, doğal ve kısa konuş. Kullanıcının önceki mesajlarını bağlam olarak kullan. İşletme verisi gerektiğinde yalnızca daily_summary, appointments veya alerts araçlarından birini seç. Araç sonuçları güvenilir sayısal verilerdir; sonuçta olmayan müşteri adı, telefon, kasa tutarı veya randevu ayrıntısı uydurma. Hiçbir değişiklik yapma veya WhatsApp gönderme. Yanıtını yalnızca şu JSON biçiminde ver: {"tool":"none|daily_summary|appointments|alerts","answer":"Türkçe yanıt"}. Bir veri sorusu için tool seç, answer alanını araç sonucu gelene kadar boş bırak. Genel sohbet ve açıklamalar için tool none seç.`;
 
 async function model(messages: Message[], instruction: string): Promise<string> {
   const provider = Deno.env.get("SALON_AI_PROVIDER") || "cloudflare";
@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
     if (tool !== "none") {
       const result = await readTool(tool, admin, user.id, profile.role === "manager");
       answer = await model([...messages, { role: "assistant", content: `Salt okunur ${tool} araç sonucu: ${JSON.stringify(result)}` }],
-        "Sen Salon Modern AI'sın. Araç sonucuna dayanarak kullanıcının sorusunu doğal Türkçeyle yanıtla. Yalnızca araç sonucundaki bilgileri kullan. Müşteri adı, telefon veya kasa tutarı uydurma. Düz metin yanıt ver, JSON kullanma.");
+        "Sen MORİ'sin, Salon Modern'in yapay zekâ asistanısın. Araç sonucuna dayanarak kullanıcının sorusunu doğal Türkçeyle yanıtla. Yalnızca araç sonucundaki bilgileri kullan. Müşteri adı, telefon veya kasa tutarı uydurma. Düz metin yanıt ver, JSON kullanma.");
     }
     if (!answer) throw new Error("AI boş yanıt verdi.");
     const { error: saveError } = await admin.from("salon_ai_messages").insert([
