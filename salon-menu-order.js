@@ -2,7 +2,7 @@
   'use strict';
   function arrange(){
     var drawer=document.querySelector('#drawerLayer .drawer');if(!drawer)return;
-    var selectors=["[onclick=\"drawerPage('home')\"]","[onclick=\"drawerPage('calendar')\"]","[onclick=\"drawerPage('statistics')\"]",'#drawerEmployeePerformance','#finance230Menu','#drawerProducts','#drawerProductSale','#drawerDebts','#drawerCustomers','#drawerSmartAnalysis'];
+    var selectors=["[onclick=\"drawerPage('home')\"]","[onclick=\"drawerPage('calendar')\"]","[onclick=\"drawerPage('statistics')\"]",'#drawerEmployeePerformance','#finance230Menu','#drawerProducts','#drawerProductSale','#drawerDebts','#drawerCustomers','#drawerSmartAnalysis','#drawerSalonAI'];
     var buttons=selectors.map(function(selector){return drawer.querySelector(selector)}).filter(Boolean);
     if(!buttons.length)return;
     var marker=document.createComment('primary menu order');drawer.insertBefore(marker,buttons[0]);

@@ -112,7 +112,7 @@ function phase2SummaryHtml(){
   return '<section class="phase2-card phase2-summary"><small>GÜNLÜK SALON ÖZETİ</small><h2>'+safe(title)+'</h2><div class="phase2-metrics"><div><strong>'+m.appointments+'</strong><span>Randevu</span></div><div><strong>'+m.due+'</strong><span>Zamanı gelen</span></div><div><strong>'+m.overdue+'</strong><span>Geciken</span></div><div><strong>'+m.risk+'</strong><span>Riskli</span></div></div><div class="phase2-gapline"><b>İlk boşluk</b><span>'+gapText+'</span></div><div class="phase2-occupancies">'+phase2OccupancyCards()+'</div></section>';
 }
 function phase2AssistantHtml(){
-  return '<section class="phase2-card phase2-assistant"><small>SALON ASİSTANI</small><h2>İstediğiniz soruyu yazın veya söyleyin</h2><p class="phase2-assistant-hint">Aşağıdaki örneklerle sınırlı değildir; müşteri, randevu, takvim ve analiz hakkında kendi cümlenizi kullanabilirsiniz.</p><form onsubmit="runPhase2HomeAssistant(event)"><div class="phase2-query"><input id="phase2AssistantInput" autocomplete="off" enterkeyhint="send" placeholder="Örn. Ahmet en son ne zaman geldi?"><button type="submit">Çalıştır</button></div></form><div class="phase2-chips"><button onclick="phase2QuickCommand(\'Yarın boş saatler ne?\')">Boş Saatler</button><button onclick="phase2QuickCommand(\'Geciken müşterileri göster\')">Geciken Müşteriler</button><button onclick="phase2QuickCommand(\'Kaybedilme riski olan müşterileri göster.\')">Riskli Müşteriler</button><button onclick="phase2QuickCommand(\'Bugünkü randevuları göster.\')">Bugünkü Randevular</button><button onclick="phase2QuickCommand(\'Ne sorabilirim?\')">Yardım</button></div><div id="phase2AssistantResult" class="assistant-result"></div></section>';
+  return '<section class="phase2-card phase2-assistant"><small>SALON MODERN AI</small><h2>İşletmenizin AI alanı</h2><p>Günlük durumu görün, Türkçe sohbet edin ve uyarılarınızı izleyin.</p><button type="button" class="save" onclick="showPage(\'salonAssistant\')">Salon Modern AI’ı aç</button></section>';
 }
 function phase2AttentionCards(rows,limit,withWhatsapp){
   return rows.slice(0,limit||20).map(function(row){
@@ -129,16 +129,9 @@ function phase2MoneyCard(){
 function phase2RenderHome(){
   var home=document.getElementById('home');if(!home||!currentUser)return;
   var metrics=phase2SummaryMetrics(),attention=phase2Actionable(false);
-  var roleShortcut=phase2IsManager()?'<button onclick="showPage(\'managedAppointments\')"><b>▤</b>Randevu Yönetimi</button>':'<button onclick="showPage(\'salonAssistant\')"><b>✦</b>Asistan</button>';
+  var roleShortcut=phase2IsManager()?'<button onclick="showPage(\'managedAppointments\')"><b>▤</b>Randevu Yönetimi</button>':'<button onclick="showPage(\'salonAssistant\')"><b>✦</b>Salon Modern AI</button>';
   home.innerHTML='<div class="phase2-home"><div class="phase2-home-top"><button class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><div><small>SALON MODERN</small><h1>Ana Sayfa</h1></div></div>'+phase2SummaryHtml()+phase2AssistantHtml()+'<section class="phase2-card"><div class="phase2-section-title"><div><small>HIZLI İŞLEMLER</small><h2>Tek dokunuşla erişim</h2></div></div><div class="phase2-actions"><button onclick="openAppointmentModal(\'\',null,\'\')"><b>＋</b>Yeni Randevu</button><button class="phase2-calendar-shortcut" onclick="showPage(\'calendar\')"><b>📅</b>Takvim</button>'+roleShortcut+'<button onclick="showPage(\'statistics\')"><b>▥</b>İstatistikler</button></div></section>'+phase2MoneyCard()+'<section class="phase2-card"><div class="phase2-section-title"><div><small>AKILLI MÜŞTERİ UYARILARI</small><h2>Bugün ilgilenilecek müşteriler</h2></div>'+(phase2IsManager()?'<button onclick="showPage(\'recoveryCenter\')">Tümü ›</button>':'')+'</div><div class="phase2-countline">'+metrics.due+' zamanı gelen · '+metrics.overdue+' geciken · '+metrics.risk+' riskli</div>'+phase2AttentionCards(attention,6,false)+'</section></div>';
 }
-window.phase2QuickCommand=function(command){var input=document.getElementById('phase2AssistantInput');if(input)input.value=command;runPhase2HomeAssistant({preventDefault:function(){}})};
-window.runPhase2HomeAssistant=function(event){
-  event.preventDefault();var homeInput=document.getElementById('phase2AssistantInput'),fullInput=document.getElementById('salonAssistantInput'),fullResult=document.getElementById('salonAssistantResult'),homeResult=document.getElementById('phase2AssistantResult');
-  if(!homeInput||!fullInput||!fullResult||!homeResult||!homeInput.value.trim())return;
-  fullInput.value=homeInput.value.trim();runSalonAssistant({preventDefault:function(){}});homeResult.innerHTML=fullResult.innerHTML;
-  if(homeResult.querySelector('.assistant-confirm'))homeResult.insertAdjacentHTML('beforeend','<button class="save" onclick="showPage(\'salonAssistant\')">Onay ekranını aç</button>');
-};
 
 function phase2InstallPage(id,title,managerOnly){
   var page=document.getElementById(id);if(page)return page;
