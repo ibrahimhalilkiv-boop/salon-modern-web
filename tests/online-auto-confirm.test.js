@@ -16,7 +16,7 @@ const services = Array.from({ length: 6 }, (_, i) => ({
   duration_minutes: [30, 30, 30, 30, 30, 15][i],
   online_duration_minutes: [60, 60, 60, 60, 30, 30][i],
 })).reverse();
-let override = null, existing = null, rpcError = null, bookingAllowed = true;
+let override = null, existing = null, rpcError = null, bookingAllowed = true, onlineEnabled = true;
 let slots = [{ time: '10:00', employeeIds: ['e1'] }, { time: '19:00', employeeIds: ['e1'] }];
 const rpcCalls = [];
 const db = {
@@ -41,7 +41,7 @@ const db = {
       then(resolve, reject) {
         const data = table === 'services' ? (single ? services.find((item) => item.id === filters.id) : services)
           : table === 'profiles' ? (single ? { id: 'e1' } : [{ id: 'e1', full_name: 'Çalışan' }])
-          : table === 'booking_settings' ? { online_booking_enabled: true, default_open_time: '08:30', default_close_time: '20:00' }
+          : table === 'booking_settings' ? { online_booking_enabled: onlineEnabled, default_open_time: '08:30', default_close_time: '20:00' }
           : table === 'booking_schedule_overrides' ? override
           : table === 'online_booking_requests' ? existing : [];
         return Promise.resolve({ data, error: null, count: 0 }).then(resolve, reject);
@@ -81,6 +81,14 @@ const create = (payload) => handler(new Request('https://test/?action=create', {
 
   const payload = { customerName: 'Test Person', customerPhone: '05000000001', serviceId: ids[0],
     employeeId: 'e1', date: '2026-10-05', time: '10:00', submissionToken: '00000000-0000-4000-8000-000000000011' };
+  onlineEnabled = false;
+  response = await handler(new Request(`https://test/?action=availability&date=2026-10-05&service=${ids[0]}`));
+  assert.deepEqual((await response.json()).slots, [], 'Online switch hides customer availability');
+  const writesBeforeClosedCreate = rpcCalls.length;
+  response = await create(payload);
+  assert.equal(response.status, 409, 'Online switch rejects customer create server-side');
+  assert.equal(rpcCalls.length, writesBeforeClosedCreate, 'Closed online booking must not create an appointment');
+  onlineEnabled = true;
   response = await create(payload);
   assert.equal(response.status, 201);
   assert.equal((await response.json()).status, 'approved');
