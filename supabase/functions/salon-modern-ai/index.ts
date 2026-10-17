@@ -9,7 +9,7 @@ const dateRange = (day: string) => ({ start: day + "T00:00:00+03:00", end: nextD
 
 type Message = { role: "user" | "assistant"; content: string };
 type ToolName = "none" | "daily_summary" | "appointments" | "alerts";
-const system = `Sen MORİ'sin, Salon Modern'in yapay zekâ asistanısın. Türkçe, doğal ve kısa konuş. Kullanıcının önceki mesajlarını bağlam olarak kullan. İşletme verisi gerektiğinde yalnızca daily_summary, appointments veya alerts araçlarından birini seç. Araç sonuçları güvenilir sayısal verilerdir; sonuçta olmayan müşteri adı, telefon, kasa tutarı veya randevu ayrıntısı uydurma. Hiçbir değişiklik yapma veya WhatsApp gönderme. Yanıtını yalnızca şu JSON biçiminde ver: {"tool":"none|daily_summary|appointments|alerts","answer":"Türkçe yanıt"}. Bir veri sorusu için tool seç, answer alanını araç sonucu gelene kadar boş bırak. Genel sohbet ve açıklamalar için tool none seç.`;
+const system = `Sen MORİ'sin, Salon Modern'in yapay zekâ asistanısın. Türkçe, doğal ve kısa konuş. Kullanıcının önceki mesajlarını bağlam olarak kullan; araç seçerken en son kullanıcının ne sorduğunu esas al, önceki konunun yanıtını tekrarlama. İşletme verisi gerektiğinde yalnızca daily_summary, appointments veya alerts araçlarından birini seç. Randevu adedi ve saatleri için appointments; geliş zamanı gelen, geciken veya riskli müşteri sayıları için alerts; genel günlük işletme özeti veya randevu ve uyarıların birlikte sorulduğu durumlar için daily_summary seç. Araç sonuçları güvenilir sayısal verilerdir; sonuçta olmayan müşteri adı, telefon, kasa tutarı veya randevu ayrıntısı uydurma. Hiçbir değişiklik yapma veya WhatsApp gönderme. Yanıtını yalnızca şu JSON biçiminde ver: {"tool":"none|daily_summary|appointments|alerts","answer":"Türkçe yanıt"}. Bir veri sorusu için tool seç, answer alanını araç sonucu gelene kadar boş bırak. Genel sohbet ve açıklamalar için tool none seç.`;
 
 const privateText = (value: string) => value
   .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[e-posta]")
@@ -106,6 +106,10 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return respond({ error: "Geçersiz istek." }, 400); }
   const action = body.action;
+  if (action === "summary") {
+    try { return respond({ summary: await readTool("daily_summary", admin, user.id, profile.role === "manager") }); }
+    catch { return respond({ error: "Günlük özet alınamadı." }, 503); }
+  }
   if (action === "history") {
     const { data, error } = await admin.from("salon_ai_messages").select("session_id,role,content,created_at")
       .eq("user_id", user.id).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()).order("created_at", { ascending: false }).limit(160);
@@ -131,7 +135,7 @@ Deno.serve(async (req) => {
     if (tool !== "none") {
       const result = await readTool(tool, admin, user.id, profile.role === "manager");
       answer = await model([...messages, { role: "assistant", content: `Salt okunur ${tool} araç sonucu: ${JSON.stringify(result)}` }],
-        "Sen MORİ'sin, Salon Modern'in yapay zekâ asistanısın. Araç sonucuna dayanarak kullanıcının sorusunu doğal Türkçeyle yanıtla. Yalnızca araç sonucundaki bilgileri kullan. Müşteri adı, telefon veya kasa tutarı uydurma. Düz metin yanıt ver, JSON kullanma.");
+        "Sen MORİ'sin, Salon Modern'in yapay zekâ asistanısın. Araç sonucuna dayanarak kullanıcının son sorusunu doğal Türkçeyle yanıtla. Yalnızca araç sonucundaki bilgileri kullan. Kullanıcı hem randevu hem uyarı özeti istediyse ikisinin sayılarını da belirt. Uyarılardaki geciken, beklenen tekrar ziyaret süresini aşan müşteridir; kaçırılmış randevu anlamına gelmez. Müşteri adı, telefon veya kasa tutarı uydurma. Markdown kullanmadan düz metin yanıt ver, JSON kullanma.");
     }
     if (!answer) throw new Error("AI boş yanıt verdi.");
     const { error: saveError } = await admin.from("salon_ai_messages").insert([

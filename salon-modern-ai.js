@@ -1,14 +1,15 @@
 (function () {
   'use strict';
-  var state = { sessionId: crypto.randomUUID(), messages: [], all: [], busy: false, listening: false, recognition: null, view: 'chat', loaded: false };
+  var state = { sessionId: crypto.randomUUID(), messages: [], all: [], summary: null, busy: false, listening: false, recognition: null, view: 'chat', loaded: false };
   var root = document.getElementById('salonAiRoot');
   if (!root) return;
   var escapeHtml = function (value) { return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var dateLabel = function (value) { return new Date(value).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }); };
 
   function metric() {
+    if (state.summary) return state.summary;
     try {
-      var m = typeof phase2SummaryMetrics === 'function' ? phase2SummaryMetrics() : null;
+      var m = typeof window.salonPhase2SummaryMetrics === 'function' ? window.salonPhase2SummaryMetrics() : null;
       return m ? { appointments: m.appointments, due: m.due, overdue: m.overdue, risk: m.risk } : null;
     } catch (ignore) { return null; }
   }
@@ -50,6 +51,13 @@
     if (result.error || result.data && result.data.error) throw new Error(result.data && result.data.error || 'AI servisine erişilemiyor.');
     return result.data;
   }
+  async function loadSummary() {
+    try {
+      var data = await invoke({ action: 'summary' }), summary = data.summary;
+      state.summary = { appointments: summary.count, due: summary.alerts && summary.alerts.due || 0, overdue: summary.alerts && summary.alerts.overdue || 0, risk: summary.alerts && summary.alerts.risk || 0 };
+      draw();
+    } catch (ignore) { /* Existing salon metrics remain available while AI is unreachable. */ }
+  }
   async function loadHistory() {
     try { var data = await invoke({ action: 'history' }); state.all = data.messages || []; state.loaded = true; state.messages = state.all.filter(function (item) { return item.session_id === state.sessionId; }); draw(); }
     catch (error) { if (state.view === 'history') root.querySelector('.sm-ai-history').insertAdjacentHTML('beforeend', '<div class="sm-ai-error">' + escapeHtml(error.message) + '</div>'); }
@@ -78,8 +86,8 @@
     recognition.start();
   }
   var oldShowPage = window.showPage;
-  window.showPage = function (id) { var result = oldShowPage.apply(this, arguments); if (id === 'salonAssistant') { draw(); if (!state.loaded) loadHistory(); } return result; };
+  window.showPage = function (id) { var result = oldShowPage.apply(this, arguments); if (id === 'salonAssistant') { draw(); loadSummary(); if (!state.loaded) loadHistory(); } return result; };
   var oldLogout = window.logout;
-  window.logout = function () { state.messages = []; state.all = []; state.loaded = false; state.sessionId = crypto.randomUUID(); if (state.recognition) state.recognition.abort(); return oldLogout.apply(this, arguments); };
+  window.logout = function () { state.messages = []; state.all = []; state.summary = null; state.loaded = false; state.sessionId = crypto.randomUUID(); if (state.recognition) state.recognition.abort(); return oldLogout.apply(this, arguments); };
   draw();
 })();

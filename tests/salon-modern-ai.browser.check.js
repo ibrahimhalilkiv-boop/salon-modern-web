@@ -13,11 +13,12 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     await page.evaluate(() => {
       Object.defineProperty(window.crypto, 'randomUUID', { value: () => '00000000-0000-4000-8000-000000000001' });
       window.currentUser = { id: 'u1', role: 'yonetici' };
-      window.phase2SummaryMetrics = () => ({ appointments: 5, due: 2, overdue: 1, risk: 0 });
+      window.salonPhase2SummaryMetrics = () => ({ appointments: 5, due: 2, overdue: 1, risk: 0 });
       window.showPage = () => {};
       window.logout = () => {};
       window.salonDb = { functions: { invoke: async (_name, { body }) => {
         window.__calls.push(body);
+        if (body.action === 'summary') return { data: { summary: { count: 5, alerts: { due: 2, overdue: 1, risk: 0 } } } };
         if (body.action === 'history') return { data: { messages: window.__messages } };
         if (body.action === 'send') { window.__messages.push({ session_id: body.session_id, role: 'user', content: body.message, created_at: new Date().toISOString() }, { session_id: body.session_id, role: 'assistant', content: 'Bugün 5 randevu var.', created_at: new Date().toISOString() }); return { data: { answer: 'Bugün 5 randevu var.' } }; }
         return { data: { ok: true } };
@@ -28,6 +29,8 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     await page.addScriptTag({ content: fs.readFileSync('salon-modern-ai.js', 'utf8') });
     assert.equal(await page.locator('h1').innerText(), 'MORİ');
     assert.equal(await page.locator('.sm-ai-summary strong').innerText(), '5 randevu');
+    await page.evaluate(() => window.showPage('salonAssistant'));
+    await page.waitForFunction(() => window.__calls.some(item => item.action === 'summary'));
     assert.equal(await page.locator('#smAiMic').count(), 1);
     assert.equal(await page.locator('#salonAssistantInput, .assistant-examples, .salon-voice-controls').count(), 0);
     await page.locator('#smAiInput').fill('Bugün işler nasıl?');
