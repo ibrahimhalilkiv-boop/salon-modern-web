@@ -11,21 +11,36 @@ type Message = { role: "user" | "assistant"; content: string };
 type ToolName = "none" | "daily_summary" | "appointments" | "alerts";
 const system = `Sen MORİ'sin, Salon Modern'in yapay zekâ asistanısın. Türkçe, doğal ve kısa konuş. Kullanıcının önceki mesajlarını bağlam olarak kullan. İşletme verisi gerektiğinde yalnızca daily_summary, appointments veya alerts araçlarından birini seç. Araç sonuçları güvenilir sayısal verilerdir; sonuçta olmayan müşteri adı, telefon, kasa tutarı veya randevu ayrıntısı uydurma. Hiçbir değişiklik yapma veya WhatsApp gönderme. Yanıtını yalnızca şu JSON biçiminde ver: {"tool":"none|daily_summary|appointments|alerts","answer":"Türkçe yanıt"}. Bir veri sorusu için tool seç, answer alanını araç sonucu gelene kadar boş bırak. Genel sohbet ve açıklamalar için tool none seç.`;
 
-async function model(messages: Message[], instruction: string): Promise<string> {
+const privateText = (value: string) => value
+  .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[e-posta]")
+  .replace(/(?:\+?90\s?)?(?:\(?0?5\d{2}\)?[\s.-]?)\d{3}[\s.-]?\d{2}[\s.-]?\d{2}\b/g, "[telefon]");
+
+async function model(messages: Message[], instruction: string, json = false): Promise<string> {
   const provider = Deno.env.get("SALON_AI_PROVIDER") || "cloudflare";
-  const body = { messages: [{ role: "system", content: instruction }, ...messages], max_completion_tokens: 650, temperature: 0.45, store: false };
+  const body: Record<string, unknown> = { messages: [{ role: "system", content: instruction }, ...messages.map((message) => ({ ...message, content: privateText(message.content) }))], max_completion_tokens: 650, temperature: 0.45 };
   let url: string, headers: Record<string, string>;
   if (provider === "cloudflare") {
     const account = Deno.env.get("CLOUDFLARE_ACCOUNT_ID"), key = Deno.env.get("CLOUDFLARE_API_TOKEN");
     if (!account || !key) throw new Error("AI yapılandırılmadı.");
     url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/ai/run/${Deno.env.get("SALON_AI_MODEL") || "@cf/zai-org/glm-4.7-flash"}`;
     headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+    body.store = false;
+  } else if (provider === "groq_free") {
+    const key = Deno.env.get("GROQ_API_KEY");
+    if (!key) throw new Error("AI yapılandırılmadı.");
+    url = "https://api.groq.com/openai/v1/chat/completions";
+    headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+    body.model = "openai/gpt-oss-120b";
+    body.reasoning_effort = "low";
+    body.reasoning_format = "hidden";
+    if (json) body.response_format = { type: "json_object" };
   } else if (provider === "openai_compatible" && Deno.env.get("SALON_AI_ALLOW_PAID") === "true") {
     url = Deno.env.get("SALON_AI_ENDPOINT") || "";
     const key = Deno.env.get("SALON_AI_API_KEY"), name = Deno.env.get("SALON_AI_MODEL");
     if (!/^https:\/\//.test(url) || !key || !name) throw new Error("AI yapılandırılmadı.");
     headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
-    (body as Record<string, unknown>).model = name;
+    body.model = name;
+    body.store = false;
   } else throw new Error("AI sağlayıcısı etkin değil.");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
@@ -107,7 +122,7 @@ Deno.serve(async (req) => {
   if (previousError) return respond({ error: "Sohbet yüklenemedi." }, 500);
   const messages = [...(previous || []).reverse(), { role: "user", content: question }] as Message[];
   try {
-    const raw = await model(messages, system);
+    const raw = await model(messages, system, true);
     let parsed: { tool?: ToolName; answer?: string } = {};
     try { parsed = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, "")); } catch { parsed.answer = raw; }
     const allowed: ToolName[] = ["daily_summary", "appointments", "alerts"];
