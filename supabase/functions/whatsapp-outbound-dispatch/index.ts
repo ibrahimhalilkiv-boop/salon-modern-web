@@ -141,11 +141,30 @@ async function processDelivery(db: any, delivery: any) {
   const phone = normalizeTrPhone(client?.phone ?? appointment.client_phone ?? "");
   if (!phone) return db.from("whatsapp_message_logs").update({ status: "skipped_no_phone", last_error: "invalid_or_missing_phone", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const provider = (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
-  const legacy = provider === "ycloud" && Deno.env.get("WHATSAPP_TEMPLATE_VERSION") === "legacy";
+  const values = valuesFor(appointment, client, employeeResult.data, settings);
+  const legacyConfigured = provider === "ycloud" && Deno.env.get("WHATSAPP_TEMPLATE_VERSION") === "legacy";
   const legacyKey = delivery.template_key as keyof typeof YCLOUD_LEGACY_APPOINTMENT_TEMPLATES;
+  const currentKey = delivery.template_key as keyof typeof YCLOUD_APPOINTMENT_TEMPLATES;
+  const currentName = YCLOUD_APPOINTMENT_TEMPLATES[currentKey];
+  const currentTokens = YCLOUD_APPOINTMENT_PARAMETERS[currentKey];
+  const storedMapping = mappingResult.data;
+  // A database mapping is enabled only after a read-only YCloud preflight.
+  // Each send still validates the approved body and buttons with YCloud;
+  // a missing, changed or temporarily unavailable new template uses legacy.
+  const tryCurrent = legacyConfigured && storedMapping?.approval_status === "approved"
+    && !!currentName && storedMapping.meta_template_name === currentName
+    && storedMapping.language_code === "tr"
+    && JSON.stringify(storedMapping.placeholder_order) === JSON.stringify(currentTokens);
+  const currentApproval = tryCurrent ? await ycloudTemplateApproved(
+    currentName, "tr", currentTokens.length, ycloudExpectedMessage(currentKey, values),
+    currentTokens, values, Deno.env, fetch,
+    currentKey === "appointment_reminder"
+      ? [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["📍 Yol Tarifi", "Yol Tarifi"] }]
+      : [],
+  ) : null;
+  const legacy = legacyConfigured && !currentApproval?.ok;
   if (!legacy && (templateResult.error || !templateResult.data?.content?.trim())) return db.from("whatsapp_message_logs").update({ status: templateResult.data ? "skipped_template_invalid" : "skipped_template_missing", last_error: templateResult.error?.message ?? "template_missing", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const allowed = legacy ? (YCLOUD_LEGACY_APPOINTMENT_PARAMETERS[legacyKey] ?? []) : (META_TEMPLATE_TOKENS[delivery.template_key as keyof typeof META_TEMPLATE_TOKENS] ?? []);
-  const values = valuesFor(appointment, client, employeeResult.data, settings);
   const rendered = legacy
     ? { ok: !!YCLOUD_LEGACY_APPOINTMENT_BODIES[legacyKey], content: ycloudLegacyExpectedMessage(legacyKey, values), reason: "legacy_template_missing" }
     : renderMessageTemplate(templateResult.data.content, values, allowed as any);
@@ -172,7 +191,7 @@ async function processDelivery(db: any, delivery: any) {
     const expectedButtons = !legacy && delivery.template_key === "appointment_reminder"
       ? [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["📍 Yol Tarifi", "Yol Tarifi"] }]
       : [];
-    const approval = await ycloudTemplateApproved(mapping.meta_template_name, mapping.language_code, parameterTokens.length, expectedMessage, parameterTokens, values, Deno.env, fetch, expectedButtons);
+    const approval = currentApproval?.ok && !legacy ? currentApproval : await ycloudTemplateApproved(mapping.meta_template_name, mapping.language_code, parameterTokens.length, expectedMessage, parameterTokens, values, Deno.env, fetch, expectedButtons);
     if (!approval.ok && approval.retryable && Number(delivery.attempt_count) < 3) return db.from("whatsapp_message_logs").update({ status: "queued", next_attempt_at: new Date(Date.now() + 60_000 * Math.pow(2, Math.max(0, Number(delivery.attempt_count) - 1))).toISOString(), last_error: approval.reason, updated_at: new Date().toISOString() }).eq("id", delivery.id).eq("status", "sending");
     if (!approval.ok) return db.from("whatsapp_message_logs").update({ status: approval.retryable ? "failed" : "awaiting_meta_approval", last_error: approval.reason, updated_at: new Date().toISOString() }).eq("id", delivery.id);
     const payload = ycloudTemplatePayload({ from: approval.from, to: phone, name: mapping.meta_template_name, languageCode: mapping.language_code, parameterTokens, values, externalId: delivery.idempotency_key });
