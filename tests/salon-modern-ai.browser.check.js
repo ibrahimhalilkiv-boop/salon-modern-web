@@ -16,11 +16,24 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
       window.salonPhase2SummaryMetrics = () => ({ appointments: 5, due: 2, overdue: 1, risk: 0 });
       window.showPage = () => {};
       window.logout = () => {};
+      window.__voiceLog = [];
+      window.SpeechRecognition = class {
+        start() { window.__recognition = this; this.onstart?.(); }
+        stop() { this.onend?.(); }
+        abort() { this.onend?.(); }
+      };
+      window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
+      Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+        getVoices: () => [{ lang: 'tr-TR', name: 'Türkçe' }],
+        speak: utterance => { window.__lastUtterance = utterance; window.__voiceLog.push(['speak', utterance.lang, utterance.text]); utterance.onstart?.(); },
+        cancel: () => window.__voiceLog.push(['cancel'])
+      } });
       window.salonDb = { functions: { invoke: async (_name, { body }) => {
         window.__calls.push(body);
         if (body.action === 'summary') return { data: { summary: { count: 5, alerts: { due: 2, overdue: 1, risk: 0 } } } };
         if (body.action === 'history') return { data: { messages: window.__messages } };
-        if (body.action === 'send') { window.__messages.push({ session_id: body.session_id, role: 'user', content: body.message, created_at: new Date().toISOString() }, { session_id: body.session_id, role: 'assistant', content: 'Bugün 5 randevu var.', created_at: new Date().toISOString() }); return { data: { answer: 'Bugün 5 randevu var.' } }; }
+        if (body.action === 'send') { window.__messages.push({ session_id: body.session_id, role: 'user', content: body.message, created_at: new Date().toISOString() }, { session_id: body.session_id, role: 'assistant', content: 'Bugün 5 randevu var.', created_at: new Date().toISOString() }); return { data: body.message.includes('randevu oluştur') ? { answer: 'Onay gerekiyor.', pending: [{ id: '00000000-0000-4000-8000-000000000002', kind: 'appointment_create', description: 'Test randevusu' }] } : { answer: 'Bugün 5 randevu var.' } }; }
+        if (body.action === 'confirm') return { data: { answer: 'Randevu oluşturuldu.', result: { kind: 'appointment_create', appointment_id: '00000000-0000-4000-8000-000000000003', client_name: 'Test', service: 'Saç sakal', scheduled_at: '2026-10-19T05:00:00Z' } } };
         return { data: { ok: true } };
       } } };
       window.__calls = [];
@@ -43,6 +56,30 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     assert.match(await page.locator('.sm-ai-alerts').innerText(), /Geciken/);
     await page.locator('[data-view="history"]').click();
     assert.match(await page.locator('.sm-ai-history').innerText(), /30 gün/);
-    console.log('PASS MORİ: mobile shell, text chat, alerts, history, legacy UI absent');
+    await page.locator('[data-view="chat"]').click();
+    await page.locator('#smAiMic').click();
+    assert.equal(await page.evaluate(() => window.__recognition.lang), 'tr-TR');
+    await page.evaluate(() => window.__recognition.onresult({ results: [Object.assign([{ transcript: 'Bugünkü randevuları söyle' }], { isFinal: true })] }));
+    await page.waitForFunction(() => window.__calls.filter(item => item.action === 'send').length === 2);
+    await page.waitForFunction(() => window.__voiceLog.some(item => item[0] === 'speak'));
+    assert.match(await page.locator('.sm-ai-thread').innerText(), /Bugünkü randevuları söyle/);
+    await page.locator('#smAiHands').click();
+    await page.evaluate(() => { window.__firstRecognition = window.__recognition; });
+    await page.evaluate(() => window.__lastUtterance.onend());
+    assert.equal(await page.locator('#smAiMic').getAttribute('aria-pressed'), 'true');
+    assert.ok(await page.evaluate(() => window.__recognition !== window.__firstRecognition));
+    await page.locator('#smAiMic').click();
+    await page.locator('#smAiVoice').click();
+    assert.equal(await page.locator('#smAiVoice').getAttribute('aria-pressed'), 'false');
+    await page.locator('#smAiVoice').click();
+    await page.evaluate(() => window.__lastUtterance.onstart());
+    await page.locator('#smAiStop').click();
+    assert.ok(await page.evaluate(() => window.__voiceLog.some(item => item[0] === 'cancel')));
+    await page.locator('#smAiInput').fill('Test randevu oluştur');
+    await page.locator('#smAiSend').click();
+    await page.locator('[data-confirm]').click();
+    await page.locator('[data-appointment]').waitFor();
+    assert.match(await page.locator('.sm-ai-thread').innerText(), /Randevu oluşturuldu/);
+    console.log('PASS MORİ: mobile shell, text and mocked Turkish voice, approval card, alerts, history, legacy UI absent');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

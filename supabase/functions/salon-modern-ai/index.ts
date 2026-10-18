@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.1";
+import { handlePhase2 } from "./phase2.ts";
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS", "Cache-Control": "no-store" };
 const respond = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: jsonHeaders });
@@ -101,7 +102,7 @@ Deno.serve(async (req) => {
   const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: { user }, error: authError } = await caller.auth.getUser(auth.slice(7));
   if (authError || !user) return respond({ error: "Oturum süresi doldu." }, 401);
-  const { data: profile } = await admin.from("profiles").select("role,active").eq("id", user.id).maybeSingle();
+  const { data: profile } = await admin.from("profiles").select("role,active,full_name,commission_pct").eq("id", user.id).maybeSingle();
   if (!profile?.active || !["manager", "employee"].includes(profile.role)) return respond({ error: "Erişim izni yok." }, 403);
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return respond({ error: "Geçersiz istek." }, 400); }
@@ -118,6 +119,10 @@ Deno.serve(async (req) => {
   if (action === "clear" && uuid(body.session_id)) {
     const { error } = await admin.from("salon_ai_messages").delete().eq("user_id", user.id).eq("session_id", body.session_id);
     return error ? respond({ error: "Sohbet silinemedi." }, 500) : respond({ ok: true });
+  }
+  if (action === "send" || action === "confirm") {
+    try { return respond(await handlePhase2(body, admin, caller, { id: user.id, role: profile.role, full_name: profile.full_name, commission_pct: Number(profile.commission_pct || 0) }, model)); }
+    catch (error) { return respond({ error: error instanceof Error ? error.message : "MORİ yanıt veremiyor." }, 503); }
   }
   if (action !== "send" || !uuid(body.session_id) || typeof body.message !== "string" || body.message.trim().length < 1 || body.message.length > 1200) return respond({ error: "Mesajı kontrol edin." }, 400);
   const sessionId = body.session_id, question = body.message.trim();
