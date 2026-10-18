@@ -90,6 +90,11 @@ async function openReminderAppointment(data){
 }
 async function openNotification(data){
   if(!data)return;
+  if(data.kind==='mori_alert'||data.type==='mori_alert'){
+    if(typeof window.MoriPhase3?.openAlert!=='function')throw new Error('MORİ uyarıları henüz hazır değil.');
+    await window.MoriPhase3.openAlert(data.moriEventId||data.eventId||'');
+    return
+  }
   if(data.kind==='appointment_thank_you'||data.type==='appointment_thank_you'){
     var thankYouId=data.appointmentId||data.appointment_id;
     if(!thankYouId||typeof window.openManualThankYouFromNotification!=='function')throw new Error('Teşekkür ekranı henüz hazır değil.');
@@ -109,7 +114,7 @@ async function openNotification(data){
   }
   if(typeof reloadRemoteData==='function')await reloadRemoteData()
 }
-function clearNotificationUrl(){var url=new URL(location.href);['date','appointment','kind','notification'].forEach(function(key){url.searchParams.delete(key)});history.replaceState(history.state,'',url.href)}
+function clearNotificationUrl(){var url=new URL(location.href);['date','appointment','kind','notification','event'].forEach(function(key){url.searchParams.delete(key)});history.replaceState(history.state,'',url.href)}
 function identity(data){return String(data.notificationId||[data.kind||data.type,data.appointmentId||data.appointment_id,data.reminderFor||data.appointmentDate].join(':'))}
 function handled(){try{return JSON.parse(sessionStorage.getItem(HANDLED_KEY)||'[]')}catch(_){return []}}
 function remember(data){var keys=handled(),key=identity(data);if(!keys.includes(key))keys.push(key);sessionStorage.setItem(HANDLED_KEY,JSON.stringify(keys.slice(-100)))}
@@ -130,7 +135,7 @@ window.addEventListener('focus',function(){sync();flushOpen()});
 document.addEventListener('visibilitychange',function(){if(!document.hidden){sync();flushOpen()}});
 window.addEventListener('offline',function(){toast('İnternet bağlantısı yok','Canlı veriler güncellenemiyor.')});
 if(navigator.serviceWorker)navigator.serviceWorker.addEventListener('message',function(event){if(event.data?.type==='SALON_NOTIFICATION_OPEN')route(event.data.data)});
-var enter=window.enterApp;window.enterApp=function(){var result=enter.apply(this,arguments);explicitLogout=false;install();sync();var p=new URLSearchParams(location.search);if(p.get('date')||p.get('kind')==='appointment_thank_you')route({appointmentDate:p.get('date'),appointmentId:p.get('appointment'),kind:p.get('kind')||'',notificationId:p.get('notification')||''});setTimeout(flushOpen,0);return result};
+var enter=window.enterApp;window.enterApp=function(){var result=enter.apply(this,arguments);explicitLogout=false;install();sync();var p=new URLSearchParams(location.search);if(p.get('date')||p.get('kind')==='appointment_thank_you'||p.get('kind')==='mori_alert')route({appointmentDate:p.get('date'),appointmentId:p.get('appointment'),kind:p.get('kind')||'',notificationId:p.get('notification')||'',moriEventId:p.get('event')||''});setTimeout(flushOpen,0);return result};
 var leave=window.logout;window.logout=async function(){explicitLogout=true;pendingOpen=null;sessionStorage.removeItem(PENDING_KEY);clearNotificationUrl();try{var sub=await existing();if(sub&&currentUser)await salonDb.from('web_push_subscriptions').update({active:false,updated_at:new Date().toISOString()}).eq('endpoint',sub.endpoint).eq('user_id',currentUser.id)}catch(_){}deviceSynced=false;return leave.apply(this,arguments)};
 if(salonDb?.auth?.onAuthStateChange)salonDb.auth.onAuthStateChange(function(event,session){if((event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION')&&session?.user)setTimeout(sync,0)});
 setInterval(function(){if(!document.hidden&&Notification.permission==='granted')sync()},5*60*1000);

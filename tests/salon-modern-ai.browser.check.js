@@ -31,6 +31,8 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
       window.salonDb = { functions: { invoke: async (_name, { body }) => {
         window.__calls.push(body);
         if (body.action === 'summary') return { data: { summary: { count: 5, alerts: { due: 2, overdue: 1, risk: 0 } } } };
+        if (body.action === 'proactive_alerts') return { data: { events: [{ id: '00000000-0000-4000-8000-000000000010', category: 'calendar', severity: 'critical', title: 'Takvimde randevu çakışması', detail: 'Yarın 08:00 saatinde iki randevu var.', route: 'calendar', state: 'active', read_at: null, last_seen_at: '2026-10-18T08:00:00Z' }], digests: [{ business_date: '2026-10-18', facts: { appointments: 5, pending_requests: 1, active_alerts: 1, yesterday_turnover: 3000, staff: [{ name: 'Cengiz', appointments: ['08:00'] }], performance: [] } }] } };
+        if (body.action === 'follow_settings') return { data: { settings: { enabled: true, categories: ['calendar','booking','daily'], digest_time: '09:00', quiet_start: '22:00', quiet_end: '08:00' } } };
         if (body.action === 'history') return { data: { messages: window.__messages } };
         if (body.action === 'send') { window.__messages.push({ session_id: body.session_id, role: 'user', content: body.message, created_at: new Date().toISOString() }, { session_id: body.session_id, role: 'assistant', content: 'Bugün 5 randevu var.', created_at: new Date().toISOString() }); return { data: body.message.includes('randevu oluştur') ? { answer: 'Onay gerekiyor.', pending: [{ id: '00000000-0000-4000-8000-000000000002', kind: 'appointment_create', description: 'Test randevusu' }] } : { answer: 'Bugün 5 randevu var.' } }; }
         if (body.action === 'confirm') return { data: { answer: 'Randevu oluşturuldu.', result: { kind: 'appointment_create', appointment_id: '00000000-0000-4000-8000-000000000003', client_name: 'Test', service: 'Saç sakal', scheduled_at: '2026-10-19T05:00:00Z' } } };
@@ -54,6 +56,15 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     assert.equal(sent.message, 'Bugün işler nasıl?');
     await page.locator('[data-view="alerts"]').click();
     assert.match(await page.locator('.sm-ai-alerts').innerText(), /Geciken/);
+    await page.locator('[data-mori-event]').click();
+    assert.match(await page.locator('.sm-ai-event-detail').innerText(), /Devam ediyor/);
+    assert.ok(await page.evaluate(() => window.__calls.some(item => item.action === 'read_proactive_alert')));
+    await page.locator('[data-mori-ask]').click();
+    assert.equal(await page.locator('#smAiInput').inputValue(), 'Bu uyarı neden önemli, nasıl çözebiliriz?');
+    await page.locator('#smAiSettings').click();
+    await page.locator('#smAiSettingsForm').waitFor();
+    await page.locator('#smAiSettingsForm button[type="submit"]').click();
+    assert.ok(await page.evaluate(() => window.__calls.some(item => item.action === 'save_follow_settings' && item.digest_time === '09:00')));
     await page.locator('[data-view="history"]').click();
     assert.match(await page.locator('.sm-ai-history').innerText(), /30 gün/);
     await page.locator('[data-view="chat"]').click();
@@ -80,6 +91,6 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     await page.locator('[data-confirm]').click();
     await page.locator('[data-appointment]').waitFor();
     assert.match(await page.locator('.sm-ai-thread').innerText(), /Randevu oluşturuldu/);
-    console.log('PASS MORİ: mobile shell, text and mocked Turkish voice, approval card, alerts, history, legacy UI absent');
+    console.log('PASS MORİ: mobile shell, voice, approvals, proactive alert detail/read, settings, history, legacy UI absent');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

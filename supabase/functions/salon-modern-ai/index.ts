@@ -107,6 +107,57 @@ Deno.serve(async (req) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return respond({ error: "Geçersiz istek." }, 400); }
   const action = body.action;
+  if (action === "follow_settings") {
+    const { data, error } = await admin.from("mori_follow_settings")
+      .select("enabled,categories,digest_time,quiet_start,quiet_end")
+      .eq("user_id", user.id).maybeSingle();
+    if (error) return respond({ error: "Takip ayarları alınamadı." }, 500);
+    return respond({ settings: data || { enabled: profile.role === "manager",
+      categories: profile.role === "manager" ? ["calendar","booking","debt","delivery","performance","cash","customers","daily"] : ["calendar"],
+      digest_time: "09:00", quiet_start: "22:00", quiet_end: "08:00" } });
+  }
+  if (action === "save_follow_settings") {
+    const allowed = profile.role === "manager"
+      ? ["calendar","booking","debt","delivery","performance","cash","customers","daily"] : ["calendar"];
+    const categories = body.categories;
+    const clock = (value: unknown) => typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+    if (typeof body.enabled !== "boolean" || !Array.isArray(categories) ||
+      !categories.every((v) => typeof v === "string" && allowed.includes(v)) ||
+      !clock(body.quiet_start) || !clock(body.quiet_end) ||
+      (profile.role === "manager" && !clock(body.digest_time)))
+      return respond({ error: "Takip ayarlarını kontrol edin." }, 400);
+    const { data: old } = await admin.from("mori_follow_settings").select("digest_time")
+      .eq("user_id", user.id).maybeSingle();
+    const values = { user_id: user.id, enabled: body.enabled,
+      categories: [...new Set(categories)], quiet_start: body.quiet_start,
+      quiet_end: body.quiet_end,
+      digest_time: profile.role === "manager" ? body.digest_time : old?.digest_time || "09:00",
+      updated_at: new Date().toISOString() };
+    const { error } = await admin.from("mori_follow_settings").upsert(values);
+    return error ? respond({ error: "Takip ayarları kaydedilemedi." }, 500) : respond({ ok: true });
+  }
+  if (action === "proactive_alerts") {
+    const [{ data: events, error }, { data: digests, error: digestError }] = await Promise.all([
+      admin.from("mori_events").select("id,category,severity,title,detail,route,context,state,read_at,resolved_at,first_seen_at,last_seen_at,notification_id")
+        .eq("recipient_id", user.id).gte("first_seen_at", new Date(Date.now() - 90 * 86400000).toISOString())
+        .order("last_seen_at", { ascending: false }).limit(100),
+      admin.from("mori_daily_summaries").select("business_date,facts,created_at")
+        .eq("recipient_id", user.id).order("business_date", { ascending: false }).limit(7),
+    ]);
+    return error || digestError ? respond({ error: "MORİ uyarıları alınamadı." }, 500)
+      : respond({ events: events || [], digests: digests || [] });
+  }
+  if (action === "read_proactive_alert" && uuid(body.event_id)) {
+    const { data, error } = await admin.from("mori_events").update({ read_at: new Date().toISOString() })
+      .eq("id", body.event_id).eq("recipient_id", user.id).is("read_at", null).select("id").maybeSingle();
+    if (error) return respond({ error: "Uyarı güncellenemedi." }, 500);
+    if (!data) {
+      const { data: existing } = await admin.from("mori_events").select("id")
+        .eq("id", body.event_id).eq("recipient_id", user.id).maybeSingle();
+      if (!existing) return respond({ error: "Uyarı bulunamadı." }, 404);
+    }
+    return respond({ ok: true });
+  }
   if (action === "summary") {
     try { return respond({ summary: await readTool("daily_summary", admin, user.id, profile.role === "manager") }); }
     catch { return respond({ error: "Günlük özet alınamadı." }, 503); }
@@ -121,6 +172,11 @@ Deno.serve(async (req) => {
     return error ? respond({ error: "Sohbet silinemedi." }, 500) : respond({ ok: true });
   }
   if (action === "send" || action === "confirm") {
+    if (action === "send") {
+      const { data: claimed, error: quotaError } = await admin.rpc("mori_claim_ai_call", { p_user: user.id });
+      if (quotaError) return respond({ error: "AI kullanım sınırı kontrol edilemedi." }, 503);
+      if (!claimed) return respond({ error: "Bugünkü ücretsiz MORİ sohbet sınırına ulaşıldı." }, 429);
+    }
     try { return respond(await handlePhase2(body, admin, caller, { id: user.id, role: profile.role, full_name: profile.full_name, commission_pct: Number(profile.commission_pct || 0) }, model)); }
     catch (error) { return respond({ error: error instanceof Error ? error.message : "MORİ yanıt veremiyor." }, 503); }
   }

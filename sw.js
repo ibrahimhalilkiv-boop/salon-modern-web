@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v141';
+const CACHE_NAME = 'salon-modern-shell-pwa-v142';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownReminders = new Set();
 let reminderDisplayQueue = Promise.resolve();
@@ -14,8 +14,8 @@ const APP_SHELL = [
   './manual-whatsapp-thank-you-2.4.6.js?v=123',
   './smart-customer-analysis-1.7.0.js?v=135',
   './salon-phase2-1.8.0.js?v=136',
-  './salon-modern-ai.js?v=141',
-  './salon-modern-ai.css?v=141',
+  './salon-modern-ai.js?v=142',
+  './salon-modern-ai.css?v=142',
   './salon-finance-2.3.0.js?v=98',
   './appointment-list-management-2.4.4.js?v=119',
   './salon-ui-2.3.12.js',
@@ -23,7 +23,7 @@ const APP_SHELL = [
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js',
   './appointment-management-2.3.26.js?v=127',
-  './salon-web-push.js?v=130',
+  './salon-web-push.js?v=142',
   './salon-menu-order.js?v=134',
   './pwa-stability-2.3.20.js?v=104',
   './pwa-recovery-2.3.21.js?v=81',
@@ -156,7 +156,7 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
   const data = event.notification.data || {};
   const targetUrl = new URL('./salon-modern.html', self.registration.scope);
-  for (const [key, value] of Object.entries({date:data.appointmentDate,appointment:data.appointmentId||data.appointment_id,kind:data.kind||data.type,notification:data.notificationId})) {
+  for (const [key, value] of Object.entries({date:data.appointmentDate,appointment:data.appointmentId||data.appointment_id,kind:data.kind||data.type,notification:data.notificationId,event:data.moriEventId})) {
     if (value) targetUrl.searchParams.set(key, String(value));
   }
   const target = targetUrl.href;

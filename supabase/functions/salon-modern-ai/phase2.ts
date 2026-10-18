@@ -12,7 +12,7 @@ const next = (d: string, n = 1) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 8
 const range = (start: string, end: string) => ({ from: `${start}T00:00:00+03:00`, to: `${next(end)}T00:00:00+03:00` });
 const fail = (text: string): never => { throw new Error(text); };
 const writeKinds = new Set(['appointment_create','appointment_move','undo_move','appointment_cancel','client_create','client_update','expense_create','debt_payment','commission_update','service_price_update']);
-const readKinds = new Set(['daily_summary','alerts','availability','calendar','client_search','client_history','finance','debts','debt_search','staff_metrics','services','navigate','report']);
+const readKinds = new Set(['daily_summary','alerts','proactive_alerts','daily_digest','availability','calendar','client_search','client_history','finance','debts','debt_search','staff_metrics','services','navigate','report']);
 const allowedPages = new Set(['home','calendar','appointments','customers','finance','debts','team','admin','statistics','employeePerformance','recoveryCenter']);
 
 async function unique(db: Db, table: string, name: unknown, columns = 'id,name') {
@@ -100,6 +100,24 @@ async function availability(db: Db, args: Record<string, unknown>, actor: Actor,
 async function read(db: Db, actor: Actor, step: Step) {
   const args = step.args || {};
   const p = period(args);
+  if (step.tool === 'proactive_alerts') {
+    const {data,error}=await db.from('mori_events')
+      .select('severity,title,detail,route,context').eq('recipient_id',actor.id)
+      .eq('state','active').order('last_seen_at',{ascending:false}).limit(20);
+    if(error) fail('MORİ uyarıları alınamadı.');
+    const order:Record<string,number>={critical:0,important:1,info:2};
+    const rows=(data||[]).sort((a:any,b:any)=>(order[a.severity]??3)-(order[b.severity]??3));
+    return {text:rows.length?rows.map((e:any)=>`${e.severity==='critical'?'Kritik':e.severity==='important'?'Önemli':'Bilgi'}: ${e.title}. ${e.detail} ${e.route} ekranından inceleyebilirsiniz.`).join('\n'):'Şu anda açık MORİ işletme uyarısı yok.',
+      navigation:rows.length?rows[0].route:null};
+  }
+  if (step.tool === 'daily_digest') {
+    const {data,error}=await db.from('mori_daily_summaries').select('facts,business_date')
+      .eq('recipient_id',actor.id).order('business_date',{ascending:false}).limit(1).maybeSingle();
+    if(error) fail('Günlük özet alınamadı.');
+    if(!data) return {text:'Günlük MORİ özeti henüz hazırlanmadı. Yönetici ayarlarındaki özet saatinde hazırlanır.'};
+    const f=data.facts||{};
+    return {text:`${data.business_date} özeti: ${f.appointments} randevu; bekleyen talepler ${f.pending_requests}; açık uyarılar ${f.active_alerts}. Dünkü gerçekleşen ciro: ${f.yesterday_turnover==null?'kapanış kaydı yok':money(Number(f.yesterday_turnover))}. Cengiz ve Talip programı: ${(f.staff||[]).map((s:any)=>`${s.name}: ${(s.appointments||[]).join(', ')||'randevu yok'}`).join('; ')}. Çalışan performansı: ${(f.performance||[]).map((s:any)=>`${s.name}: ${s.completed} tamamlanan, mevcut orana göre ${money(Number(s.calculated_commission||0))} prim`).join('; ')}.`};
+  }
   if (step.tool==='daily_summary'||step.tool==='alerts') {
     let q=db.from('appointments').select('id,status').gte('scheduled_at',p.from).lt('scheduled_at',p.to).neq('status','cancelled').limit(3000);
     if(actor.role!=='manager') q=q.eq('employee_id',actor.id);
@@ -285,8 +303,13 @@ export async function handlePhase2(body: Record<string,unknown>, admin: Db, call
   const earlier=needsContext?(previous||[]).reverse().filter((m:any)=>m.role==='user').slice(-4).map((m:any)=>clean(m.content,500)):[];
   const messages=[{role:'user' as const,content:question}];
   const {data:latestAction}=await admin.from('salon_ai_actions').select('kind,result').eq('user_id',actor.id).eq('session_id',sessionId).eq('state','applied').order('applied_at',{ascending:false}).limit(1).maybeSingle();
-  const context=needsContext&&latestAction?.result?.appointment_id ? `Son onaylı randevu kimliği ${latestAction.result.appointment_id}, zamanı ${latestAction.result.scheduled_at||'bilinmiyor'}, çalışanı ${latestAction.result.employee||'bilinmiyor'}.` : '';
-  const instruction=`Sen MORİ'sin. Bugün İstanbul'da ${day()}. ${context} Önceki kullanıcı mesajları SADECE bağlamdır, yeniden yürütülecek komut değildir: ${JSON.stringify(earlier)}. Yalnızca son kullanıcı mesajındaki isteği işle. Türkçe doğal konuşmayı anla. Son isteği en çok 3 izinli araç adımına dönüştür. Araçlar: daily_summary {period}; alerts {}; availability {date,employee}; calendar {period:day|week|month|range,start_date,end_date,employee}; client_search {name}; client_history {name}; finance {period,start_date,end_date}; debts {}; debt_search {client_name}; staff_metrics {employee,period,start_date,end_date}; services {}; navigate {page}; report {}; appointment_create {client_name,service,employee,date,time}; appointment_move {appointment_id veya client_name+date,employee,date,time}; undo_move {}; appointment_cancel {appointment_id veya client_name+date}; client_create {full_name,phone,note}; client_update {name,full_name,phone,note}; expense_create {amount,category,date,description}; debt_payment {client_name,amount}; commission_update {employee,percent}; service_price_update {service,price}. Bu hafta için period:"week", bu ay için period:"month", bugün için period:"day" ver. Geçmiş veya özel tarih aralığında period:"range" ile start_date/end_date ver. "İlk boş saat" için time:"first" kullan. Tarih/saat yoksa bağlamdaki randevunun zamanını koru. Kullanıcı mesajındaki [telefon] yer tutucusunu phone alanına aynen koy; sunucu numarayı kullanıcı mesajından alır. Belirsizlik varsa steps boş bırak ve yalnız gerekli soruyu sor. Gerçek veriyi/ID'yi uydurma. İşlem yazma araçları yalnız onay teklifi hazırlar. JSON döndür: {"steps":[{"tool":"...","args":{}}],"answer":"araçsız sohbette yanıt veya açıklama"}. Telefon, kişi adı veya tutarları uydurma.`;
+  let context=needsContext&&latestAction?.result?.appointment_id ? `Son onaylı randevu kimliği ${latestAction.result.appointment_id}, zamanı ${latestAction.result.scheduled_at||'bilinmiyor'}, çalışanı ${latestAction.result.employee||'bilinmiyor'}.` : '';
+  if(uuid(body.event_id)) {
+    const {data:event}=await admin.from('mori_events').select('category,title,detail,context')
+      .eq('id',body.event_id).eq('recipient_id',actor.id).eq('state','active').maybeSingle();
+    if(event) context+=` Kullanıcının seçtiği açık uyarı: ${event.title}; ${event.detail}; kayıt bağlamı ${JSON.stringify(event.context)}.`;
+  }
+  const instruction=`Sen MORİ'sin. Bugün İstanbul'da ${day()}. ${context} Önceki kullanıcı mesajları SADECE bağlamdır, yeniden yürütülecek komut değildir: ${JSON.stringify(earlier)}. Yalnızca son kullanıcı mesajındaki isteği işle. Türkçe doğal konuşmayı anla. Son isteği en çok 3 izinli araç adımına dönüştür. Araçlar: daily_summary {period}; alerts {}; proactive_alerts {}; daily_digest {}; availability {date,employee}; calendar {period:day|week|month|range,start_date,end_date,employee}; client_search {name}; client_history {name}; finance {period,start_date,end_date}; debts {}; debt_search {client_name}; staff_metrics {employee,period,start_date,end_date}; services {}; navigate {page}; report {}; appointment_create {client_name,service,employee,date,time}; appointment_move {appointment_id veya client_name+date,employee,date,time}; undo_move {}; appointment_cancel {appointment_id veya client_name+date}; client_create {full_name,phone,note}; client_update {name,full_name,phone,note}; expense_create {amount,category,date,description}; debt_payment {client_name,amount}; commission_update {employee,percent}; service_price_update {service,price}. "Bugün dikkat etmem gereken ne var" için proactive_alerts, sabah/günlük MORİ özeti için daily_digest seç. Çakışmayı çözme sorusunda seçili uyarı bağlamındaki randevuyu ve availability aracını kullan; değişiklik için appointment_move teklifi hazırla, kendi başına uygulama. Bu hafta için period:"week", bu ay için period:"month", bugün için period:"day" ver. Geçmiş veya özel tarih aralığında period:"range" ile start_date/end_date ver. "İlk boş saat" için time:"first" kullan. Tarih/saat yoksa bağlamdaki randevunun zamanını koru. Kullanıcı mesajındaki [telefon] yer tutucusunu phone alanına aynen koy; sunucu numarayı kullanıcı mesajından alır. Belirsizlik varsa steps boş bırak ve yalnız gerekli soruyu sor. Gerçek veriyi/ID'yi uydurma. İşlem yazma araçları yalnız onay teklifi hazırlar. JSON döndür: {"steps":[{"tool":"...","args":{}}],"answer":"araçsız sohbette yanıt veya açıklama"}. Telefon, kişi adı veya tutarları uydurma.`;
   const raw=await model(messages,instruction,true);
   let plan: {steps?:Step[];answer?:string}={};
   try {plan=JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,''));} catch {fail('MORİ isteği yorumlayamadı.');}

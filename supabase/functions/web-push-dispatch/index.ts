@@ -96,12 +96,23 @@ async function dispatch() {
     }).eq("id", item.id).in("status", ["queued", "failed"]).select("id").maybeSingle();
     if (!claimed) continue;
     const [{ data: note }, { data: sub }] = await Promise.all([
-      admin.from("notifications").select("id,appointment_id,kind,title,body,reminder_for").eq("id", item.notification_id).maybeSingle(),
+      admin.from("notifications").select("id,recipient_id,appointment_id,kind,title,body,reminder_for,mori_event_id").eq("id", item.notification_id).maybeSingle(),
       admin.from("web_push_subscriptions").select("id,endpoint,p256dh,auth_secret,active").eq("id", item.subscription_id).maybeSingle(),
     ]);
     if (!note || !sub?.active) {
       await admin.from("web_push_deliveries").update({ status: "expired", last_error: "Kayıt veya abonelik artık aktif değil." }).eq("id", item.id);
       expired++; continue;
+    }
+    if (note.kind === "mori_alert") {
+      const [{ data: event }, { data: settings }] = await Promise.all([
+        admin.from("mori_events").select("state,recipient_id,category").eq("id", note.mori_event_id).maybeSingle(),
+        admin.from("mori_follow_settings").select("enabled,categories").eq("user_id", note.recipient_id).maybeSingle(),
+      ]);
+      if (!event || event.state !== "active" || event.recipient_id !== note.recipient_id ||
+        !settings?.enabled || !settings.categories?.includes(event.category)) {
+        await admin.from("web_push_deliveries").update({ status: "expired", last_error: "MORİ uyarısı artık geçerli değil." }).eq("id", item.id);
+        expired++; continue;
+      }
     }
     let appointment: any = null;
     if (note.appointment_id) {
@@ -130,9 +141,12 @@ async function dispatch() {
     const date = appointment?.scheduled_at ? new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul" }).format(new Date(appointment.scheduled_at)) : "";
     const payload = JSON.stringify({
       title: note.title, body: note.body, tag: `salon-${note.id}`, notificationId: note.id,
+      moriEventId: note.mori_event_id || "",
       appointmentId: note.appointment_id || "", appointmentDate: date, kind: note.kind,
       type: note.kind, reminderFor: note.reminder_for || "",
-      url: `./salon-modern.html${date ? `?date=${encodeURIComponent(date)}&appointment=${encodeURIComponent(note.appointment_id || "")}&kind=${encodeURIComponent(note.kind || "")}` : ""}`,
+      url: note.kind === "mori_alert"
+        ? `./salon-modern.html?kind=mori_alert&event=${encodeURIComponent(note.mori_event_id || "")}`
+        : `./salon-modern.html${date ? `?date=${encodeURIComponent(date)}&appointment=${encodeURIComponent(note.appointment_id || "")}&kind=${encodeURIComponent(note.kind || "")}` : ""}`,
     });
     try {
       await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_secret } }, payload, { TTL: 3600, urgency: "high" });
