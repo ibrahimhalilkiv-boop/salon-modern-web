@@ -14,6 +14,6 @@ assert.match(push, /window\.addEventListener\('focus'.*sync\(\)/, 'Uygulamaya d�
 assert.match(push, /rpc\('claim_web_push_subscription'/, 'Aynı cihaz mevcut kullanıcıya güvenli RPC ile bağlanmalı');
 assert.match(push, /Bildirim cihazı sunucuya kaydedilemedi/, 'Sunucu kayıt hatası kullanıcıdan gizlenmemeli');
 assert.match(worker, /clients\.openWindow\(target\)/, 'Hatırlatma tıklaması Service Worker üzerinden açılmalı');
-assert.match(worker, /salon-modern-shell-pwa-v143/, 'Güncel uygulama sürümü eski PWA önbelleğinden ayrılmalı');
+assert.match(worker, /salon-modern-shell-pwa-v144/, 'Güncel uygulama sürümü eski PWA önbelleğinden ayrılmalı');
 assert.match(worker, /self\.addEventListener\('push'/, 'Service Worker push olayını göstermeli');
 console.log('PASS web push registration and reminder delivery client');

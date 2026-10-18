@@ -32,5 +32,5 @@ assert.equal(ctx.phase2PerformanceTotal([make('cengiz','2026-10-17',null)],profi
 assert.equal(ctx.phase2PerformanceTotal([make('cengiz','2026-10-17',100)],{role:'employee',commission_pct:null}),null);
 assert.equal(ctx.phase2PerformanceTotal([],{role:'employee',commission_pct:50}),0);
 assert.match(fs.readFileSync('salon-modern.html','utf8'),/salon-phase2-1\.8\.0\.js\?v=142/);
-assert.match(fs.readFileSync('sw.js','utf8'),/salon-modern-shell-pwa-v143/);
+assert.match(fs.readFileSync('sw.js','utf8'),/salon-modern-shell-pwa-v144/);
 console.log('PASS employee commissions, order, exclusions, rounding, manager totals and version');

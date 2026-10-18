@@ -39,5 +39,5 @@ assert.match(holder.innerHTML,/<span>Bugün<\/span><small class="phase2-period-t
 const html=fs.readFileSync('salon-modern.html','utf8');
 const sw=fs.readFileSync('sw.js','utf8');
 assert.match(html,/salon-phase2-1\.8\.0\.js\?v=142/);
-assert.match(sw,/salon-modern-shell-pwa-v143/);
+assert.match(sw,/salon-modern-shell-pwa-v144/);
 console.log('PASS staff today and week recorded booking totals, exclusions, missing amounts and PWA version');
