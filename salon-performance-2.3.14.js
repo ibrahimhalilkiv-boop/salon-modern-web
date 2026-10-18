@@ -141,9 +141,15 @@ var preferAppointmentOnlyReload=false;
 
 async function refreshAppointmentsOnly(){
   if(!currentUser)return;
-  var response=await salonDb.from('appointments').select('id,client_id,client_name,client_phone,service_id,service_name,amount,employee_id,scheduled_at,duration_minutes,status,note,created_by,updated_by,recurrence_group_id,recurrence_interval_weeks,tariff_price_snapshot,debt_original_amount,reminder_eligible,reminder_target_at').neq('status','cancelled').order('scheduled_at');
-  if(response.error)throw response.error;
-  appts=(response.data||[]).map(function(row){var mapped=remoteAppointment(row);mapped.status=row.status;mapped.note=row.note||'';mapped.updatedBy=row.updated_by||null;mapped.debtOriginalAmount=Number(row.debt_original_amount||0);return mapped});
+  var userId=currentUser.id,version=SalonAppointmentData.nextGeneration();
+  window.salonCalendarLoadState={status:'loading',date:selectedTeamDate()};
+  if(document.getElementById('calendar')?.classList.contains('active'))renderCalendar();
+  var rows;
+  try{rows=await SalonAppointmentData.load(salonDb,'*',selectedTeamDate())}
+  catch(error){if(SalonAppointmentData.isCurrent(version)){window.salonCalendarLoadState={status:'error',date:selectedTeamDate(),message:error.message||String(error)};renderCalendar()}throw error}
+  if(!SalonAppointmentData.isCurrent(version)||currentUser?.id!==userId)return;
+  appts=rows.map(function(row){var mapped=remoteAppointment(row);mapped.status=row.status;mapped.note=row.note||'';mapped.updatedBy=row.updated_by||null;mapped.debtOriginalAmount=Number(row.debt_original_amount||0);return mapped});
+  window.salonCalendarLoadState={status:'ready',date:selectedTeamDate()};
   renderHomeSummary();render();renderCalendar();renderStatistics();
   if(typeof syncNativeAppointmentReminders==='function')syncNativeAppointmentReminders();
 }
@@ -173,6 +179,9 @@ function scheduleTargeted(name,fn,delay){
 function applyRealtimeAppointment(payload,renderNow){
   var row=payload&&payload.new&&payload.new.id?payload.new:payload&&payload.old;
   if(!row||!row.id)return;
+  var loading=window.salonCalendarLoadState?.status==='loading';
+  SalonAppointmentData.nextGeneration();
+  if(loading)scheduleTargeted('appointment-reconcile',refreshAppointmentsOnly,200);
   var index=appts.findIndex(function(item){return String(item.id)===String(row.id)});
   if(payload.eventType==='DELETE'||row.status==='cancelled'){if(index>=0)appts.splice(index,1);}else{
     var mapped=remoteAppointment(row);mapped.status=row.status;mapped.note=row.note||'';mapped.updatedBy=row.updated_by||null;mapped.debtOriginalAmount=Number(row.debt_original_amount||0);
