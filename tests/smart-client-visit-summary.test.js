@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 
 const source = fs.readFileSync('smart-customer-analysis-1.7.0.js', 'utf8');
 const core = source.slice(source.indexOf('var smartSelectedClientId='), source.indexOf('var previousRemoteAppointment='));
-const migration = fs.readFileSync('supabase/migrations/20261020202100_client_visit_summary_future_guard.sql', 'utf8');
+const migration = fs.readFileSync('supabase/migrations/20261020202600_client_visit_summary_staff_scope.sql', 'utf8');
 const legacy = fs.readFileSync('salon-ui-fixes-2.3.16.js', 'utf8');
 const clients = [
   { id: 'kenan', full_name: 'Kenan Şahin' },
@@ -74,7 +74,10 @@ const visit = (id, count, last, average) => ({
   assert.match(migration, /a\.status in \('completed','confirmed'\) and a\.scheduled_at < now\(\)/,
     'Neither future reservations nor future-dated completed rows count as visits');
   assert.match(migration, /select distinct e\.client_id, e\.visit_day/);
-  assert.match(migration, /security invoker/);
+  assert.match(migration, /security definer/);
+  assert.match(migration, /p\.id = \(select auth\.uid\(\)\) and p\.active/);
+  assert.match(migration, /own\.client_id = c\.id and own\.employee_id = u\.id/,
+    'Staff can request complete visit aggregates only for clients already assigned to them');
   assert.match(migration, /revoke all on function .* from public, anon/);
   assert.doesNotMatch(legacy, /offset<10000|loadAllAppointmentsPaged|loadCalendarDayFast/);
   console.log('PASS independent visit summaries, Kenan today, identity, stale requests, error state and legacy loader removal');
