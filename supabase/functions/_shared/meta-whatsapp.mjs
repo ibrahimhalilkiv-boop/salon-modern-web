@@ -6,6 +6,7 @@ export const META_TEMPLATE_TOKENS = {
   appointment_reminder: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}", "{google_haritalar_url}", "{yol_tarifi_url}"],
   appointment_cancelled: ["{musteri_adi}", "{randevu_tarihi}", "{randevu_saati}", "{calisan_adi}"],
   appointment_thank_you: ["{musteri_adi}", "{google_yorum_url}", "{instagram_url}"],
+  customer_return_reminder: ["{musteri_adi}"],
 };
 
 export async function sha256(value) {
