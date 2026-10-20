@@ -115,7 +115,75 @@ async function diagnoseMeta(expectedPhone: string) {
   return output;
 }
 
+
+async function processReturnDelivery(db: any, delivery: any) {
+  // This message has no appointment: its idempotency key is (phone,last visit).
+  // Revalidate consent, future appointments, manual contact and mode on EVERY attempt.
+  const eligibility = await db.rpc("salon_auto_return_send_is_current", { p_log_id: delivery.id });
+  if (eligibility.error || eligibility.data !== true) return db.from("whatsapp_message_logs")
+    .update({ status: "skipped_event_invalid", last_error: eligibility.error?.message ?? "return_no_longer_eligible", updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+
+  const [{ data: client, error: clientError }, { data: template, error: templateError }, { data: mapping, error: mappingError }] = await Promise.all([
+    db.from("clients").select("id,full_name,phone").eq("id", delivery.client_id).maybeSingle(),
+    db.from("message_templates").select("content").eq("template_key", "customer_return_reminder").maybeSingle(),
+    db.from("whatsapp_meta_template_mappings").select("approval_status,meta_template_name,language_code,placeholder_order,approved_content_hash")
+      .eq("template_key", "customer_return_reminder").maybeSingle(),
+  ]);
+  if (clientError || templateError || mappingError || !client || !template?.content || !mapping) return db.from("whatsapp_message_logs")
+    .update({ status: "skipped_template_missing", last_error: clientError?.message ?? templateError?.message ?? mappingError?.message ?? "return_template_missing", updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+
+  const phone = normalizeTrPhone(client.phone);
+  const values = { "{musteri_adi}": client.full_name };
+  const allowed = META_TEMPLATE_TOKENS.customer_return_reminder;
+  const rendered = renderMessageTemplate(template.content, values, allowed);
+  const currentHash = await sha256(template.content);
+  if (!phone || !rendered.ok || !Array.isArray(mapping.placeholder_order)
+      || JSON.stringify(mapping.placeholder_order) !== JSON.stringify(allowed)
+      || mapping.meta_template_name !== "salon_modern_tiras_hatirlatma_v1"
+      || mapping.language_code !== "tr") return db.from("whatsapp_message_logs")
+    .update({ status: "skipped_template_invalid", last_error: "return_template_or_phone_invalid", updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+
+  if (mapping.approval_status !== "approved" || !mapping.approved_content_hash
+      || mapping.approved_content_hash !== currentHash) return db.from("whatsapp_message_logs")
+    .update({ status: "awaiting_meta_approval", template_content_hash: currentHash, last_error: "return_meta_approval_or_hash_mismatch", updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+
+  if (SAFE_MODE) return db.from("whatsapp_message_logs")
+    .update({ status: "suppressed_safe_mode", template_content_hash: currentHash, rendered_message: rendered.content, metadata: { provider: "meta", category: "MARKETING", safe_mode: true }, updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+
+  // Recheck immediately before the paid provider call.
+  const lastCheck = await db.rpc("salon_auto_return_send_is_current", { p_log_id: delivery.id });
+  if (lastCheck.error || lastCheck.data !== true) return db.from("whatsapp_message_logs")
+    .update({ status: "skipped_event_invalid", last_error: "return_eligibility_changed", updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+
+  const payload = metaTemplatePayload({
+    to: phone, name: mapping.meta_template_name, languageCode: mapping.language_code,
+    parameterTokens: allowed, values,
+  });
+  const result = await postMetaMessage(payload);
+  if (result.ok) return db.from("whatsapp_message_logs")
+    .update({ status: "sent", provider_message_id: result.providerMessageId,
+      template_content_hash: currentHash, rendered_message: rendered.content,
+      metadata: { provider: "meta", category: "MARKETING", meta_template_name: mapping.meta_template_name },
+      sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+  if (result.kind === "retryable" && Number(delivery.attempt_count) < 3) return db.from("whatsapp_message_logs")
+    .update({ status: "queued", next_attempt_at: new Date(Date.now() + 60_000 * Math.pow(2, Math.max(0, Number(delivery.attempt_count) - 1))).toISOString(),
+      last_error: "meta_" + result.httpStatus, updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+  return db.from("whatsapp_message_logs")
+    .update({ status: result.kind === "unknown" ? "delivery_unknown" : "failed",
+      last_error: result.error ?? ("meta_" + result.httpStatus), updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
+}
+
 async function processDelivery(db: any, delivery: any) {
+  if (delivery.template_key === "customer_return_reminder") return processReturnDelivery(db, delivery);
   const appointmentResult = await db.from("appointments").select("id,client_id,client_name,client_phone,service_name,amount,employee_id,scheduled_at,status,reminder_eligible,reminder_target_at,completed_at").eq("id", delivery.appointment_id).maybeSingle();
   const appointment = appointmentResult.data;
   if (appointmentResult.error || !appointment) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: appointmentResult.error?.message ?? "appointment_not_found", updated_at: new Date().toISOString() }).eq("id", delivery.id);
