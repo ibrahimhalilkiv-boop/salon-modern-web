@@ -38,11 +38,17 @@
     }
   }
 
-  async function load(db, columns, day) {
+  async function loadVisible(db, columns, day) {
+    var bounds = monthBounds(day);
+    return pages(db, columns, bounds.start, bounds.end);
+  }
+
+  async function load(db, columns, day, onVisible) {
     var bounds = monthBounds(day);
     // Read the visible month first. Complete the global set for history,
     // performance, commissions and modules that still use `appts`.
     var visible = await pages(db, columns, bounds.start, bounds.end);
+    if (onVisible) await onVisible(visible);
     var other = await Promise.all([
       pages(db, columns, null, bounds.start),
       pages(db, columns, bounds.end, null)
@@ -52,5 +58,5 @@
     });
   }
 
-  window.SalonAppointmentData = { load: load, nextGeneration: nextGeneration, isCurrent: isCurrent, monthBounds: monthBounds };
+  window.SalonAppointmentData = { load: load, loadVisible: loadVisible, nextGeneration: nextGeneration, isCurrent: isCurrent, monthBounds: monthBounds };
 })();

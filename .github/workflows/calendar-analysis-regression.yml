@@ -1,0 +1,28 @@
+name: Calendar and customer analysis regression
+
+on:
+  push:
+    paths:
+      - 'salon-appointment-data.js'
+      - 'salon-modern.html'
+      - 'salon-performance-2.3.14.js'
+      - 'salon-ui-fixes-2.3.16.js'
+      - 'smart-customer-analysis-1.7.0.js'
+      - 'supabase/migrations/**'
+      - 'tests/appointment-pagination.test.js'
+      - 'tests/calendar-preview-race.test.js'
+      - 'tests/smart-client-visit-summary.test.js'
+      - '.github/workflows/calendar-analysis-regression.yml'
+  pull_request:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tests/appointment-pagination.test.js
+      - run: node tests/calendar-preview-race.test.js
+      - run: node tests/smart-client-visit-summary.test.js

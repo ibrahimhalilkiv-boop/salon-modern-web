@@ -3,6 +3,36 @@
 
 var smartSelectedClientId=null;
 var smartPendingAction=null;
+var smartVisitSummaries=new Map(),smartSummaryState='loading',smartSummaryGeneration=0;
+function smartToday(){return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Istanbul'})}
+function smartSummaryNotice(){return smartSummaryState==='error'?'Müşteri analizi yüklenemedi. Bağlantıyı kontrol edip sayfayı yenileyin.':'Müşteri analizi yükleniyor…'}
+async function smartRefreshSummaries(){
+  if(!currentUser)return;
+  var generation=++smartSummaryGeneration,userId=currentUser.id;
+  smartSummaryState='loading';renderSmartAnalysisPage();renderSmartDailyPanels();
+  try{
+    var rows=[],cursor=null,pageSize=500;
+    for(;;){
+      var response=await salonDb.rpc('salon_client_visit_summary',{p_after:cursor,p_limit:pageSize});
+      if(response.error)throw response.error;
+      if(!Array.isArray(response.data))throw new Error('Müşteri ziyaret özeti eksik döndü.');
+      if(generation!==smartSummaryGeneration||currentUser?.id!==userId)return;
+      rows.push.apply(rows,response.data);
+      if(response.data.length<pageSize)break;
+      cursor=response.data[response.data.length-1].client_id;
+      if(!cursor)throw new Error('Müşteri ziyaret özeti sayfalama anahtarı eksik.');
+    }
+    if(generation!==smartSummaryGeneration||currentUser?.id!==userId)return;
+    smartVisitSummaries=new Map(rows.map(function(row){return [String(row.client_id),row]}));
+    smartSummaryState='ready';
+  }catch(error){
+    if(generation!==smartSummaryGeneration)return;
+    smartSummaryState='error';
+    throw error;
+  }finally{
+    if(generation===smartSummaryGeneration){renderSmartAnalysisPage();renderSmartDailyPanels();renderCustomerReturnAlerts();renderCustomerDetail()}
+  }
+}
 var SMART_STATUS={
   approaching:{label:'Yaklaşıyor',rank:1,className:'smart-approaching'},
   due:{label:'Zamanı Geldi',rank:2,className:'smart-due'},
@@ -19,14 +49,15 @@ function smartClientAppointments(clientId){
   return appts.filter(function(item){return item.clientId&&String(item.clientId)===String(clientId)}).sort(function(a,b){return (appointmentDate(b)+'T'+b.time).localeCompare(appointmentDate(a)+'T'+a.time)});
 }
 function smartDateDiff(later,earlier){
-  var one=Date.parse(String(later).slice(0,10)+'T12:00:00'),two=Date.parse(String(earlier).slice(0,10)+'T12:00:00');
+  var one=Date.parse(String(later).slice(0,10)+'T12:00:00Z'),two=Date.parse(String(earlier).slice(0,10)+'T12:00:00Z');
   return Math.max(0,Math.round((one-two)/86400000));
 }
 function smartPastVisits(client){
-  var today=localDate(0),seen={};
+  var today=smartToday(),seen={};
   return smartClientAppointments(client.id).filter(function(item){
     var day=appointmentDate(item),status=String(item.status||'confirmed');
-    if(day>today||status==='cancelled'||status==='no_show'||seen[day])return false;
+    if(day>today||!['completed','confirmed'].includes(status)||seen[day])return false;
+    if(status==='confirmed'&&Date.parse(item.scheduledAt||remoteSchedule(day,item.time))>=Date.now())return false;
     seen[day]=true;return true;
   }).sort(function(a,b){return appointmentDate(a).localeCompare(appointmentDate(b))});
 }
@@ -36,21 +67,18 @@ function smartPreferredEmployee(items){
   return Object.keys(counts).sort(function(left,right){return counts[right]-counts[left]})[0]||null;
 }
 function smartAnalysisForClient(client){
-  var visits=smartPastVisits(client),dates=visits.map(appointmentDate),last=dates.length?dates[dates.length-1]:null;
-  if(dates.length<3){return {client:client,enough:false,status:'insufficient',label:SMART_STATUS.insufficient.label,count:dates.length,last:last,average:null,elapsed:last?smartDateDiff(localDate(0),last):null,preferredEmployeeId:smartPreferredEmployee(visits),visits:visits}}
-  var intervals=[];
-  for(var index=1;index<dates.length;index++)intervals.push(smartDateDiff(dates[index],dates[index-1]));
-  intervals=intervals.filter(function(value){return value>0});
-  if(intervals.length<2){return {client:client,enough:false,status:'insufficient',label:SMART_STATUS.insufficient.label,count:dates.length,last:last,average:null,elapsed:smartDateDiff(localDate(0),last),preferredEmployeeId:smartPreferredEmployee(visits),visits:visits}}
-  var average=Math.max(1,Math.round(intervals.reduce(function(sum,value){return sum+value},0)/intervals.length));
-  var elapsed=smartDateDiff(localDate(0),last),ratio=elapsed/average,status='regular';
+  var summary=smartVisitSummaries.get(String(client.id)),count=Number(summary?.visit_count||0),last=summary?.last_visit||null,
+      average=Number(summary?.average_days||0),elapsed=last?smartDateDiff(smartToday(),last):null;
+  if(count<3||average<1)return {client:client,enough:false,status:'insufficient',label:SMART_STATUS.insufficient.label,count:count,last:last,average:null,elapsed:elapsed,preferredEmployeeId:summary?.preferred_employee_id||null,visits:[]};
+  var ratio=elapsed/average,status='regular';
   if(ratio>=1.75)status='risk';
   else if(ratio>=1.25)status='overdue';
   else if(ratio>=1)status='due';
   else if(ratio>=0.75)status='approaching';
-  return {client:client,enough:true,status:status,label:SMART_STATUS[status].label,count:dates.length,last:last,average:average,elapsed:elapsed,preferredEmployeeId:smartPreferredEmployee(visits),visits:visits};
+  return {client:client,enough:true,status:status,label:SMART_STATUS[status].label,count:count,last:last,average:average,elapsed:elapsed,preferredEmployeeId:summary?.preferred_employee_id||null,visits:[]};
 }
 function smartAnalyses(){
+  if(smartSummaryState!=='ready')return [];
   return uniqueRemoteClients().map(smartAnalysisForClient).filter(function(item){return item.count>0}).sort(function(left,right){
     var rank=(SMART_STATUS[right.status].rank-SMART_STATUS[left.status].rank);return rank||(right.elapsed||0)-(left.elapsed||0);
   });
@@ -142,11 +170,23 @@ window.onSalonContactsSelected=function(payload){
 var smartClientLoadPromise=null;
 function smartLoadActiveClients(){
   if(smartClientLoadPromise)return smartClientLoadPromise;
-  smartClientLoadPromise=salonDb.from('clients').select('id,full_name,phone,note,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by,deleted_at,deleted_by').eq('active',true).order('full_name').then(function(result){
-    if(result.error)throw result.error;
-    remoteClients=result.data||[];clients=remoteClients.map(function(client){return client.full_name});
+  var userId=currentUser?.id;
+  smartClientLoadPromise=(async function(){
+    var rows=[],pageSize=500,cursor=null;
+    for(;;){
+      var query=salonDb.from('clients').select('id,full_name,phone,note,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by,deleted_at,deleted_by').eq('active',true).order('id').limit(pageSize);
+      if(cursor)query=query.gt('id',cursor);
+      var result=await query;
+      if(result.error)throw result.error;
+      if(!Array.isArray(result.data))throw new Error('Müşteri listesi eksik döndü.');
+      rows.push.apply(rows,result.data);
+      if(result.data.length<pageSize)break;
+      cursor=result.data[result.data.length-1].id;
+    }
+    if(currentUser?.id!==userId)return remoteClients;
+    remoteClients=rows.sort(function(left,right){return left.full_name.localeCompare(right.full_name,'tr')});clients=remoteClients.map(function(client){return client.full_name});
     return remoteClients;
-  }).finally(function(){smartClientLoadPromise=null});
+  })().finally(function(){smartClientLoadPromise=null});
   return smartClientLoadPromise;
 }
 var previousLoadV151Smart=loadV151Supplement;
@@ -157,9 +197,13 @@ loadV151Supplement=async function(){
 
 var previousReloadSmart=reloadRemoteData;
 reloadRemoteData=async function(){
-  await previousReloadSmart();if(!currentUser)return;
-  await smartLoadActiveClients();
-  renderCustomers();renderCustomerDetail();renderSmartAnalysisPage();renderSmartDailyPanels();
+  smartSummaryState='loading';renderSmartAnalysisPage();renderSmartDailyPanels();
+  try{
+    await previousReloadSmart();if(!currentUser)return;
+    await smartLoadActiveClients();
+    await smartRefreshSummaries();
+    renderCustomers();renderCustomerDetail();renderSmartAnalysisPage();renderSmartDailyPanels();
+  }catch(error){smartSummaryState='error';renderSmartAnalysisPage();renderSmartDailyPanels();throw error}
 };
 
 // Some older boot loaders initially selected only the client identity fields.
@@ -214,18 +258,19 @@ function smartAttentionCards(items,limit){
 }
 function smartGreeting(){var hour=new Date().getHours();return hour<12?'Günaydın':hour<18?'İyi günler':'İyi akşamlar'}
 function smartSummaryText(){
-  var today=localDate(0),todayAppointments=appts.filter(function(item){return appointmentDate(item)===today&&item.status!=='cancelled'}),gaps=smartFreeSlots(today),analyses=smartActionableAnalyses(false),risk=analyses.filter(function(item){return item.status==='risk'}).length,suggestions=smartGapSuggestions(today);
+  var today=localDate(0),todayAppointments=appts.filter(function(item){return appointmentDate(item)===today&&item.status!=='cancelled'}),gaps=smartFreeSlots(today),analyses=smartActionableAnalyses(false),risk=analyses.filter(function(item){return item.status==='risk'}).length,suggestions=smartSummaryState==='ready'?smartGapSuggestions(today):[];
   var prefix=smartGreeting()+((currentUser&&currentUser.role!=='yonetici')?' '+currentUser.name.split(' ')[0]:'')+'. ';
   var count=prefix+'Bugün '+todayAppointments.length+' randevu'+(currentUser&&currentUser.role!=='yonetici'?'n var':' var')+'. ';
   var gap=gaps.length?gaps[0].employeeName+' için '+smartClock(gaps[0].start)+'–'+smartClock(gaps[0].end)+' arasında boşluk bulunuyor. ':'Bugün uygun boşluk görünmüyor. ';
+  if(smartSummaryState!=='ready')return count+gap+smartSummaryNotice();
   return count+gap+analyses.length+' müşterinin gelme zamanı geldi veya geçti. '+risk+' müşteri kaybedilme riski taşıyor. Boşluğu doldurabilecek '+suggestions.reduce(function(sum,item){return sum+item.candidates.length},0)+' müşteri bulundu.';
 }
 function renderSmartDailyPanels(){
   var target=document.getElementById('calendarContent');if(!target||!currentUser||teamCalendarMode==='month'||selectedTeamDate()!==localDate(0))return;
   target.querySelectorAll('.smart-daily-block').forEach(function(node){node.remove()});
-  var attention=smartActionableAnalyses(false),suggestions=smartGapSuggestions(localDate(0));
+  var attention=smartActionableAnalyses(false),suggestions=smartSummaryState==='ready'?smartGapSuggestions(localDate(0)):[];
   var summary=document.createElement('section');summary.className='smart-daily-block smart-summary';summary.innerHTML='<div class="smart-title"><div><small>GÜNLÜK SALON ÖZETİ</small><h2>'+safe(smartGreeting())+'</h2></div><button type="button" onclick="showPage(\'salonAssistant\')">MORİ ›</button></div><p>'+safe(smartSummaryText())+'</p>';
-  var attentionBlock=document.createElement('section');attentionBlock.className='smart-daily-block';attentionBlock.innerHTML='<div class="smart-title"><div><small>AKILLI MÜŞTERİ ANALİZİ</small><h2>Bugün ilgilenilecek müşteriler</h2></div><button type="button" onclick="showPage(\'smartAnalysis\')">Tümünü gör ›</button></div><div class="smart-scroll">'+(smartAttentionCards(attention,8)||'<div class="empty">Bugün için öncelikli müşteri yok.</div>')+'</div>';
+  var attentionBlock=document.createElement('section');attentionBlock.className='smart-daily-block';attentionBlock.innerHTML='<div class="smart-title"><div><small>AKILLI MÜŞTERİ ANALİZİ</small><h2>Bugün ilgilenilecek müşteriler</h2></div><button type="button" onclick="showPage(\'smartAnalysis\')">Tümünü gör ›</button></div><div class="smart-scroll">'+(smartSummaryState!=='ready'?'<div class="empty">'+safe(smartSummaryNotice())+'</div>':smartAttentionCards(attention,8)||'<div class="empty">Bugün için öncelikli müşteri yok.</div>')+'</div>';
   var gapBlock=document.createElement('section');gapBlock.className='smart-daily-block';gapBlock.innerHTML='<div class="smart-title"><div><small>BOŞ SAAT ANALİZİ</small><h2>Boşluğu doldurabilecek müşteriler</h2></div></div>'+(suggestions.map(function(group){return '<div class="smart-gap"><strong>'+safe(group.slot.employeeName)+' · '+smartClock(group.slot.start)+'–'+smartClock(group.slot.end)+'</strong>'+group.candidates.map(function(item){return '<span>'+safe(item.client.full_name)+' · '+safe(item.label)+smartWhatsappButton(item.client.id,'Mesaj')+'</span>'}).join('')+'</div>'}).join('')||'<div class="empty">Uygun boşluk veya müşteri önerisi yok.</div>');
   var anchor=target.querySelector('.calendar-date-nav')||target.firstChild;target.insertBefore(gapBlock,anchor);target.insertBefore(attentionBlock,gapBlock);target.insertBefore(summary,attentionBlock);
 }
@@ -243,12 +288,14 @@ function installSmartPages(){
 }
 function renderSmartAnalysisPage(){
   var holder=document.getElementById('smartAnalysisContent');if(!holder||!currentUser)return;
+  if(smartSummaryState!=='ready'){holder.innerHTML='<div class="empty">'+safe(smartSummaryNotice())+'</div>';return}
   var analyses=smartAnalyses(),groups=['risk','overdue','due','approaching','insufficient'];
   holder.innerHTML='<div class="smart-analysis-intro"><strong>'+analyses.length+' müşteri analiz edildi</strong><small>Geçmişler yalnızca benzersiz customer_id üzerinden hesaplanır. En az 3 farklı ziyaret olmadan tahmin yapılmaz.</small></div>'+groups.map(function(status){var items=analyses.filter(function(item){return item.status===status});return '<section class="smart-analysis-group"><div class="section"><h2>'+safe(SMART_STATUS[status].label)+'</h2><span class="role">'+items.length+'</span></div>'+(smartAttentionCards(items,100)||'<div class="empty">Bu durumda müşteri yok.</div>')+'</section>'}).join('');
 }
 
 renderCustomerReturnAlerts=function(){
   var area=document.getElementById('customerReturnAlerts');if(!area||currentUser?.role!=='yonetici')return;
+  if(smartSummaryState!=='ready'){area.innerHTML='<div class="empty">'+safe(smartSummaryNotice())+'</div>';return}
   var due=smartActionableAnalyses(false);
   area.innerHTML='<div class="section"><h2>Akıllı Müşteri Analizi</h2><span class="role">'+due.length+' müşteri</span></div><div class="notice">Analiz kendi başına WhatsApp açmaz ve mesaj göndermez. Mesaj yalnızca aşağıdaki düğmeye basıldığında hazırlanır.</div>'+(smartAttentionCards(due,50)||'<div class="empty">Şu anda ilgilenilecek müşteri yok.</div>');
 };
@@ -259,7 +306,7 @@ function assistantClients(term){var key=customerNameKey(term);return uniqueRemot
 function assistantAppointmentRows(items){return items.map(function(item){return '<div class="assistant-row"><strong>'+safe(item.customer)+'</strong><small>'+safe(friendlyDate(appointmentDate(item)))+' · '+safe(item.time)+' · '+safe(item.staff)+' · '+safe(item.operation)+'</small></div>'}).join('')||'<div class="empty">Kayıt bulunamadı.</div>'}
 function assistantClientHistory(term,limit,latestOnly){
   var matches=assistantClients(term);if(!matches.length)return '<div class="empty">Bu isimle müşteri bulunamadı.</div>';
-  return matches.map(function(client){var items=smartClientAppointments(client.id).filter(function(item){return appointmentDate(item)<=localDate(0)}).slice(0,limit);return '<div class="assistant-client"><h3>'+safe(client.full_name)+'</h3>'+(latestOnly?(items[0]?'<p>Son geliş: <strong>'+safe(friendlyDate(appointmentDate(items[0])))+' · '+safe(items[0].time)+'</strong></p>':'<div class="empty">Ziyaret kaydı yok.</div>'):assistantAppointmentRows(items))+'</div>'}).join('');
+  return matches.map(function(client){var items=smartPastVisits(client).slice().reverse().slice(0,limit);return '<div class="assistant-client"><h3>'+safe(client.full_name)+'</h3>'+(latestOnly?(items[0]?'<p>Son geliş: <strong>'+safe(friendlyDate(appointmentDate(items[0])))+' · '+safe(items[0].time)+'</strong></p>':'<div class="empty">Ziyaret kaydı yok.</div>'):assistantAppointmentRows(items))+'</div>'}).join('');
 }
 function assistantReadResult(command){
   var normalized=assistantNormalize(command),today=localDate(0),tomorrow=localDate(1),match;
@@ -306,6 +353,12 @@ showPage=function(id){
   if(id==='smartAnalysis')renderSmartAnalysisPage();
   if(id==='salonAssistant'){var input=document.getElementById('salonAssistantInput');if(input)setTimeout(function(){input.focus()},50)}
 };
+
+var smartFocusRefreshAt=0;
+function smartRefreshOnResume(){if(!currentUser||document.hidden||Date.now()-smartFocusRefreshAt<15000)return;smartFocusRefreshAt=Date.now();smartRefreshSummaries().catch(function(error){showAppToast('Müşteri analizi yüklenemedi',error.message||'Bağlantıyı kontrol edin.')})}
+window.addEventListener('focus',smartRefreshOnResume);
+document.addEventListener('visibilitychange',smartRefreshOnResume);
+window.SalonSmartAnalysis={refresh:smartRefreshSummaries,invalidate:function(){smartSummaryState='loading';renderSmartAnalysisPage();renderSmartDailyPanels()},state:function(){return smartSummaryState}};
 var previousSimplifySmart=simplifyNavigation;
 simplifyNavigation=function(){previousSimplifySmart();installSmartPages();document.getElementById('drawerSmartAnalysis')?.classList.remove('hidden');document.getElementById('drawerSalonAssistant')?.remove()};
 

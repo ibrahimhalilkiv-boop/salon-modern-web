@@ -150,8 +150,10 @@ async function refreshAppointmentsOnly(){
   catch(error){if(SalonAppointmentData.isCurrent(version)){window.salonCalendarLoadState={status:'error',date:selectedTeamDate(),message:error.message||String(error)};renderCalendar()}throw error}
   if(!SalonAppointmentData.isCurrent(version)||currentUser?.id!==userId)return;
   appts=rows.map(function(row){var mapped=remoteAppointment(row);mapped.status=row.status;mapped.note=row.note||'';mapped.updatedBy=row.updated_by||null;mapped.debtOriginalAmount=Number(row.debt_original_amount||0);return mapped});
+  window.salonHistoryState='ready';
   window.salonCalendarLoadState={status:'ready',date:selectedTeamDate()};
   renderHomeSummary();render();renderCalendar();renderStatistics();
+  if(window.SalonSmartAnalysis)await window.SalonSmartAnalysis.refresh();
   if(typeof syncNativeAppointmentReminders==='function')syncNativeAppointmentReminders();
 }
 
@@ -180,7 +182,7 @@ function scheduleTargeted(name,fn,delay){
 function applyRealtimeAppointment(payload,renderNow){
   var row=payload&&payload.new&&payload.new.id?payload.new:payload&&payload.old;
   if(!row||!row.id)return;
-  var loading=window.salonCalendarLoadState?.status==='loading';
+  var loading=window.salonCalendarLoadState?.status==='loading'||window.salonHistoryState==='loading';
   SalonAppointmentData.nextGeneration();
   if(loading)scheduleTargeted('appointment-reconcile',refreshAppointmentsOnly,200);
   var index=appts.findIndex(function(item){return String(item.id)===String(row.id)});
@@ -197,11 +199,13 @@ function applyRealtimeAppointment(payload,renderNow){
 
 var pendingAppointmentPayloads=[];
 function queueRealtimeAppointment(payload){
+  window.SalonSmartAnalysis?.invalidate();
   pendingAppointmentPayloads.push(payload);
   scheduleTargeted('appointments',function(){
     var events=pendingAppointmentPayloads.splice(0);
     events.forEach(function(item){applyRealtimeAppointment(item,false)});
     renderCalendar();renderStatistics();renderHomeSummary();render();
+    window.SalonSmartAnalysis?.refresh().catch(function(error){console.error('Müşteri analizi yenilenemedi:',error)});
     if(typeof syncNativeAppointmentReminders==='function')syncNativeAppointmentReminders();
   },35);
 }
