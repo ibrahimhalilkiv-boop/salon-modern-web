@@ -103,6 +103,17 @@ async function dispatch() {
       await admin.from("web_push_deliveries").update({ status: "expired", last_error: "Kayıt veya abonelik artık aktif değil." }).eq("id", item.id);
       expired++; continue;
     }
+    if (note.kind === "customer_return_due") {
+      const [{ data: settings, error: settingsError }, { data: owner, error: ownerError }] = await Promise.all([
+        admin.from("booking_settings").select("whatsapp_return_auto_enabled").eq("id", true).maybeSingle(),
+        admin.from("profiles").select("username,role,active").eq("id", note.recipient_id).maybeSingle(),
+      ]);
+      if (settingsError || ownerError) throw settingsError ?? ownerError;
+      if (!settings || settings.whatsapp_return_auto_enabled || owner?.username !== "halil.kiv" || owner?.role !== "manager" || !owner?.active) {
+        await admin.from("web_push_deliveries").update({ status: "expired", last_error: "Manuel geri çağırma bildirimi artık geçerli değil." }).eq("id", item.id);
+        expired++; continue;
+      }
+    }
     if (note.kind === "mori_alert") {
       const [{ data: event }, { data: settings }] = await Promise.all([
         admin.from("mori_events").select("state,recipient_id,category").eq("id", note.mori_event_id).maybeSingle(),

@@ -26,6 +26,12 @@ function boot(source){
     assert(receipt.shownAt&&receipt.pushReceivedAt);assert.equal(receipt.lastError,null);assert(!('body' in receipt));
     await page.evaluate(data=>fixtureReminder({...data,notificationId:'old-history',createdAt:'2020-01-01T00:00:00Z'},'message'),payload);
     assert.equal(await page.evaluate(()=>fixtureCalls.length),0,'An update must not replay old notification history');
-    console.log('PASS browser reminder receipts: real CacheStorage, concurrent dedup, restart/update persistence and no pre-upgrade replay');
+    const returnDigest={notificationId:'fixture-return-digest',kind:'customer_return_due',title:'Tıraş zamanı',body:'Listeyi açın'};
+    await page.evaluate(async data=>{await Promise.all([fixtureReminder(data),fixtureReminder(data)]);},returnDigest);
+    assert.equal(await page.evaluate(()=>fixtureCalls.length),1,'Repeated return digest push must display once');
+    await page.reload();await page.evaluate(boot,source);await page.evaluate(()=>fixtureActivate());
+    await page.evaluate(data=>fixtureReminder(data),returnDigest);
+    assert.equal(await page.evaluate(()=>fixtureCalls.length),0,'Worker restart must not replay a dismissed return digest');
+    console.log('PASS browser push receipts: reminders and return digests dedup across retries and worker restarts');
   }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

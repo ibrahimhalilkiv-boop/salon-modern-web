@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var items = [], template = '', busy = false;
+  var items = [], template = '', busy = false, autoEnabled = false;
   var pageId = 'salonReturnDue';
 
   function isOwner() {
@@ -70,17 +70,18 @@
     }
     var label = { risk: 'Kaybedilme Riski', overdue: 'Gecikti', due: 'Zamanı Geldi' };
     target.innerHTML =
-      '<div class="return-due-note"><strong>' + items.length + ' müşteri</strong> · En az 3 farklı ziyaret esas alınır. Eski randevuların bir kısmı tamamlandı olarak işaretlenmediği için listeyi kontrol edin. İleti iznini doğrulamadan mesaj göndermeyin.</div>' +
+      '<div class="return-due-note"><strong>' + items.length + ' müşteri</strong> · En az 3 farklı ziyaret esas alınır. ' +
+      (autoEnabled ? 'Otomatik geri çağırma açık; manuel WhatsApp işlemleri kapalı.' : 'Eski randevuların bir kısmı tamamlandı olarak işaretlenmediği için listeyi kontrol edin. İleti iznini doğrulamadan mesaj göndermeyin.') + '</div>' +
       (items.length ? items.map(function (item) {
         return '<article class="return-due-item">' +
           '<div class="return-due-head"><strong>' + escapeHtml(item.client_name) + '</strong><span class="return-due-status">' + escapeHtml(label[item.state] || 'Zamanı Geldi') + '</span></div>' +
           '<small>' + escapeHtml(item.phone) + ' · Son ziyaret: ' + dateTr(item.last_visit) +
           '<br>Ortalama ' + Number(item.average_days) + ' günde bir · ' + Number(item.elapsed_days) + ' gündür gelmedi' +
           '<br>' + (item.has_consent ? 'WhatsApp pazarlama izni kayıtlı' : 'WhatsApp iletişim izni sistemde kayıtlı değil') + '</small>' +
-          '<div class="return-due-controls">' +
+          (autoEnabled ? '' : '<div class="return-due-controls">' +
             '<button class="send" type="button" data-return-action="whatsapp" data-client="' + escapeHtml(item.client_id) + '">WhatsApp’ta hazırla</button>' +
             '<button class="handled" type="button" data-return-action="handled" data-client="' + escapeHtml(item.client_id) + '">Mesajı gönderdim</button>' +
-          '</div></article>';
+          '</div>') + '</article>';
       }).join('') : '<div class="empty">Şu anda hatırlatılacak müşteri yok.</div>');
   }
   async function load() {
@@ -93,19 +94,22 @@
     try {
       var results = await Promise.all([
         salonDb.rpc('salon_return_due_clients'),
-        salonDb.from('message_templates').select('content').eq('template_key', 'customer_return_reminder').maybeSingle()
+        salonDb.from('message_templates').select('content').eq('template_key', 'customer_return_reminder').maybeSingle(),
+        salonDb.from('booking_settings').select('whatsapp_return_auto_enabled').eq('id', true).maybeSingle()
       ]);
       if (results[0].error) throw results[0].error;
       items = results[0].data || [];
       if (results[1].error) throw results[1].error;
+      if (results[2].error || !results[2].data) throw results[2].error || new Error('Geri çağırma modu alınamadı.');
       template = results[1].data && results[1].data.content || '';
+      autoEnabled = results[2].data.whatsapp_return_auto_enabled === true;
       render();
     } catch (error) {
       if (list) list.innerHTML = '<div class="empty">Müşteri listesi yüklenemedi. ' + escapeHtml(error.message || 'Bağlantıyı kontrol edin.') + '</div>';
     } finally { busy = false; }
   }
   function openWhatsApp(item) {
-    if (!isOwner() || !item.phone || !/^905[0-9]{9}$/.test(item.phone)) return;
+    if (!isOwner() || autoEnabled || !item.phone || !/^905[0-9]{9}$/.test(item.phone)) return;
     if (!item.has_consent && !window.confirm('Bu müşterinin WhatsApp üzerinden geri çağırma mesajı almayı kabul ettiğini teyit ediyor musunuz? Kayıtlı pazarlama izni bulunmuyor.')) return;
     var message = String(template || '').trim();
     if (!message) { alert('Müşteri hatırlatma şablonu yüklenemedi. Listeyi yenileyin.'); return; }
@@ -119,14 +123,14 @@
     window.open('https://wa.me/' + item.phone + '?text=' + encodeURIComponent(message), '_blank', 'noopener');
   }
   async function markHandled(item) {
-    if (!isOwner() || !window.confirm(item.client_name + ' için WhatsApp mesajını gerçekten gönderdiniz mi?')) return;
+    if (!isOwner() || autoEnabled || !window.confirm(item.client_name + ' için WhatsApp mesajını gerçekten gönderdiniz mi?')) return;
     try {
       var response = await salonDb.rpc('salon_mark_return_contact', {
         p_client_id: item.client_id, p_last_visit: item.last_visit
       });
       if (response.error) throw response.error;
       await load();
-      if (typeof showAppToast === 'function') showAppToast('İşaretlendi', 'Müşteri yeni ziyaretine kadar geri çağırma listesinden çıkarıldı.');
+      if (typeof showAppToast === 'function') showAppToast(response.data ? 'İşaretlendi' : 'Zaten işaretlenmiş', response.data ? 'Müşteri yeni ziyaretine kadar geri çağırma listesinden çıkarıldı.' : 'Bu ziyaret için ikinci bir kayıt açılmadı.');
     } catch (error) {
       if (typeof showAppToast === 'function') showAppToast('İşaretlenemedi', error.message || 'Tekrar deneyin.');
     }
