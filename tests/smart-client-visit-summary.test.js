@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 
 const source = fs.readFileSync('smart-customer-analysis-1.7.0.js', 'utf8');
 const core = source.slice(source.indexOf('var smartSelectedClientId='), source.indexOf('var previousRemoteAppointment='));
-const migration = fs.readFileSync('supabase/migrations/20261020202600_client_visit_summary_staff_scope.sql', 'utf8');
+const migration = fs.readFileSync('supabase/migrations/20261020202536_client_visit_summary_staff_scope.sql', 'utf8');
 const legacy = fs.readFileSync('salon-ui-fixes-2.3.16.js', 'utf8');
 const clients = [
   { id: 'kenan', full_name: 'Kenan Şahin' },
