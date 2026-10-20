@@ -214,7 +214,7 @@ async function publicStatus(req: Request, token: string) {
   const item = row.data.appointment
   const starts = item?.scheduled_at || row.data.scheduled_at
   const outsideCutoff = new Date(starts).getTime() >= Date.now() + 2 * 60 * 60 * 1000
-  return reply(req, { status: item?.status === 'cancelled' ? 'cancelled' : row.data.status,
+  return reply(req, { status: item && ['completed', 'cancelled', 'no_show'].includes(item.status) ? item.status : row.data.status,
     requested_date: starts, requested_start_at: starts, revision: row.data.customer_revision,
     appointment: item ? { customer: item.client_name, service: item.service_name, employee: item.employee?.full_name,
       scheduledAt: starts, durationMinutes: item.duration_minutes, amount: item.amount,

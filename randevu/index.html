@@ -68,11 +68,15 @@
       <h2>Randevunuz onaylandı</h2>
       <p>Randevunuz Salon Modern takvimine kaydedildi. Seçtiğiniz tarih ve saatte sizi bekliyoruz.</p>
       <p>Randevu numaranız: <strong id="requestNumber"></strong></p>
+      <p class="hint">Randevu numarası kısa bir referanstır. Randevunuzu yönetmek için aşağıdaki güvenli takip bağlantısını saklayın ve kimseyle paylaşmayın.</p>
+      <label for="trackingLink">Güvenli takip bağlantınız<input id="trackingLink" type="text" readonly autocomplete="off"></label>
+      <button id="copyTrackingLink" class="button-link" type="button">Takip bağlantısını kopyala</button>
+      <p id="copyMessage" role="status" aria-live="polite"></p>
       <a id="statusLink" class="button-link" href="durum/">Randevu durumunu görüntüle</a>
     </section>
 
     <footer><a href="durum/">Randevumun durumunu kontrol et</a><br><a href="../salon-modern.html">Personel Girişi</a><br><a href="https://salonmodern.com.tr/">Salon Modern web sitesine dön</a></footer>
   </main>
-  <script src="booking.js?v=67"></script>
+  <script src="booking.js?v=68"></script>
 </body>
 </html>
