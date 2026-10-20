@@ -19,7 +19,8 @@
   window.appointmentTemplateValues=function(customer,date,time,staffName,amount,operation){return Object.assign(priorValues(customer,date,time,staffName,amount,operation),{'{google_haritalar_url}':settings.google_maps_url,'{yol_tarifi_url}':'https://salonmodern.com.tr/konum','{google_yorum_url}':settings.google_review_url,'{instagram_url}':settings.instagram_url})};
   window.whatsappAppointmentUrl=function(customer,phone,date,time,staffName,amount,operation){return 'https://wa.me/'+window.whatsappPhone(phone)+'?text='+encodeURIComponent(window.renderSavedTemplate('appointment_confirmation',window.appointmentTemplateValues(customer,date,time,staffName,amount,operation)))};
   var priorAutoKey=window.metaTemplateAutoKey;
-  window.metaTemplateAutoKey=function(key){return key==='appointment_thank_you'||priorAutoKey(key)};
+  window.whatsappTemplateConfig.customer_return_reminder.allowed=['{musteri_adi}'];
+  window.metaTemplateAutoKey=function(key){return key==='appointment_thank_you'||key==='customer_return_reminder'||priorAutoKey(key)};
   function sampleValues(){return window.appointmentTemplateValues('Ayşe Yılmaz','2026-10-12','14:30','Halil Kıv',500,'Saç kesimi')}
   window.previewMessageTemplate=function(key){var node=document.getElementById('messageTemplatePreview_'+key),input=document.getElementById('messageTemplate_'+key);if(!node||!input)return;var content=input.value;Object.entries(sampleValues()).forEach(function(entry){content=content.split(entry[0]).join(entry[1])});node.textContent=content;node.classList.remove('hidden')};
   var priorCard=window.messageTemplateCard;
