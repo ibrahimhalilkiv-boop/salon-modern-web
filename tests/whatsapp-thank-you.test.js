@@ -14,6 +14,7 @@ assert.match(migration,/on conflict\(idempotency_key\) do nothing/);
 assert.match(migration,/salon_modern_tesekkur_v1/);
 assert.match(edge,/whatsapp_enqueue_due_thank_yous/);
 assert.match(edge,/thank_you_not_eligible/);
+assert.match(edge,/delivery\.template_key === "appointment_thank_you"\s*\? "meta"\s*:\s*\(Deno\.env\.get\("WHATSAPP_PROVIDER"\)/);
 assert.match(shared,/appointment_thank_you/);
 assert.match(shared,/\{google_haritalar_url\}/);
 assert.match(ui,/Google Haritalar yol tarifi URL/);

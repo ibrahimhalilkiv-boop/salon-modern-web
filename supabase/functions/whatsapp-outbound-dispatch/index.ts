@@ -141,8 +141,11 @@ async function processDelivery(db: any, delivery: any) {
   )) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "thank_you_not_eligible", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const phone = normalizeTrPhone(client?.phone ?? appointment.client_phone ?? "");
   if (!phone) return db.from("whatsapp_message_logs").update({ status: "skipped_no_phone", last_error: "invalid_or_missing_phone", updated_at: new Date().toISOString() }).eq("id", delivery.id);
-  const provider = (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
-  if (delivery.template_key === "appointment_thank_you" && provider !== "meta") return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "meta_provider_required", updated_at: new Date().toISOString() }).eq("id", delivery.id);
+  // Thank-you messages use the approved Meta template even while the other
+  // appointment notifications continue through the configured YCloud route.
+  const provider = delivery.template_key === "appointment_thank_you"
+    ? "meta"
+    : (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
   const values = valuesFor(appointment, client, employeeResult.data, settings);
   const legacyConfigured = provider === "ycloud" && Deno.env.get("WHATSAPP_TEMPLATE_VERSION") === "legacy";
   const legacyKey = delivery.template_key as keyof typeof YCLOUD_LEGACY_APPOINTMENT_TEMPLATES;
