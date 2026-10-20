@@ -18,6 +18,6 @@ assert.match(shared,/appointment_thank_you/);
 assert.match(shared,/\{google_haritalar_url\}/);
 assert.match(ui,/Google Haritalar yol tarifi URL/);
 assert.match(ui,/Pazarlama izni zorunludur/);
-assert.match(ui,/Meta tarafından onaylanmadan otomatik gönderim açılamaz/);
-assert.match(html,/whatsapp-messages-2\.4\.5\.js\?v=113/);
+assert.match(ui,/Onay gelene kadar otomatik gönderim yapılmaz/);
+assert.match(html,/whatsapp-messages-2\.4\.5\.js\?v=127/);
 console.log('PASS WhatsApp links, 60-minute reminder and opt-in thank-you safeguards');

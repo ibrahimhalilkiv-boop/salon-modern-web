@@ -105,7 +105,7 @@ async function diagnoseMeta(expectedPhone: string) {
   if (wabaId) {
     const templates = await graphRead(`${encodeURIComponent(wabaId)}/message_templates?fields=name,status,language&limit=100`, token, version);
     if (templates.ok) {
-      const expected = ["salon_modern_randevu_onayi","salon_modern_randevu_guncelleme_v2","salon_modern_randevu_hatirlatma","salon_modern_randevu_iptal"];
+      const expected = ["salon_modern_randevu_onayi","salon_modern_randevu_guncelleme_v2","salon_modern_randevu_hatirlatma","salon_modern_randevu_iptal","salon_modern_tesekkur_v1"];
       output.templates = Object.fromEntries(expected.map((name) => {
         const row = (templates.body?.data ?? []).find((item: any) => item.name === name && item.language === "tr");
         return [name, row?.status ?? "MISSING"];
@@ -136,11 +136,13 @@ async function processDelivery(db: any, delivery: any) {
   if (delivery.template_key === "appointment_thank_you" && (
     appointment.status !== "completed" || !appointment.completed_at || !settings?.whatsapp_thank_you_enabled ||
     !client?.whatsapp_marketing_opt_in || !client?.whatsapp_marketing_opt_in_at || client?.whatsapp_marketing_opt_out_at ||
-    Date.parse(delivery.scheduled_for) !== Date.parse(new Date(Date.parse(appointment.completed_at) + Number(settings?.whatsapp_thank_you_delay_minutes ?? 120) * 60_000).toISOString())
+    Date.parse(delivery.scheduled_for) !== Date.parse(appointment.scheduled_at) + 120 * 60_000 ||
+    Date.now() > Date.parse(delivery.scheduled_for) + 15 * 60_000
   )) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "thank_you_not_eligible", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const phone = normalizeTrPhone(client?.phone ?? appointment.client_phone ?? "");
   if (!phone) return db.from("whatsapp_message_logs").update({ status: "skipped_no_phone", last_error: "invalid_or_missing_phone", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const provider = (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
+  if (delivery.template_key === "appointment_thank_you" && provider !== "meta") return db.from("whatsapp_message_logs").update({ status: "awaiting_meta_approval", last_error: "meta_provider_required", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   const values = valuesFor(appointment, client, employeeResult.data, settings);
   const legacyConfigured = provider === "ycloud" && Deno.env.get("WHATSAPP_TEMPLATE_VERSION") === "legacy";
   const legacyKey = delivery.template_key as keyof typeof YCLOUD_LEGACY_APPOINTMENT_TEMPLATES;

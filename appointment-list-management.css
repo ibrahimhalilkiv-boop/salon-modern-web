@@ -1,0 +1,44 @@
+#managedList .managed-appointment {
+  display: block;
+  min-width: 0;
+  padding: 16px;
+}
+#managedList .managed-appointment .item-main {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#managedList .managed-appointment .item-main small {
+  line-height: 1.45;
+}
+#managedList .managed-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 13px;
+}
+#managedList .managed-actions button {
+  min-width: 0;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8f2e9;
+  color: #805923;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+#managedList .managed-actions .remove {
+  background: #fff0ee;
+  border-color: #f0d6d2;
+  color: var(--red);
+}
+@media (max-width: 360px) {
+  #managedList .managed-actions { grid-template-columns: 1fr; }
+}
