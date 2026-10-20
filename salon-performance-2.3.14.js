@@ -19,6 +19,7 @@ function priceText(item){
 
 var appointmentRevenueBeforeStoredZero=appointmentRevenue;
 appointmentRevenue=function(item){
+  if(item&&item.status==='no_show')return 0;
   var stored=item&&item.amount;
   return stored!==null&&stored!==''&&Number.isFinite(Number(stored))?Number(stored):appointmentRevenueBeforeStoredZero(item);
 };

@@ -20,14 +20,14 @@ const row=(id,employee='employee1')=>({id,employee_id:employee,client_name:'Test
  records=[row('online1'),row('staff1'),row('other','employee2')];
  assert.equal(api.permitted({employeeId:'employee2'}),false);
  ctx.currentUser={id:'manager1',role:'yonetici'};calls=[];api.filter.source='all';await api.load();assert(!calls.some(x=>x.op==='eq'));assert.match(elems.managedList.innerHTML,/3 randevu/);
- let editButtons=[],deleteButtons=[];elems.managedList.querySelectorAll=selector=>selector==='[data-edit]'?editButtons:deleteButtons;
+ let editButtons=[],deleteButtons=[];elems.managedList.querySelectorAll=selector=>selector==='[data-edit]'?editButtons:selector==='[data-delete]'?deleteButtons:[];
  editButtons=[{dataset:{edit:'0'}}];deleteButtons=[{dataset:{delete:'0'}}];await api.load();editButtons[0].onclick();assert.equal(opened.id,'online1');assert.equal(ctx.appts.length,2);ctx.closeAppointmentModal();assert.equal(ctx.appts.length,1);
  deleteButtons[0].onclick();assert.equal(deleted,'online1','Management delete must delegate to existing confirmation');ctx.closeAppointmentDeleteModal();assert.equal(ctx.appts.length,1);
  records=Array.from({length:501},(_,i)=>row('item'+i));calls=[];await api.load();assert.equal(calls.filter(x=>x.op==='range').length,2);assert.match(elems.managedList.innerHTML,/501 randevu/);
  let resolveOld;pending=new Promise(resolve=>resolveOld=resolve);const old=api.load();pending=null;records=[row('latest')];await api.load();resolveOld({data:[row('stale')]});await old;assert.match(elems.managedList.innerHTML,/1 randevu/);assert.doesNotMatch(elems.managedList.innerHTML,/stale/);
  failure={message:'TEST_LOAD_ERROR'};await api.load();assert.match(elems.managedList.innerHTML,/TEST_LOAD_ERROR/);failure=null;
  ctx.logout();ctx.currentUser=null;const before=calls.length;await api.load();assert.equal(calls.length,before);
-assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=119/);
+assert.match(fs.readFileSync('salon-modern.html','utf8'),/appointment-list-management-2\.4\.4\.js\?v=120/);
  assert.match(source,/window.toggleDrawer=function\(\)\{ensure\(\)/,'Install the menu even when session restoration skips the enter wrapper');
  const adminAnchor={id:'admin'},oldRequest={remove(){this.removed=true}};elems.drawerBookingRequests=oldRequest;
  let positioned=null;const drawer={querySelector:()=>adminAnchor,insertBefore(button,anchor){elems[button.id]=button;positioned=anchor}};
