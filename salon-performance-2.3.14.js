@@ -214,6 +214,7 @@ var subscribeBeforeTargetedRefresh=subscribeSalon;
 subscribeSalon=function(){
   subscribeBeforeTargetedRefresh.apply(this,arguments);
   if(salonChannel)salonDb.removeChannel(salonChannel);
+  var subscribedOnce=false;
   salonChannel=salonDb.channel('salon-modern-live-v2314')
     .on('postgres_changes',{event:'*',schema:'public',table:'appointments'},queueRealtimeAppointment)
     .on('postgres_changes',{event:'*',schema:'public',table:'profiles'},function(){scheduleTargeted('profiles',legacyFullReload,180)})
@@ -222,10 +223,20 @@ subscribeSalon=function(){
     .on('postgres_changes',{event:'*',schema:'public',table:'closed_time_slots'},function(){scheduleTargeted('closed',legacyFullReload,150)})
     .on('postgres_changes',{event:'*',schema:'public',table:'customer_debts'},function(){scheduleTargeted('debts',loadV151Supplement,100)})
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications'},function(payload){deliverAssignmentNotification(payload.new)})
-    .subscribe();
+    .subscribe(function(status){
+      if(status==='SUBSCRIBED'){
+        if(subscribedOnce)scheduleTargeted('appointment-reconnect',refreshAppointmentsOnly,250);
+        subscribedOnce=true;
+      }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
+        window.SalonSmartAnalysis?.invalidate();
+      }
+    });
   deliverUnreadAssignmentNotifications();
 };
 window.subscribeSalon=subscribeSalon;
+window.addEventListener('online',function(){
+  if(currentUser)scheduleTargeted('appointment-reconnect',refreshAppointmentsOnly,250);
+});
 
 var handleBackBeforePrice=handleAndroidBack;
 handleAndroidBack=function(){if(document.getElementById('appointmentPriceModal')?.classList.contains('show')){closeStatisticsAppointmentPrice();return true}return handleBackBeforePrice.apply(this,arguments)};

@@ -9,7 +9,12 @@ assert(html.includes("window.salonHistoryState!=='ready'&&target!=='calendar'"))
 assert.doesNotMatch(html,/from\('appointments'\)\.select\('\*'\)\.neq\('status','cancelled'\)\.order\('scheduled_at'\)/,
   'Unpaged legacy appointment reader must not return');
 assert.match(html,/salon-appointment-data\.js\?v=150/);
-assert.match(fs.readFileSync('sw.js','utf8'),/salon-modern-shell-pwa-v150/);
+assert.match(fs.readFileSync('sw.js','utf8'),/salon-modern-shell-pwa-v151/);
+const performance=fs.readFileSync('salon-performance-2.3.14.js','utf8');
+assert.match(performance,/status==='SUBSCRIBED'[\s\S]*subscribedOnce[\s\S]*appointment-reconnect/,
+  'Realtime resubscription must reconcile missed appointments');
+assert.match(performance,/addEventListener\('online',[\s\S]*appointment-reconnect/,
+  'Network recovery must reconcile missed appointments');
 
 const pending = new Map();
 let date = '2026-10-20';
