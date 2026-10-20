@@ -1,0 +1,18 @@
+{
+  "name": "salon_modern_tiras_hatirlatma_v1",
+  "language": "tr",
+  "category": "MARKETING",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Merhaba {{1}} 👋\n\nSalon Modern'den selamlar.\n\nDüzenli bakım alışkanlığınıza göre tıraş zamanınız gelmiş olabilir. Yeni bir randevu planlamak isterseniz bu mesaja yanıt verebilirsiniz.\n\nSalon Modern",
+      "example": {
+        "body_text": [
+          [
+            "Ahmet Bey"
+          ]
+        ]
+      }
+    }
+  ]
+}
