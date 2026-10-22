@@ -32,5 +32,12 @@ async function record(id){const r=await(await caches.open('salon-modern-push-rec
   await worker.emit('message',fallback({...payload,notificationId:'foreign-origin'}),'https://foreign.test/salon-modern.html');
   await worker.emit('message',fallback({...payload,notificationId:'customer-page'}),'https://fixture.test/randevu/');assert.equal(shown.length,3,'Customer pages and foreign origins cannot request staff reminder display');
   lookupFails=true;await worker.emit('push',{...payload,notificationId:'lookup-failure'});assert.equal(shown.length,4,'Notification lookup failure must never block primary push display');
+  const assignment={notificationId:'assignment-once',appointmentId:'appointment-1',kind:'appointment',title:'Yeni Randevu Atandı',body:'Fixture customer · 10:00'};
+  await Promise.all([worker.emit('push',assignment),worker.emit('push',assignment)]);
+  assert.equal(shown.length,5,'Repeated assignment push must display once on the same device');
+  worker=boot();await worker.emit('push',assignment);
+  assert.equal(shown.length,5,'Assignment dedup must survive worker restart and dismissal');
+  await worker.emit('push',{...assignment,notificationId:'assignment-next'});
+  assert.equal(shown.length,6,'A new notification for the appointment must still display');
   console.log('PASS reminder display: concurrent fallback/push once, durable dedup across update/restart, failure trace/retry, no customer data and source isolation');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,7 +1,7 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v153';
+const CACHE_NAME = 'salon-modern-shell-pwa-v154';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
-const shownReminders = new Set();
-let reminderDisplayQueue = Promise.resolve();
+const shownNotifications = new Set();
+let notificationDisplayQueue = Promise.resolve();
 const APP_SHELL = [
   './',
   './salon-modern.html',
@@ -27,7 +27,7 @@ const APP_SHELL = [
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js?v=150',
   './appointment-management-2.3.26.js?v=127',
-  './salon-web-push.js?v=152',
+  './salon-web-push.js?v=154',
   './salon-menu-order.js?v=153',
   './pwa-stability-2.3.20.js?v=104',
   './pwa-recovery-2.3.21.js?v=81',
@@ -62,7 +62,7 @@ self.addEventListener('message', event => {
     const app = new URL('./salon-modern.html', self.registration.scope);
     if (source.origin === app.origin && source.pathname === app.pathname &&
         event.data.data?.kind === 'appointment_reminder' && event.data.data.notificationId) {
-      event.waitUntil(displayReminder(event.data.data, 'foreground-fallback'));
+      event.waitUntil(displayOnce(event.data.data, 'foreground-fallback'));
     }
   }
 });
@@ -88,8 +88,8 @@ async function writeReceipt(data, record) {
   } catch (error) { console.warn('[salon-push] receipt write failed', error); }
 }
 
-function displayReminder(data, source) {
-  const task = reminderDisplayQueue.catch(() => {}).then(async () => {
+function displayOnce(data, source) {
+  const task = notificationDisplayQueue.catch(() => {}).then(async () => {
     const record = await readReceipt(data.notificationId) || {};
     record.lastReceivedAt = new Date().toISOString();
     if (source === 'push') record.pushReceivedAt = record.pushReceivedAt || record.lastReceivedAt;
@@ -101,7 +101,7 @@ function displayReminder(data, source) {
       if (!boundary?.firstEnabledAt || !data.createdAt || Date.parse(data.createdAt) < Date.parse(boundary.firstEnabledAt)) return;
     }
     const tag = 'salon-' + data.notificationId;
-    if (record.shownAt || shownReminders.has(data.notificationId)) {
+    if (record.shownAt || shownNotifications.has(data.notificationId)) {
       await writeReceipt(data, record); return;
     }
     try {
@@ -111,7 +111,7 @@ function displayReminder(data, source) {
         if (self.registration.getNotifications) visible = await self.registration.getNotifications({ tag });
       } catch (error) { console.warn('[salon-push] visible notification lookup failed', error); }
       if (!visible.length) await displayNotification({ ...data, tag });
-      shownReminders.add(data.notificationId);
+      shownNotifications.add(data.notificationId);
       record.shownAt = new Date().toISOString();
       record.shownBy = visible.length ? 'existing-notification' : source;
       record.lastError = null;
@@ -123,7 +123,7 @@ function displayReminder(data, source) {
       throw error; // Failure must remain retryable, never marked as displayed.
     }
   });
-  reminderDisplayQueue = task;
+  notificationDisplayQueue = task;
   return task;
 }
 
@@ -132,8 +132,7 @@ self.addEventListener('push', event => {
   try { data = event.data ? event.data.json() : {}; }
   catch (_) { try { data = { body: event.data ? event.data.text() : '' }; } catch (_) { data = {}; } }
   if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
-  event.waitUntil(['appointment_reminder', 'customer_return_due'].includes(data.kind) && data.notificationId
-    ? displayReminder(data, 'push') : displayNotification(data));
+  event.waitUntil(data.notificationId ? displayOnce(data, 'push') : displayNotification(data));
 });
 
 async function displayNotification(data) {

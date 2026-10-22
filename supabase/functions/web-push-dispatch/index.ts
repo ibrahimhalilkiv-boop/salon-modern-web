@@ -48,15 +48,32 @@ async function bootstrapVapid(request: Request) {
   return json({ publicKey: keys.publicKey, configured: true });
 }
 
-async function createTestNotification(request: Request) {
+async function createTestNotification(request: Request, subscriptionId: string) {
   const user = await authenticatedUser(request);
   if (!user) return json({ error: "Oturum gerekli." }, 401);
-  const { data, error } = await admin.from("notifications").insert({
-    recipient_id: user.id, kind: "system", title: "Salon Modern Test Bildirimi",
-    body: "Web Push bildirimleri bu cihazda çalışıyor.",
-  }).select("id").single();
-  if (error) throw error;
-  return json({ queued: true, notificationId: data.id, dispatched: await dispatch() });
+  if (!/^[0-9a-f-]{36}$/i.test(subscriptionId)) return json({ error: "Bu cihazın aboneliği seçilemedi." }, 400);
+  const { data: target, error: targetError } = await admin.from("web_push_subscriptions")
+    .select("id,endpoint,p256dh,auth_secret").eq("id", subscriptionId).eq("user_id", user.id).eq("active", true).maybeSingle();
+  if (targetError) throw targetError;
+  if (!target) return json({ error: "Bu cihazın aktif kaydı bulunamadı. Bağlantıyı yenileyin." }, 404);
+  const cfg = await config();
+  if (!cfg?.public_key || !cfg?.private_key) return json({ error: "VAPID yapılandırması eksik." }, 503);
+  webpush.setVapidDetails(cfg.subject || "mailto:ibrahimhalilkiv@gmail.com", cfg.public_key, cfg.private_key);
+  const notificationId = crypto.randomUUID();
+  const payload = JSON.stringify({ notificationId, kind: "system", type: "system",
+    title: "Salon Modern Test Bildirimi", body: "Bu cihaz için test bildirimi.", tag: `salon-${notificationId}` });
+  try {
+    await webpush.sendNotification({ endpoint: target.endpoint, keys: { p256dh: target.p256dh, auth: target.auth_secret } }, payload,
+      { TTL: 60, urgency: "high" });
+    return json({ notificationId, status: "sent", sentAt: new Date().toISOString() });
+  } catch (cause: any) {
+    const providerStatus = Number(cause?.statusCode || 0);
+    if (providerStatus === 404 || providerStatus === 410) {
+      await admin.from("web_push_subscriptions").update({ active: false, updated_at: new Date().toISOString() }).eq("id", target.id);
+    }
+    return json({ notificationId, status: providerStatus === 404 || providerStatus === 410 ? "expired" : "failed",
+      error: providerStatus ? `Push servisi HTTP ${providerStatus}` : "Push servisine ulaşılamadı." });
+  }
 }
 
 async function prepareDeliveries() {
@@ -195,7 +212,7 @@ Deno.serve(async (request: Request) => {
     }
     const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
     if (body.action === "bootstrap-vapid") return await bootstrapVapid(request);
-    if (body.action === "test") return await createTestNotification(request);
+    if (body.action === "test") return await createTestNotification(request, body.subscriptionId || "");
     if (body.action === "dispatch") {
       const cfg = await config();
       if (!cfg?.dispatch_secret || request.headers.get("x-salon-push-secret") !== cfg.dispatch_secret) return json({ error: "Yetkisiz." }, 401);
