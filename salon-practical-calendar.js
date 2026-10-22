@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   var PAGE_SIZE = 500;
+  var employeeOrder = { 'mehmet.safakoglu': 0, 'halil.kiv': 1, 'cengiz.bavkir': 2, 'talip.kose': 3 };
   var colors = { 'halil.kiv': '#2563EB', 'cengiz.bavkir': '#15803D', 'talip.kose': '#7C3AED', 'mehmet.safakoglu': '#EA580C' };
   var statusNames = { confirmed: 'Aktif', completed: 'Tamamlandı', no_show: 'Gelmedi', cancelled: 'İptal' };
   var statusIcons = { confirmed: '●', completed: '✓', no_show: '−', cancelled: '×' };
@@ -20,14 +21,23 @@
   function profile(item) { return remoteProfiles.find(function (person) { return String(person.id) === String(item.employeeId); }); }
   function color(item) { var person = profile(item); return person?.calendar_color || colors[person?.username] || '#526575'; }
   function isActive() { return !!document.getElementById('practicalCalendar')?.classList.contains('active'); }
-  function currentKey() { return user()?.id + ':' + state.date.slice(0, 7); }
+  function visibleRange() {
+    var start = state.view === 'month' ? moveDay(monday(monthStart(state.date)), 0) : state.view === 'week' ? monday(state.date) : state.date;
+    var end = state.view === 'month' ? moveDay(nextMonth(state.date, 1), 7) : moveDay(start, state.view === 'week' ? 7 : 1);
+    return { start: start + 'T00:00:00+03:00', end: end + 'T00:00:00+03:00' };
+  }
+  function currentKey() { var range = visibleRange(); return user()?.id + ':' + range.start + ':' + range.end; }
+  function employees() {
+    return remoteProfiles.filter(function (person) { return person.active && person.username !== 'salon.modern' && (manager() || String(person.id) === String(user()?.id)); })
+      .sort(function (a, b) { return (employeeOrder[a.username] ?? 99) - (employeeOrder[b.username] ?? 99); });
+  }
 
   function ensurePage() {
     if (document.getElementById('practicalCalendar')) return;
     var page = document.createElement('section');
     page.id = 'practicalCalendar';
     page.className = 'page';
-    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><h1 class="page-title">Pratik Takvim</h1><button type="button" id="practicalCreate" class="practical-add">＋ Randevu oluştur</button></div><div class="practical-toolbar"><div class="practical-views" role="group" aria-label="Takvim görünümü"><button type="button" data-view="day">Gün</button><button type="button" data-view="week">Hafta</button><button type="button" data-view="month">Ay</button></div><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki dönem">‹</button><strong id="practicalTitle"></strong><button type="button" data-nav="next" aria-label="Sonraki dönem">›</button><button type="button" data-nav="today">Bugün</button></div></div><div class="practical-filters"><label>Çalışan<select id="practicalStaff"></select></label><label>İşlem<select id="practicalService"></select></label><label>Durum<select id="practicalStatus"><option value="all">Tümü</option><option value="active">Aktif</option><option value="arrived">Geldi</option><option value="unfinished">Tamamlanmamış</option><option value="completed">Tamamlandı</option><option value="no_show">Gelmedi</option><option value="cancelled">İptal</option></select></label><label>Tarih<input id="practicalDate" type="date"></label><button type="button" id="practicalClear">Filtreleri temizle</button></div><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
+    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><h1 class="page-title">Pratik Takvim</h1><button type="button" id="practicalCreate" class="practical-add">＋ Randevu oluştur</button></div><div class="practical-toolbar"><div class="practical-views" role="group" aria-label="Takvim görünümü"><button type="button" data-view="day">Gün</button><button type="button" data-view="week">Hafta</button><button type="button" data-view="month">Ay</button></div><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki dönem">‹</button><strong id="practicalTitle"></strong><button type="button" data-nav="next" aria-label="Sonraki dönem">›</button><button type="button" data-nav="today">Bugün</button></div></div><div class="practical-filters"><label>Çalışan<select id="practicalStaff"></select></label><label>İşlem<select id="practicalService"></select></label><label>Durum<select id="practicalStatus"><option value="all">Tümü</option><option value="active">Aktif</option><option value="arrived">Geldi</option><option value="unfinished">Tamamlanmamış</option><option value="completed">Tamamlandı</option><option value="no_show">Gelmedi</option><option value="cancelled">İptal</option></select></label><label>Tarih<input id="practicalDate" type="date"></label><button type="button" id="practicalClear">Filtreleri temizle</button></div><button type="button" id="practicalAll" hidden>Tüm Çalışanlar</button><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
     document.getElementById('calendar').after(page);
     page.addEventListener('click', click);
     page.addEventListener('change', change);
@@ -57,7 +67,7 @@
   }
 
   function controls() {
-    var people = remoteProfiles.filter(function (person) { return person.active && (manager() || String(person.id) === String(user()?.id)); });
+    var people = employees();
     if (!manager()) state.staff = user()?.id || '';
     options(document.getElementById('practicalStaff'), (manager() ? [['', 'Tüm çalışanlar']] : []).concat(people.map(function (person) { return [person.id, person.full_name]; })), state.staff);
     document.getElementById('practicalStaff').disabled = !manager();
@@ -68,6 +78,7 @@
     document.getElementById('practicalDate').value = state.date;
     document.querySelectorAll('#practicalCalendar [data-view]').forEach(function (button) { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-pressed', String(button.dataset.view === state.view)); });
     document.getElementById('practicalCreate').hidden = !manager();
+    document.getElementById('practicalAll').hidden = !manager() || !state.staff || state.view !== 'day';
   }
 
   function matches(item) {
@@ -90,6 +101,43 @@
   function daySection(day, items) {
     var rows = rowsFor(day, items);
     return '<section class="practical-day"><h2>' + esc(title(day, { weekday: 'long', day: 'numeric', month: 'long' })) + ' <span>' + rows.length + ' randevu</span></h2>' + (rows.length ? rows.map(card).join('') : '<p class="practical-empty">Bu gün için randevu yok.</p>') + '</section>';
+  }
+  function timeMinute(value) { var parts = String(value || '').split(':'); return Number(parts[0]) * 60 + Number(parts[1]); }
+  function timeLabel(minute) { return String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0'); }
+  function dayGrid(items) {
+    var people = employees().filter(function (person) { return !state.staff || String(person.id) === String(state.staff); });
+    if (!people.length) return '<div class="practical-empty">Gösterilecek çalışan bulunamadı.</div>';
+    var allDay = state.rows.filter(function (item) { return item.date === state.date; });
+    var dayRows = rowsFor(state.date, items), start = 540, end = 1200;
+    allDay.forEach(function (item) { var minute = timeMinute(item.time); if (Number.isFinite(minute)) { start = Math.min(start, Math.floor(minute / 30) * 30); end = Math.max(end, Math.floor(minute / 30) * 30 + 30); } });
+    var bySlot = new Map();
+    dayRows.forEach(function (item) {
+      var minute = Math.floor(timeMinute(item.time) / 30) * 30, key = minute + ':' + item.employeeId;
+      if (!bySlot.has(key)) bySlot.set(key, []);
+      bySlot.get(key).push(item);
+    });
+    var single = people.length === 1, html = '<div class="practical-schedule' + (single ? ' single' : '') + '" style="--practical-columns:' + people.length + '"><div class="practical-schedule-head"><span>Saat</span>';
+    people.forEach(function (person) {
+      var sample = { employeeId: person.id }, shade = esc(color(sample)), name = person.full_name.split(' ')[0];
+      html += '<button type="button" data-employee="' + esc(person.id) + '" style="--staff-color:' + shade + '"' + (manager() ? '' : ' disabled') + '>' + esc(single ? person.full_name : name) + '</button>';
+    });
+    html += '</div>';
+    for (var minute = start; minute < end; minute += 30) {
+      var time = timeLabel(minute);
+      html += '<div class="practical-schedule-row"><span class="practical-slot-time">' + esc(time) + '</span>';
+      people.forEach(function (person) {
+        var shade = esc(color({ employeeId: person.id })), rows = bySlot.get(minute + ':' + person.id) || [];
+        html += '<div class="practical-cell" style="--staff-color:' + shade + '">';
+        if (rows.length) rows.forEach(function (item) {
+          var status = item.checkedInAt && item.status === 'confirmed' ? 'Geldi' : (statusNames[item.status] || 'Aktif');
+          html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '" title="' + esc(item.customer + ' · ' + item.operation + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><small>' + esc(single ? item.operation + ' · ' + item.time : item.time) + '</small><span>' + esc(status) + '</span></button>';
+        });
+        else html += '<button type="button" class="practical-available" data-slot-time="' + esc(time) + '" data-slot-staff="' + esc(person.id) + '" aria-label="' + esc(person.full_name + ' ' + time + ' boş saat') + '"' + (manager() ? '' : ' disabled') + '><span aria-hidden="true">＋</span></button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    return html + '</div>';
   }
   function monthGrid(items) {
     var first = monthStart(state.date), start = monday(first), next = nextMonth(first, 1), days = [];
@@ -119,39 +167,33 @@
       for (var i = 0; i < 7; i++) html += daySection(moveDay(start, i), items);
       body.innerHTML = html; return;
     }
-    body.innerHTML = daySection(state.date, items);
+    body.innerHTML = dayGrid(items);
   }
 
   async function fetchPages(start, end) {
-    var rows = [], cursor = null;
-    for (;;) {
+    var rows = new Map();
+    for (var offset = 0; ; offset += PAGE_SIZE) {
       var query = salonDb.from('appointments').select('*').gte('scheduled_at', start).lt('scheduled_at', end)
-        .order('scheduled_at', { ascending: false }).order('id', { ascending: false }).limit(PAGE_SIZE);
-      if (cursor) {
-        if (!/^[0-9TZ:.+\-]+$/.test(cursor.scheduled_at) || !/^[a-f0-9-]+$/i.test(cursor.id)) throw new Error('Randevu sayfalama anahtarı geçersiz.');
-        query = query.or('scheduled_at.lt.' + cursor.scheduled_at + ',and(scheduled_at.eq.' + cursor.scheduled_at + ',id.lt.' + cursor.id + ')');
-      }
+        .order('scheduled_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + PAGE_SIZE - 1);
       var response = await query;
       if (response.error) throw response.error;
       var batch = response.data || [];
-      rows.push.apply(rows, batch);
-      if (batch.length < PAGE_SIZE) return rows;
-      cursor = batch[batch.length - 1];
+      batch.forEach(function (item) { rows.set(String(item.id), item); });
+      if (batch.length < PAGE_SIZE) return Array.from(rows.values());
     }
   }
 
   async function load(force) {
-    if (!user() || !window.salonRemoteMode) return;
+    if (!user()) return;
+    if (!window.salonDb) { state.loading = false; state.error = 'Canlı veri bağlantısı kurulamadı.'; render(); return; }
     var key = currentKey();
     if (!force && state.key === key && !state.error) { render(); return; }
     var generation = ++state.generation, actor = user().id;
     state.loading = true; state.error = ''; state.rows = []; state.key = '';
     render();
-    var bounds = SalonAppointmentData.monthBounds(state.date);
-    var start = new Date(Date.parse(bounds.start) - 7 * 86400000).toISOString();
-    var end = new Date(Date.parse(bounds.end) + 7 * 86400000).toISOString();
+    var range = visibleRange();
     try {
-      var raw = await fetchPages(start, end);
+      var raw = await fetchPages(range.start, range.end);
       if (generation !== state.generation || actor !== user()?.id || key !== currentKey()) return;
       state.rows = raw.map(remoteAppointment).filter(function (item) { return manager() || String(item.employeeId) === String(actor); });
       state.key = key; state.loading = false;
@@ -166,13 +208,16 @@
   function setDate(date) { if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return; state.date = date; load(false); }
   function click(event) {
     var button = event.target.closest('button'); if (!button) return;
-    if (button.dataset.view) { state.view = button.dataset.view; render(); return; }
+    if (button.dataset.view) { state.view = button.dataset.view; load(false); return; }
     if (button.dataset.nav) {
       if (button.dataset.nav === 'today') setDate(today());
       else { var amount = button.dataset.nav === 'next' ? 1 : -1; setDate(state.view === 'month' ? nextMonth(state.date, amount) : moveDay(state.date, amount * (state.view === 'week' ? 7 : 1))); }
       return;
     }
     if (button.dataset.day) { state.view = 'day'; setDate(button.dataset.day); return; }
+    if (button.dataset.employee && manager()) { state.staff = button.dataset.employee; render(); return; }
+    if (button.id === 'practicalAll' && manager()) { state.staff = ''; render(); return; }
+    if (button.dataset.slotTime && manager()) { createAppointment(button.dataset.slotTime, button.dataset.slotStaff); return; }
     if (button.dataset.appointment) {
       var item = state.rows.find(function (row) { return String(row.id) === button.dataset.appointment; });
       if (item && matches(item)) {
@@ -191,12 +236,13 @@
     else if (id === 'practicalService') { state.service = value; render(); }
     else if (id === 'practicalStatus') { state.status = value; render(); }
   }
-  function createAppointment() {
+  function createAppointment(time, employeeId) {
     if (!manager()) return;
     window.openAppointmentModal();
     var date = document.getElementById('appointmentDate'); if (date) date.value = state.date;
-    var employee = remoteProfiles.find(function (person) { return String(person.id) === String(state.staff); });
+    var employee = remoteProfiles.find(function (person) { return String(person.id) === String(employeeId || state.staff); });
     if (employee) document.getElementById('appointmentStaff').value = employee.full_name;
+    var selectedTime = document.getElementById('appointmentTime'); if (selectedTime && typeof time === 'string') selectedTime.value = time;
     window.updateDateCaption?.(); window.refreshAppointmentTimeAvailability?.();
   }
 
@@ -208,6 +254,7 @@
     document.querySelectorAll('.page').forEach(function (page) { page.classList.remove('active'); });
     document.getElementById('practicalCalendar').classList.add('active');
     window.scrollTo(0, 0);
+    render();
     load(true);
   };
   var previousReload = window.reloadRemoteData;
