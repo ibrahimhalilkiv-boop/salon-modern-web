@@ -4,8 +4,7 @@
   var employeeOrder = { 'mehmet.safakoglu': 0, 'halil.kiv': 1, 'cengiz.bavkir': 2, 'talip.kose': 3 };
   var colors = { 'halil.kiv': '#2563EB', 'cengiz.bavkir': '#15803D', 'talip.kose': '#7C3AED', 'mehmet.safakoglu': '#EA580C' };
   var statusNames = { confirmed: 'Aktif', completed: 'Tamamlandı', no_show: 'Gelmedi', cancelled: 'İptal' };
-  var statusIcons = { confirmed: '●', completed: '✓', no_show: '−', cancelled: '×' };
-  var state = { view: 'day', date: today(), staff: '', service: '', status: 'all', rows: [], key: '', loading: false, error: '', generation: 0 };
+  var state = { view: 'day', date: today(), staff: '', rows: [], hours: null, key: '', loading: false, error: '', generation: 0 };
 
   function user() { return typeof currentUser === 'undefined' ? null : currentUser; }
   function manager() { return user()?.role === 'yonetici'; }
@@ -22,8 +21,8 @@
   function color(item) { var person = profile(item); return person?.calendar_color || colors[person?.username] || '#526575'; }
   function isActive() { return !!document.getElementById('practicalCalendar')?.classList.contains('active'); }
   function visibleRange() {
-    var start = state.view === 'month' ? moveDay(monday(monthStart(state.date)), 0) : state.view === 'week' ? monday(state.date) : state.date;
-    var end = state.view === 'month' ? moveDay(nextMonth(state.date, 1), 7) : moveDay(start, state.view === 'week' ? 7 : 1);
+    var start = state.view === 'month' ? monday(monthStart(state.date)) : state.date;
+    var end = state.view === 'month' ? moveDay(nextMonth(state.date, 1), 7) : moveDay(start, 1);
     return { start: start + 'T00:00:00+03:00', end: end + 'T00:00:00+03:00' };
   }
   function currentKey() { var range = visibleRange(); return user()?.id + ':' + range.start + ':' + range.end; }
@@ -37,11 +36,9 @@
     var page = document.createElement('section');
     page.id = 'practicalCalendar';
     page.className = 'page';
-    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><h1 class="page-title">Pratik Takvim</h1><button type="button" id="practicalCreate" class="practical-add">＋ Randevu oluştur</button></div><div class="practical-toolbar"><div class="practical-views" role="group" aria-label="Takvim görünümü"><button type="button" data-view="day">Gün</button><button type="button" data-view="week">Hafta</button><button type="button" data-view="month">Ay</button></div><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki dönem">‹</button><strong id="practicalTitle"></strong><button type="button" data-nav="next" aria-label="Sonraki dönem">›</button><button type="button" data-nav="today">Bugün</button></div></div><div class="practical-filters"><label>Çalışan<select id="practicalStaff"></select></label><label>İşlem<select id="practicalService"></select></label><label>Durum<select id="practicalStatus"><option value="all">Tümü</option><option value="active">Aktif</option><option value="arrived">Geldi</option><option value="unfinished">Tamamlanmamış</option><option value="completed">Tamamlandı</option><option value="no_show">Gelmedi</option><option value="cancelled">İptal</option></select></label><label>Tarih<input id="practicalDate" type="date"></label><button type="button" id="practicalClear">Filtreleri temizle</button></div><button type="button" id="practicalAll" hidden>Tüm Çalışanlar</button><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
+    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><h1 class="page-title">Pratik Takvim</h1></div><div class="practical-toolbar"><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki gün veya ay">‹</button><strong id="practicalTitle"></strong><button type="button" data-nav="next" aria-label="Sonraki gün veya ay">›</button><button type="button" data-nav="today">Bugün</button><button type="button" id="practicalMonth" data-view="month" aria-pressed="false">Ay görünümü</button><button type="button" id="practicalDay" data-view="day" hidden aria-pressed="false">Güne dön</button></div></div><button type="button" id="practicalAll" hidden>Tüm Çalışanlar</button><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
     document.getElementById('calendar').after(page);
     page.addEventListener('click', click);
-    page.addEventListener('change', change);
-    document.getElementById('practicalCreate').addEventListener('click', createAppointment);
   }
 
   function ensureMenu() {
@@ -60,56 +57,41 @@
     calendar.after(practical);
   }
 
-  function options(element, pairs, value) {
-    var html = pairs.map(function (pair) { return '<option value="' + esc(pair[0]) + '">' + esc(pair[1]) + '</option>'; }).join('');
-    if (element.innerHTML !== html) element.innerHTML = html;
-    element.value = value;
-  }
-
   function controls() {
-    var people = employees();
     if (!manager()) state.staff = user()?.id || '';
-    options(document.getElementById('practicalStaff'), (manager() ? [['', 'Tüm çalışanlar']] : []).concat(people.map(function (person) { return [person.id, person.full_name]; })), state.staff);
-    document.getElementById('practicalStaff').disabled = !manager();
-    var names = Array.from(new Set(remoteServices.map(function (service) { return service.name; }).concat(state.rows.map(function (item) { return item.operation; })).filter(Boolean))).sort(function (a, b) { return a.localeCompare(b, 'tr'); });
-    if (state.service && !names.includes(state.service)) names.push(state.service);
-    options(document.getElementById('practicalService'), [['', 'Tüm işlemler']].concat(names.map(function (name) { return [name, name]; })), state.service);
-    document.getElementById('practicalStatus').value = state.status;
-    document.getElementById('practicalDate').value = state.date;
     document.querySelectorAll('#practicalCalendar [data-view]').forEach(function (button) { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-pressed', String(button.dataset.view === state.view)); });
-    document.getElementById('practicalCreate').hidden = !manager();
+    document.getElementById('practicalMonth').hidden = state.view === 'month';
+    document.getElementById('practicalDay').hidden = state.view === 'day';
     document.getElementById('practicalAll').hidden = !manager() || !state.staff || state.view !== 'day';
   }
 
   function matches(item) {
+    if (item.status === 'cancelled') return false;
     if (state.staff && String(item.employeeId) !== String(state.staff)) return false;
     if (!manager() && String(item.employeeId) !== String(user()?.id)) return false;
-    if (state.service && item.operation !== state.service) return false;
-    if (state.status === 'active') return item.status === 'confirmed' && !item.checkedInAt;
-    if (state.status === 'arrived') return item.status === 'confirmed' && !!item.checkedInAt;
-    if (state.status === 'unfinished') return item.status === 'confirmed';
-    return state.status === 'all' || item.status === state.status;
-  }
-
-  function card(item) {
-    var status = item.checkedInAt && item.status === 'confirmed' ? 'Geldi' : (statusNames[item.status] || 'Aktif');
-    var icon = status === 'Geldi' ? '✓' : (statusIcons[item.status] || '●');
-    return '<button type="button" class="practical-card" data-appointment="' + esc(item.id) + '" style="--practical-color:' + esc(color(item)) + '" aria-label="' + esc(item.time + ', ' + item.customer + ', ' + item.staff + ', ' + status) + '"><span class="practical-time">' + esc(item.time) + '</span><span class="practical-card-main"><strong>' + esc(item.customer) + '</strong><span>' + esc(item.operation) + '</span><small>' + esc(item.staff) + '</small></span><span class="practical-status"><span aria-hidden="true">' + icon + '</span> ' + esc(status) + '</span></button>';
+    return true;
   }
 
   function rowsFor(day, items) { return items.filter(function (item) { return item.date === day; }).sort(function (a, b) { return a.time.localeCompare(b.time) || a.customer.localeCompare(b.customer, 'tr'); }); }
-  function daySection(day, items) {
-    var rows = rowsFor(day, items);
-    return '<section class="practical-day"><h2>' + esc(title(day, { weekday: 'long', day: 'numeric', month: 'long' })) + ' <span>' + rows.length + ' randevu</span></h2>' + (rows.length ? rows.map(card).join('') : '<p class="practical-empty">Bu gün için randevu yok.</p>') + '</section>';
-  }
   function timeMinute(value) { var parts = String(value || '').split(':'); return Number(parts[0]) * 60 + Number(parts[1]); }
   function timeLabel(minute) { return String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0'); }
+  async function loadHours(day) {
+    var results = await Promise.all([
+      salonDb.from('booking_settings').select('default_open_time,default_close_time').eq('id', true).maybeSingle(),
+      salonDb.from('booking_schedule_overrides').select('open_time,close_time,is_closed').eq('schedule_date', day).maybeSingle()
+    ]);
+    if (results[0].error || results[1].error) throw results[0].error || results[1].error;
+    var base = results[0].data || {}, override = results[1].data;
+    var open = timeMinute(override?.open_time || base.default_open_time || '09:00');
+    var close = timeMinute(override?.close_time || base.default_close_time || '20:00');
+    if (!Number.isFinite(open) || !Number.isFinite(close)) throw Error('Çalışma saatleri geçersiz.');
+    return { open: open, close: close, closed: !!override?.is_closed || close <= open };
+  }
   function dayGrid(items) {
     var people = employees().filter(function (person) { return !state.staff || String(person.id) === String(state.staff); });
     if (!people.length) return '<div class="practical-empty">Gösterilecek çalışan bulunamadı.</div>';
-    var allDay = state.rows.filter(function (item) { return item.date === state.date; });
-    var dayRows = rowsFor(state.date, items), start = 540, end = 1200;
-    allDay.forEach(function (item) { var minute = timeMinute(item.time); if (Number.isFinite(minute)) { start = Math.min(start, Math.floor(minute / 30) * 30); end = Math.max(end, Math.floor(minute / 30) * 30 + 30); } });
+    var dayRows = rowsFor(state.date, items), hours = state.hours || { open: 540, close: 1200 }, start = hours.closed ? 1440 : Math.floor(hours.open / 30) * 30, end = hours.closed ? 0 : Math.ceil(hours.close / 30) * 30;
+    dayRows.forEach(function (item) { var minute = timeMinute(item.time); if (Number.isFinite(minute)) { start = Math.min(start, Math.floor(minute / 30) * 30); end = Math.max(end, Math.floor(minute / 30) * 30 + 30); } });
     var bySlot = new Map();
     dayRows.forEach(function (item) {
       var minute = Math.floor(timeMinute(item.time) / 30) * 30, key = minute + ':' + item.employeeId;
@@ -122,6 +104,7 @@
       html += '<button type="button" data-employee="' + esc(person.id) + '" style="--staff-color:' + shade + '"' + (manager() ? '' : ' disabled') + '>' + esc(single ? person.full_name : name) + '</button>';
     });
     html += '</div>';
+    if (start >= end) return html + '<div class="practical-empty">Bu gün işletme kapalı; kayıtlı randevu yok.</div></div>';
     for (var minute = start; minute < end; minute += 30) {
       var time = timeLabel(minute);
       html += '<div class="practical-schedule-row"><span class="practical-slot-time">' + esc(time) + '</span>';
@@ -130,7 +113,8 @@
         html += '<div class="practical-cell" style="--staff-color:' + shade + '">';
         if (rows.length) rows.forEach(function (item) {
           var status = item.checkedInAt && item.status === 'confirmed' ? 'Geldi' : (statusNames[item.status] || 'Aktif');
-          html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '" title="' + esc(item.customer + ' · ' + item.operation + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><small>' + esc(single ? item.operation + ' · ' + item.time : item.time) + '</small><span>' + esc(status) + '</span></button>';
+          var amount = Number(item.amount), price = Number.isFinite(amount) ? '₺ ' + amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : 'Ücret belirtilmemiş';
+          html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '" title="' + esc(item.customer + ' · ' + item.operation + ' · ' + price + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + item.operation + ', ' + price + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><span class="practical-event-time">' + esc(item.time) + '</span><span class="practical-event-service">' + esc(item.operation || 'Hizmet belirtilmemiş') + '</span><span class="practical-event-price">' + esc(price) + '</span><span class="practical-event-status">' + esc(status) + '</span></button>';
         });
         else html += '<button type="button" class="practical-available" data-slot-time="' + esc(time) + '" data-slot-staff="' + esc(person.id) + '" aria-label="' + esc(person.full_name + ' ' + time + ' boş saat') + '"' + (manager() ? '' : ' disabled') + '><span aria-hidden="true">＋</span></button>';
         html += '</div>';
@@ -153,20 +137,15 @@
     if (!user()) return;
     ensurePage(); controls();
     var notice = document.getElementById('practicalNotice'), body = document.getElementById('practicalBody');
-    document.getElementById('practicalTitle').textContent = state.view === 'month' ? title(monthStart(state.date), { month: 'long', year: 'numeric' }) : state.view === 'week' ? title(monday(state.date), { day: 'numeric', month: 'short' }) + ' – ' + title(moveDay(monday(state.date), 6), { day: 'numeric', month: 'short', year: 'numeric' }) : title(state.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    document.getElementById('practicalTitle').textContent = state.view === 'month' ? title(monthStart(state.date), { month: 'long', year: 'numeric' }) : title(state.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     if (state.loading) { notice.textContent = 'Randevular yükleniyor…'; body.replaceChildren(); return; }
     if (state.error) { notice.textContent = 'Randevular yüklenemedi: ' + state.error; body.replaceChildren(); return; }
     var items = state.rows.filter(matches);
-    var firstVisible = state.view === 'month' ? monthStart(state.date) : state.view === 'week' ? monday(state.date) : state.date;
-    var lastVisible = state.view === 'month' ? nextMonth(state.date, 1) : moveDay(firstVisible, state.view === 'week' ? 7 : 1);
+    var firstVisible = state.view === 'month' ? monthStart(state.date) : state.date;
+    var lastVisible = state.view === 'month' ? nextMonth(state.date, 1) : moveDay(firstVisible, 1);
     var visibleCount = items.filter(function (item) { return item.date >= firstVisible && item.date < lastVisible; }).length;
-    notice.textContent = visibleCount + ' randevu · ' + (state.view === 'day' ? 'Gün' : state.view === 'week' ? 'Hafta' : 'Ay') + ' görünümü';
+    notice.textContent = visibleCount + ' randevu';
     if (state.view === 'month') { body.innerHTML = monthGrid(items); return; }
-    if (state.view === 'week') {
-      var start = monday(state.date), html = '';
-      for (var i = 0; i < 7; i++) html += daySection(moveDay(start, i), items);
-      body.innerHTML = html; return;
-    }
     body.innerHTML = dayGrid(items);
   }
 
@@ -193,9 +172,10 @@
     render();
     var range = visibleRange();
     try {
-      var raw = await fetchPages(range.start, range.end);
+      var result = await Promise.all([fetchPages(range.start, range.end), state.view === 'day' ? loadHours(state.date) : Promise.resolve(null)]);
       if (generation !== state.generation || actor !== user()?.id || key !== currentKey()) return;
-      state.rows = raw.map(remoteAppointment).filter(function (item) { return manager() || String(item.employeeId) === String(actor); });
+      state.rows = result[0].map(remoteAppointment).filter(function (item) { return manager() || String(item.employeeId) === String(actor); });
+      state.hours = result[1];
       state.key = key; state.loading = false;
       render();
     } catch (error) {
@@ -210,8 +190,8 @@
     var button = event.target.closest('button'); if (!button) return;
     if (button.dataset.view) { state.view = button.dataset.view; load(false); return; }
     if (button.dataset.nav) {
-      if (button.dataset.nav === 'today') setDate(today());
-      else { var amount = button.dataset.nav === 'next' ? 1 : -1; setDate(state.view === 'month' ? nextMonth(state.date, amount) : moveDay(state.date, amount * (state.view === 'week' ? 7 : 1))); }
+      if (button.dataset.nav === 'today') { state.view = 'day'; setDate(today()); }
+      else { var amount = button.dataset.nav === 'next' ? 1 : -1; setDate(state.view === 'month' ? nextMonth(state.date, amount) : moveDay(state.date, amount)); }
       return;
     }
     if (button.dataset.day) { state.view = 'day'; setDate(button.dataset.day); return; }
@@ -227,14 +207,6 @@
       }
       return;
     }
-    if (button.id === 'practicalClear') { state.staff = manager() ? '' : user().id; state.service = ''; state.status = 'all'; state.date = today(); load(false); }
-  }
-  function change(event) {
-    var id = event.target.id, value = event.target.value;
-    if (id === 'practicalDate') setDate(value);
-    else if (id === 'practicalStaff') { state.staff = manager() ? value : user().id; render(); }
-    else if (id === 'practicalService') { state.service = value; render(); }
-    else if (id === 'practicalStatus') { state.status = value; render(); }
   }
   function createAppointment(time, employeeId) {
     if (!manager()) return;
