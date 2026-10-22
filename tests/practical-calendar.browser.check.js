@@ -1,0 +1,94 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { chromium } = require(path.join(process.argv[2], 'playwright'));
+
+(async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    for (const width of [390, 1280]) {
+      const page = await browser.newPage({ viewport: { width, height: 850 } });
+      await page.setContent('<main><section id="calendar" class="page active"><div id="calendarContent">Ekip görünümü korunur</div></section></main><div id="drawerLayer"><aside class="drawer"><button class="menu-item" onclick="drawerPage(\'calendar\')">Takvim</button></aside></div><input id="appointmentDate"><select id="appointmentStaff"></select>');
+      await page.addStyleTag({ content: '.page:not(.active){display:none}body{margin:0;font-family:Arial,sans-serif}#drawerLayer{display:none}' + fs.readFileSync('salon-practical-calendar.css', 'utf8') });
+      await page.addScriptTag({ content: `
+        let currentUser={id:'00000000-0000-0000-0000-000000000001',name:'Halil',role:'yonetici'};
+        let remoteProfiles=[{id:currentUser.id,full_name:'Halil Kıv',username:'halil.kiv',active:true,calendar_color:'#1234ab'},{id:'00000000-0000-0000-0000-000000000002',full_name:'Cengiz Bavkır',username:'cengiz.bavkir',active:true}];
+        let remoteServices=[{name:'Saç Sakal'},{name:'Boya'}];
+        window.salonRemoteMode=true;
+        window.safe=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+        window.showPage=id=>{document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById(id).classList.add('active')};
+        window.drawerPage=id=>showPage(id);
+        window.simplifyNavigation=()=>{};window.enterApp=()=>{};window.toggleDrawer=()=>{};
+        window.reloadRemoteData=async()=>{};window.openAppointmentModal=()=>{window.formOpened=true};
+        window.updateDateCaption=()=>{};window.refreshAppointmentTimeAvailability=()=>{};
+        let appts=[];window.renderCalendar=()=>{};window.remoteSchedule=(day,time)=>day+'T'+time+':00+03:00';
+        window.SalonAppointmentData={monthBounds(day){let first=day.slice(0,7)+'-01',next=new Date(first+'T12:00:00Z');next.setUTCMonth(next.getUTCMonth()+1);return {start:first+'T00:00:00+03:00',end:next.toISOString().slice(0,7)+'-01T00:00:00+03:00'}}};
+        window.remoteAppointment=row=>({id:row.id,customer:row.client_name,operation:row.service_name,staff:remoteProfiles.find(p=>p.id===row.employee_id)?.full_name||'',time:row.scheduled_at.slice(11,16),date:row.scheduled_at.slice(0,10),employeeId:row.employee_id,status:row.status,checkedInAt:row.checked_in_at,scheduledAt:row.scheduled_at});
+        window.testRows=[];window.deferMonth='';window.releaseDeferred=null;
+        window.salonDb={from(table){if(table!=='appointments')throw Error(table);const filters=[];let cursor='',limit=500;
+          const query={select(){return this},gte(k,v){filters.push(r=>r[k]>=v);return this},lt(k,v){filters.push(r=>r[k]<v);return this},order(){return this},limit(v){limit=v;return this},or(v){let m=v.match(/^scheduled_at\\.lt\\.(.+),and\\(scheduled_at\\.eq\\.(.+),id\\.lt\\.(.+)\\)$/);if(!m)throw Error(v);cursor=m;return this},then(resolve){let data=testRows.filter(r=>filters.every(f=>f(r))&&(currentUser.role==='yonetici'||r.employee_id===currentUser.id));if(cursor)data=data.filter(r=>r.scheduled_at<cursor[1]||r.scheduled_at===cursor[2]&&r.id<cursor[3]);data.sort((a,b)=>b.scheduled_at.localeCompare(a.scheduled_at)||b.id.localeCompare(a.id));const result={data:data.slice(0,limit),error:null};let task=Promise.resolve(result);if(deferMonth&&filters.every(f=>f({scheduled_at:deferMonth+'-15T10:00:00+03:00'}))){task=new Promise(done=>{releaseDeferred=()=>done(result)})}return task.then(resolve)}};return query}};
+        window.testAdd=(day,n,employee,status='confirmed',service='Saç Sakal',name='Çok Uzun İsimli Bir Müşteri Adı Soyadı')=>{testRows.push({id:n.toString(16).padStart(32,'0'),scheduled_at:day+'T10:00:00+03:00',employee_id:employee,client_name:name,service_name:service,status,checked_in_at:null})};
+      ` });
+      await page.addScriptTag({ content: fs.readFileSync('salon-calendar-smart.js', 'utf8') });
+      await page.addScriptTag({ content: fs.readFileSync('salon-practical-calendar.js', 'utf8') });
+      const date = await page.evaluate(() => SalonPracticalCalendar.state.date);
+      await page.evaluate(date => { for (let n = 1; n <= 1005; n++) testAdd(date, n, n % 2 ? remoteProfiles[0].id : remoteProfiles[1].id, n === 3 ? 'completed' : 'confirmed', n === 5 ? 'Boya' : 'Saç Sakal'); }, date);
+      await page.evaluate(() => drawerPage('practicalCalendar'));
+      await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-card').length === 1005);
+      assert.match(await page.locator('#drawerLayer').textContent(), /Ekip Takvimi[\s\S]*Pratik Takvim/);
+      assert.equal(await page.locator('#calendarContent').textContent(), 'Ekip görünümü korunur');
+      assert.equal(await page.locator('#practicalCalendar').evaluate(el => el.classList.contains('active')), true);
+      assert.match(await page.locator('#practicalBody .practical-card').first().getAttribute('style'), /#1234ab/);
+      assert.equal(await page.locator('#practicalBody .practical-card-main strong').first().evaluate(el => getComputedStyle(el).whiteSpace), 'normal');
+      await page.selectOption('#practicalStaff', '00000000-0000-0000-0000-000000000001');
+      await page.selectOption('#practicalService', 'Boya');
+      await page.selectOption('#practicalStatus', 'active');
+      assert.equal(await page.locator('#practicalBody .practical-card').count(), 1);
+      await page.locator('#practicalBody .practical-card').click();
+      assert.equal(await page.locator('#smartAppointmentPanel.show #smartPanelTitle').textContent(), 'Çok Uzun İsimli Bir Müşteri Adı Soyadı');
+      assert.equal(await page.locator('#smartPanelActions [data-action="edit"]').count(), 1);
+      assert.equal(await page.locator('#smartPanelActions [data-action="cancel"]').count(), 1);
+      await page.locator('.smart-panel-close').click();
+      await page.click('#practicalClear');
+      await page.click('[data-view="week"]');
+      assert.equal(await page.locator('#practicalBody .practical-day').count(), 7);
+      await page.click('[data-view="month"]');
+      assert.equal(await page.locator('#practicalBody .practical-month-day').count() >= 35, true);
+      await page.locator('#practicalBody .practical-month-day.selected').click();
+      assert.equal(await page.locator('[data-view="day"]').getAttribute('aria-pressed'), 'true');
+      await page.click('#practicalCreate');
+      assert.equal(await page.evaluate(() => formOpened), true);
+      assert.equal(await page.locator('#appointmentDate').inputValue(), date);
+      await page.evaluate(() => { testRows.find(row => row.id === (5).toString(16).padStart(32, '0')).status = 'completed'; reloadRemoteData(); });
+      await page.waitForFunction(() => SalonPracticalCalendar.state.rows.find(row => row.id === (5).toString(16).padStart(32, '0'))?.status === 'completed');
+      await page.evaluate(() => {
+        const first = new Date(SalonPracticalCalendar.state.date.slice(0, 7) + '-01T12:00:00Z');
+        first.setUTCMonth(first.getUTCMonth() + 1);
+        window.raceFirst = first.toISOString().slice(0, 7);
+        first.setUTCMonth(first.getUTCMonth() + 1);
+        window.raceSecond = first.toISOString().slice(0, 7);
+        testAdd(raceFirst + '-15', 2000, remoteProfiles[0].id, 'confirmed', 'Boya', 'Eski istek');
+        testAdd(raceSecond + '-15', 2001, remoteProfiles[0].id, 'confirmed', 'Boya', 'Yeni istek');
+        deferMonth = raceFirst;
+      });
+      await page.locator('#practicalDate').fill(await page.evaluate(() => raceFirst + '-15'));
+      await page.waitForFunction(() => !!releaseDeferred);
+      await page.locator('#practicalDate').fill(await page.evaluate(() => raceSecond + '-15'));
+      await page.waitForFunction(() => document.querySelector('#practicalBody')?.textContent.includes('Yeni istek'));
+      await page.evaluate(() => { deferMonth = ''; releaseDeferred(); });
+      await page.waitForTimeout(80);
+      assert.equal(await page.locator('#practicalBody').textContent().then(s => s.includes('Eski istek')), false);
+      await page.locator('#practicalDate').fill(date);
+      await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-card').length === 1005);
+      await page.evaluate(() => { currentUser={id:remoteProfiles[1].id,name:'Cengiz Bavkır',role:'personel'}; showPage('practicalCalendar'); });
+      await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-card').length === 502);
+      assert.equal(await page.locator('#practicalStaff').isDisabled(), true);
+      assert.equal(await page.locator('#practicalCreate').isVisible(), false);
+      assert.equal(await page.locator('#practicalBody .practical-card').first().getAttribute('style').then(s => s.includes('#15803D')), true);
+      assert.equal(await page.evaluate(() => SalonPracticalCalendar.state.rows.every(r => r.employeeId === currentUser.id)), true);
+      if (width === 390) assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await page.close();
+      console.log('PASS practical calendar ' + width + 'px: 1005 rows, views, filters, card action, manager/staff scope, form');
+    }
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });
