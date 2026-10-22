@@ -223,6 +223,8 @@
     if (id !== 'practicalCalendar') return previousShowPage.apply(this, arguments);
     if (!user()) return;
     ensurePage(); ensureMenu();
+    state.view = 'day';
+    state.staff = manager() ? '' : user().id;
     document.querySelectorAll('.page').forEach(function (page) { page.classList.remove('active'); });
     document.getElementById('practicalCalendar').classList.add('active');
     window.scrollTo(0, 0);
