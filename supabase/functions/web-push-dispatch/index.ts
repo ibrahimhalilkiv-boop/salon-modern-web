@@ -97,9 +97,9 @@ async function dispatch() {
     if (!claimed) continue;
     const [{ data: note }, { data: sub }] = await Promise.all([
       admin.from("notifications").select("id,recipient_id,appointment_id,kind,title,body,reminder_for,mori_event_id").eq("id", item.notification_id).maybeSingle(),
-      admin.from("web_push_subscriptions").select("id,endpoint,p256dh,auth_secret,active").eq("id", item.subscription_id).maybeSingle(),
+      admin.from("web_push_subscriptions").select("id,user_id,endpoint,p256dh,auth_secret,active").eq("id", item.subscription_id).maybeSingle(),
     ]);
-    if (!note || !sub?.active) {
+    if (!note || !sub?.active || sub.user_id !== note.recipient_id) {
       await admin.from("web_push_deliveries").update({ status: "expired", last_error: "Kayıt veya abonelik artık aktif değil." }).eq("id", item.id);
       expired++; continue;
     }
@@ -127,7 +127,7 @@ async function dispatch() {
     }
     let appointment: any = null;
     if (note.appointment_id) {
-      const result = await admin.from("appointments").select("id,scheduled_at,status").eq("id", note.appointment_id).maybeSingle();
+      const result = await admin.from("appointments").select("id,scheduled_at,status,employee_id").eq("id", note.appointment_id).maybeSingle();
       appointment = result.data;
     }
     if (note.kind === "appointment_thank_you") {
@@ -143,9 +143,11 @@ async function dispatch() {
     const cancellation = note.kind === "appointment_cancelled" || note.kind === "appointment_reassigned_from";
     const reminderValid = note.kind !== "appointment_reminder" ||
       (appointment?.status === "confirmed" && appointment?.scheduled_at === note.reminder_for && Date.parse(appointment.scheduled_at) > Date.now());
+    const assignedToRecipient = !["appointment", "appointment_update", "appointment_reminder"].includes(note.kind) ||
+      appointment?.employee_id === note.recipient_id;
     const eventValid = note.kind === "appointment_thank_you" || cancellation || !note.appointment_id ||
       (appointment?.status === "confirmed" && Date.parse(appointment.scheduled_at) > Date.now());
-    if (!reminderValid || !eventValid) {
+    if (!reminderValid || !eventValid || !assignedToRecipient) {
       await admin.from("web_push_deliveries").update({ status: "expired", last_error: "Randevu değişti, iptal oldu veya geçmişte kaldı." }).eq("id", item.id);
       expired++; continue;
     }

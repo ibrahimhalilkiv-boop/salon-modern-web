@@ -18,7 +18,10 @@ const { PGlite } = require(process.argv[2] ? path.resolve(process.argv[2]) : '@e
         id uuid primary key, employee_id uuid, client_id uuid, status text not null,
         scheduled_at timestamptz not null, duration_minutes integer not null default 30,
         staff_overlap_override boolean not null default false,
-        completed_at timestamptz, completed_by uuid);
+        completed_at timestamptz, completed_by uuid, source text default 'staff',
+        client_name text default 'Test müşteri', created_by uuid, updated_by uuid);
+      create table public.notifications(id uuid default gen_random_uuid() primary key,
+        recipient_id uuid, appointment_id uuid, kind text, title text, body text);
       create function private.complete_metadata() returns trigger language plpgsql as $$
       begin
         if new.status='completed' and old.status is distinct from 'completed' then
@@ -85,6 +88,41 @@ const { PGlite } = require(process.argv[2] ? path.resolve(process.argv[2]) : '@e
     assert.equal(queued.appointment_id, uuid(11));
     const target = (await db.query('select scheduled_at+interval \'2 hours\' target from appointments where id=$1', [uuid(11)])).rows[0].target;
     assert.equal(new Date(queued.scheduled_for).getTime(), new Date(target).getTime());
-    console.log('PASS activation cutoff, no-show/cancel exclusion, idempotent completion, Meta/consent gate and two-hour schedule');
+    await db.exec(fs.readFileSync('supabase/migrations/20261022063517_online_assignment_and_completion_override.sql', 'utf8'));
+    await db.exec("select set_config('test.manager','true',false)");
+    await db.query("update appointments set status='confirmed' where id=$1", [uuid(11)]);
+    assert.equal((await db.query('select auto_completion_suppressed from appointments where id=$1', [uuid(11)])).rows[0].auto_completion_suppressed, true);
+    assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 0,
+      'Manager correction survives cron');
+    await db.query("update appointments set status='completed' where id=$1", [uuid(11)]);
+    assert.equal((await db.query('select auto_completion_suppressed from appointments where id=$1', [uuid(11)])).rows[0].auto_completion_suppressed, false);
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at,source,created_by) values($1,$2,$3,'confirmed',now()+interval '1 day','online',$2)", [uuid(30), employee, client]);
+    const assigned = (await db.query("select recipient_id,title,body from notifications where appointment_id=$1 and kind='appointment'", [uuid(30)])).rows;
+    assert.equal(assigned.length, 1, 'Self-assignment produces exactly one notification');
+    assert.equal(assigned[0].recipient_id, employee);
+    assert.equal(assigned[0].title, 'Yeni Randevu Atandı');
+    assert.match(assigned[0].body, /Tarih ve saat:/);
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at,source,created_by) values($1,$2,$3,'pending',now()+interval '1 day','online',$2)", [uuid(31), employee, client]);
+    assert.equal((await db.query('select count(*)::int n from notifications where appointment_id=$1', [uuid(31)])).rows[0].n, 0);
+    await db.exec('create table public.online_booking_requests(appointment_id uuid,status text)');
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at,source) values($1,$2,$3,'confirmed',now()-interval '2 days','online')", [uuid(32), employee, client]);
+    await db.exec("insert into online_booking_requests values ('" + uuid(32) + "','pending')");
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at,source) values($1,$2,$3,'confirmed',now()-interval '2 days','online')", [uuid(33), employee, client]);
+    await db.exec("insert into online_booking_requests values ('" + uuid(33) + "','approved')");
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at) select gen_random_uuid(),$1,$2,'confirmed',now()-interval '2 days' from generate_series(1,1100)", [employee, client]);
+    const queueBefore = (await db.query('select count(*)::int n from whatsapp_message_logs')).rows[0].n;
+    await db.exec(fs.readFileSync('supabase/migrations/20261022063543_backfill_past_confirmed_appointments.sql', 'utf8'));
+    assert.equal((await db.query("select count(*)::int n from appointments where status='confirmed' and scheduled_at<now()-interval '1 day' and source='staff'")).rows[0].n, 0);
+    assert.equal((await db.query('select status from appointments where id=$1', [uuid(32)])).rows[0].status, 'confirmed');
+    assert.equal((await db.query('select status from appointments where id=$1', [uuid(33)])).rows[0].status, 'completed');
+    assert.equal((await db.query('select count(*)::int n from whatsapp_message_logs')).rows[0].n, queueBefore);
+    await db.exec(fs.readFileSync('supabase/migrations/20261022063543_backfill_past_confirmed_appointments.sql', 'utf8'));
+    assert.equal((await db.query('select count(*)::int n from whatsapp_message_logs')).rows[0].n, queueBefore);
+    await db.exec(fs.readFileSync('supabase/migrations/20261022064016_exact_two_hour_auto_completion.sql', 'utf8'));
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at,duration_minutes) values($1,$2,$3,'confirmed',now()-interval '2 hours 1 minute',180)", [uuid(34), employee, client]);
+    assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 1,
+      'A long service completes two hours after the start');
+    assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 0);
+    console.log('PASS cutoff, no-show/cancel exclusion, exact two-hour boundary, idempotence, manager override, online assignment, pending gate, 1100+ backfill and no WhatsApp');
   } finally { await db.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

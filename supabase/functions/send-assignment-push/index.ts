@@ -92,6 +92,12 @@ Deno.serve(async (request: Request) => {
         return Response.json({ ignored: true, reason: invalidReason });
       }
     }
+    if (["appointment", "appointment_update"].includes(notification.kind) &&
+        (!appointment || appointment.status !== "confirmed" ||
+         appointment.employee_id !== notification.recipient_id ||
+         Date.parse(appointment.scheduled_at) <= Date.now())) {
+      return Response.json({ ignored: true, reason: "assignment_no_longer_current" });
+    }
     if (notification.kind !== "appointment_thank_you" && appointment && Date.parse(appointment.scheduled_at) <= Date.now()) {
       return Response.json({ ignored: true, reason: "past_appointment" });
     }
@@ -111,7 +117,9 @@ Deno.serve(async (request: Request) => {
     }
 
     const token = await accessToken();
-    const appointmentDate = appointment?.scheduled_at?.slice(0, 10) ?? "";
+    const appointmentDate = appointment?.scheduled_at
+      ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Istanbul" }).format(new Date(appointment.scheduled_at))
+      : "";
     let reminderDedupeKey = "";
     if (notification.kind === "appointment_reminder" && appointment) {
       const scheduled = new Date(appointment.scheduled_at);
