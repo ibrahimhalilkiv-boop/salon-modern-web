@@ -151,11 +151,11 @@ async function createRequest(req: Request) {
   }
   const startAt = slotIso(requestedDate, time)
   if (submissionToken) {
-    const existing = await db.from('online_booking_requests').select('id,public_token,status,phone_normalized,service_id,employee_id,scheduled_at').eq('public_token', submissionToken).maybeSingle()
+    const existing = await db.from('online_booking_requests').select('id,public_token,status,client_name,phone_normalized,service_id,employee_id,scheduled_at').eq('public_token', submissionToken).maybeSingle()
     if (existing.error) throw existing.error
     if (existing.data) {
       const row = existing.data
-      if (row.phone_normalized !== customerPhone || row.service_id !== serviceId || (employeeId && row.employee_id !== employeeId) || new Date(row.scheduled_at).getTime() !== new Date(startAt).getTime()) return reply(req, { error: 'Kayıt bilgileri değişti. Sayfayı yenileyin.' }, 409)
+      if (row.client_name.trim().toLocaleLowerCase('tr-TR') !== customerName.toLocaleLowerCase('tr-TR') || row.phone_normalized !== customerPhone || row.service_id !== serviceId || (employeeId && row.employee_id !== employeeId) || new Date(row.scheduled_at).getTime() !== new Date(startAt).getTime()) return reply(req, { error: 'Kayıt bilgileri değişti. Sayfayı yenileyin.' }, 409)
       if (row.status === 'approved') return reply(req, { requestNumber: row.id.slice(0, 8).toUpperCase(), statusToken: row.public_token, status: 'approved' }, 200)
     }
   }

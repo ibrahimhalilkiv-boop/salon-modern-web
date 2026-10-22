@@ -26,7 +26,7 @@ function istanbulParts(iso: string) {
 function valuesFor(appointment: any, client: any, employee: any, settings: any) {
   const time = istanbulParts(appointment.scheduled_at);
   return {
-    "{musteri_adi}": client?.full_name ?? appointment.client_name ?? "",
+    "{musteri_adi}": appointment.client_name ?? client?.full_name ?? "",
     "{randevu_tarihi}": time.date,
     "{randevu_saati}": time.time,
     "{calisan_adi}": employee?.full_name ?? "",
