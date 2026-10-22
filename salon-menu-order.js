@@ -24,7 +24,23 @@
     drawer.querySelectorAll('#appVersion,[data-app-version]').forEach(function(node){node.remove()});
     drawer.querySelectorAll(':scope > .manager-menu > .drawer-separator').forEach(function(separator){separator.classList.add('hidden')});
     document.getElementById('drawerRecoveryCenter')?.classList.add('hidden');
-    drawer.querySelectorAll('[data-push-settings-menu]').forEach(function(button){button.remove()});
+    // Restore the existing device-specific Web Push settings and test menu.
+    // Available to employees as well as managers; does not send anything until tapped.
+    var pushMenu=drawer.querySelector('[data-push-settings-menu]');
+    if(!pushMenu){
+      pushMenu=document.createElement('button');
+      pushMenu.type='button';
+      pushMenu.className='menu-item';
+      pushMenu.setAttribute('data-push-settings-menu','');
+      pushMenu.textContent='🔔  Bildirim Ayarları / Test';
+      pushMenu.addEventListener('click',function(){
+        if(document.getElementById('pushSettings'))drawerPage('pushSettings');
+        else window.showAppToast?.('Bildirim ayarları açılmadı','Uygulamayı yenileyip tekrar deneyin.');
+      });
+      var adminMenu=drawer.querySelector("[onclick=\"drawerPage('admin')\"]");
+      if(adminMenu)drawer.insertBefore(pushMenu,adminMenu);
+      else drawer.appendChild(pushMenu);
+    }
   }
   ['simplifyNavigation','enterApp','toggleDrawer'].forEach(function(name){
     var previous=window[name];if(typeof previous!=='function')return;
