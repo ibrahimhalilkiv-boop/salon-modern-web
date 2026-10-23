@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v177';
+const CACHE_NAME = 'salon-modern-shell-pwa-v178';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownNotifications = new Set();
 let notificationDisplayQueue = Promise.resolve();
@@ -47,8 +47,8 @@ const APP_SHELL = [
   ,'./booking-schedule-admin-2.4.1.js?v=98'
   ,'./booking-schedule-controls-2.4.3.js?v=103'
   ,'./randevu/'
-  ,'./randevu/booking.css'
-  ,'./randevu/booking.js'
+  ,'./randevu/booking.css?v=3'
+  ,'./randevu/booking.js?v=70'
   ,'./randevu/durum/'
   ,'./randevu/durum/manage.js?v=94'
 ];
