@@ -2,14 +2,34 @@
   'use strict';
   var baseRender=window.renderCalendar,baseReload=window.reloadRemoteData;
   var filters={service:'',status:'all'},cancelled={month:'',actor:'',rows:[],loading:false},busy=false;
-  var defaults={'halil.kiv':'#2563EB','cengiz.bavkir':'#15803D','talip.kose':'#7C3AED','mehmet.safakoglu':'#EA580C'};
+  // One consistent pastel palette per service category; never use employee identity for appointment colors.
+  var servicePalette={
+    combo:{name:'Saç + sakal',bg:'#D7F6DC',edge:'#13A35E'},
+    hair:{name:'Saç kesimi',bg:'#D8EFFF',edge:'#1E83BB'},
+    child:{name:'Çocuk tıraşı',bg:'#E9DCFF',edge:'#8554C9'},
+    beard:{name:'Sakal kesimi',bg:'#FFF2C1',edge:'#CE9D21'},
+    wash:{name:'Yıkama ve fön',bg:'#FFE2EE',edge:'#C96894'},
+    dye:{name:'Saç boyama',bg:'#FFE0C9',edge:'#D67329'},
+    care:{name:'Bakım / keratin',bg:'#D5F0EB',edge:'#248E82'},
+    other:{name:'Diğer hizmetler',bg:'#E5E7EB',edge:'#7B8794'}
+  };
   function esc(value){return window.safe(String(value==null?'':value))}
   function user(){return typeof currentUser==='undefined'?null:currentUser}
   function manager(){return user()?.role==='yonetici'}
   function owned(item){return !!item&&!!user()&&(manager()||String(item.employeeId)===String(user().id))}
   function date(item){return item.date||window.appointmentDate(item)}
   function profile(item){return remoteProfiles.find(function(p){return String(p.id)===String(item.employeeId)||p.full_name===item.staff})}
-  function color(item){var p=profile(item);return p?.calendar_color||defaults[p?.username]||'#526575'}
+  function serviceTone(item){
+    var name=String(item?.operation||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i');
+    if(name.includes('cocuk'))return servicePalette.child;
+    if(name.includes('boya'))return servicePalette.dye;
+    if(name.includes('keratin')||name.includes('cilt'))return servicePalette.care;
+    if(name.includes('sac')&&name.includes('sakal'))return servicePalette.combo;
+    if(name.includes('sakal'))return servicePalette.beard;
+    if(name.includes('yikama')||name.includes('fon'))return servicePalette.wash;
+    if(name.includes('sac')||name.includes('ense')||name.includes('damat'))return servicePalette.hair;
+    return servicePalette.other;
+  }
   function price(item){var value=item&&item.amount;return value==null||!Number.isFinite(Number(value))?'Ücret belirtilmemiş':'₺ '+Number(value).toLocaleString('tr-TR',{maximumFractionDigits:2})}
   function cardPrice(item){var value=price(item);return value==='Ücret belirtilmemiş'?'Ücret yok':value}
   function label(item){return item.status==='completed'?'Tamamlandı':item.status==='no_show'?'Gelmedi':item.status==='cancelled'?'İptal':'Aktif'}
@@ -19,9 +39,9 @@
   function invalidate(){cancelled.month='';cancelled.rows=[]}
   async function loadCancelled(day){var actor=user()?.id,month=day.slice(0,7);if(!actor||cancelled.loading||(cancelled.month===month&&cancelled.actor===actor))return;cancelled.loading=true;try{var bounds=SalonAppointmentData.monthBounds(day),start=new Date(Date.parse(bounds.start)-7*86400000).toISOString(),end=new Date(Date.parse(bounds.end)+7*86400000).toISOString(),rows=[];for(var offset=0;;offset+=500){var result=await salonDb.from('appointments').select('*').eq('status','cancelled').gte('scheduled_at',start).lt('scheduled_at',end).order('scheduled_at').order('id').range(offset,offset+499);if(result.error)throw result.error;rows.push.apply(rows,result.data||[]);if((result.data||[]).length<500)break}if(user()?.id!==actor)return;cancelled={month:month,actor:actor,rows:rows.map(remoteAppointment),loading:false};window.renderCalendar()}catch(error){cancelled.loading=false;window.showAppToast?.('İptal kayıtları yüklenemedi',error.message||'Tekrar deneyin.')}}
   function options(id,pairs,value){var el=document.getElementById(id);if(!el)return;var html=pairs.map(function(pair){return '<option value="'+esc(pair[0])+'">'+esc(pair[1])+'</option>'}).join('');if(el.innerHTML!==html)el.innerHTML=html;el.value=value}
-  function controls(){var content=document.querySelector('#calendar .content');if(!content||!user())return;var holder=document.getElementById('salonCalendarControls');if(!holder){holder=document.createElement('div');holder.id='salonCalendarControls';holder.innerHTML='<details id="smartFilters"><summary aria-label="Filtreler">☷</summary><div class="calendar-smart-filters"><label>Çalışan<select id="smartStaff"></select></label><label>İşlem<select id="smartService"></select></label><label>Durum<select id="smartStatus"></select></label><label>Görünüm<select id="smartPeriod"></select></label></div></details><details id="smartColors"><summary aria-label="Çalışan renkleri">🎨</summary><div id="smartColorList"></div></details>';content.insertBefore(holder,document.getElementById('calendarContent'));document.getElementById('smartStaff').onchange=function(e){teamCalendarMember=e.target.value||undefined;window.renderCalendar()};document.getElementById('smartService').onchange=function(e){filters.service=e.target.value;window.renderCalendar()};document.getElementById('smartStatus').onchange=function(e){filters.status=e.target.value;window.renderCalendar()};document.getElementById('smartPeriod').onchange=function(e){teamCalendarMode=e.target.value;window.renderCalendar()};document.getElementById('smartColorList').onchange=async function(e){if(!manager()||!e.target.matches('input[type=color]'))return;var id=e.target.dataset.profile,result=await salonDb.from('profiles').update({calendar_color:e.target.value}).eq('id',id).select('id,calendar_color').single();if(result.error){showAppToast('Renk kaydedilemedi',result.error.message);return}var p=remoteProfiles.find(function(row){return String(row.id)===String(id)});if(p)p.calendar_color=result.data.calendar_color;window.renderCalendar()}}
-    options('smartStaff',[['','Tüm çalışanlar']].concat(staff.map(function(s){return [s[0],s[0]]})),manager()?teamCalendarMember||'':user().name);document.getElementById('smartStaff').disabled=!manager();options('smartService',[['','Tüm işlemler']].concat(remoteServices.map(function(s){return [s.name,s.name]})),filters.service);if(filters.status==='arrived'||filters.status==='cancelled')filters.status='all';options('smartStatus',[['all','Tümü'],['active','Aktif'],['completed','Tamamlandı'],['no_show','Gelmedi']],filters.status);options('smartPeriod',[['day','Gün'],['week','Hafta'],['month','Ay']],teamCalendarMode||'day');var colors=document.getElementById('smartColors');colors.hidden=!manager();if(manager()&&!colors.open)document.getElementById('smartColorList').innerHTML=remoteProfiles.filter(function(p){return p.active&&p.username!=='salon.modern'}).map(function(p){return '<label><span>'+esc(p.full_name)+'</span><input type="color" data-profile="'+esc(p.id)+'" value="'+esc(p.calendar_color||defaults[p.username]||'#526575')+'"></label>'}).join('')}
-  function card(item){return '<button type="button" class="smart-event" data-smart-id="'+esc(item.id)+'" style="--employee-color:'+esc(color(item))+'"><strong>'+esc(item.customer)+'</strong><span>'+esc(item.time)+' · '+esc(item.staff)+'</span><small>'+esc(item.operation)+' · '+esc(price(item))+' · '+label(item)+'</small></button>'}
+  function controls(){var content=document.querySelector('#calendar .content');if(!content||!user())return;var holder=document.getElementById('salonCalendarControls');if(!holder){holder=document.createElement('div');holder.id='salonCalendarControls';holder.innerHTML='<details id="smartFilters"><summary aria-label="Filtreler">☷</summary><div class="calendar-smart-filters"><label>Çalışan<select id="smartStaff"></select></label><label>İşlem<select id="smartService"></select></label><label>Durum<select id="smartStatus"></select></label><label>Görünüm<select id="smartPeriod"></select></label></div></details><details id="smartColors"><summary aria-label="Hizmet renkleri">🎨</summary><div id="smartColorList" aria-label="Hizmet renk açıklamaları"></div></details>';content.insertBefore(holder,document.getElementById('calendarContent'));document.getElementById('smartStaff').onchange=function(e){teamCalendarMember=e.target.value||undefined;window.renderCalendar()};document.getElementById('smartService').onchange=function(e){filters.service=e.target.value;window.renderCalendar()};document.getElementById('smartStatus').onchange=function(e){filters.status=e.target.value;window.renderCalendar()};document.getElementById('smartPeriod').onchange=function(e){teamCalendarMode=e.target.value;window.renderCalendar()};}
+    options('smartStaff',[['','Tüm çalışanlar']].concat(staff.map(function(s){return [s[0],s[0]]})),manager()?teamCalendarMember||'':user().name);document.getElementById('smartStaff').disabled=!manager();options('smartService',[['','Tüm işlemler']].concat(remoteServices.map(function(s){return [s.name,s.name]})),filters.service);if(filters.status==='arrived'||filters.status==='cancelled')filters.status='all';options('smartStatus',[['all','Tümü'],['active','Aktif'],['completed','Tamamlandı'],['no_show','Gelmedi']],filters.status);options('smartPeriod',[['day','Gün'],['week','Hafta'],['month','Ay']],teamCalendarMode||'day');var colors=document.getElementById('smartColors');colors.hidden=false;if(!colors.open)document.getElementById('smartColorList').innerHTML=Object.keys(servicePalette).map(function(key){var tone=servicePalette[key];return '<div class="service-color-legend"><span class="service-color-swatch" style="--service-bg:'+tone.bg+';--service-color:'+tone.edge+'"></span><span>'+esc(tone.name)+'</span></div>'}).join('')}
+  function card(item){return '<button type="button" class="smart-event" data-smart-id="'+esc(item.id)+'" style="--service-bg:'+esc(serviceTone(item).bg)+';--service-color:'+esc(serviceTone(item).edge)+'"><strong>'+esc(item.customer)+'</strong><span>'+esc(item.time)+' · '+esc(item.staff)+'</span><small>'+esc(item.operation)+' · '+esc(price(item))+' · '+label(item)+'</small></button>'}
   function simplify(target){
     var nav=target.querySelector('.calendar-date-nav');
     if(nav){
@@ -39,10 +59,7 @@
     }
     if(teamCalendarMode==='month')return;
     target.querySelector(':scope > .section')?.remove();
-    target.querySelectorAll('.duration-hour-grid > button.team-head').forEach(function(head){
-      var member=staff.find(function(row){return row[0].split(' ')[0]===head.textContent.trim()});
-      if(member)head.style.setProperty('--staff-color',window.calendarEmployeeColor?window.calendarEmployeeColor(member[0]):color({staff:member[0]}));
-    });
+
     target.querySelectorAll('[data-appointment-id]').forEach(function(node){
       var item=appts.concat(cancelled.rows).find(function(row){return String(row.id)===node.dataset.appointmentId});
       if(!item)return;
@@ -52,12 +69,12 @@
       var amount=node.querySelector('.calendar-price');
       if(!amount){amount=document.createElement('span');amount.className='calendar-price';(small||strong)?.after(amount)}
       amount.textContent=cardPrice(item);
-      node.style.setProperty('--staff-color',color(item));
+      var tone=serviceTone(item);node.style.setProperty('--service-bg',tone.bg);node.style.setProperty('--service-color',tone.edge);
       node.title=item.customer+' · '+item.operation+' · '+price(item);
     });
   }
   function week(target){if(teamCalendarMode!=='week')return;var current=new Date(selectedTeamDate()+'T12:00:00Z');current.setUTCDate(current.getUTCDate()-(current.getUTCDay()+6)%7);var days=[];for(var i=0;i<7;i++){var d=new Date(current);d.setUTCDate(d.getUTCDate()+i);days.push(d.toISOString().slice(0,10))}var items=all();target.innerHTML='<div class="calendar-date-nav"><strong>'+esc(days[0])+' – '+esc(days[6])+'</strong></div><div class="smart-week">'+days.map(function(day){var rows=items.filter(function(item){return date(item)===day}).sort(function(a,b){return a.time.localeCompare(b.time)});return '<section><button type="button" class="smart-week-day" data-smart-day="'+day+'">'+esc(new Date(day+'T12:00:00Z').toLocaleDateString('tr-TR',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'}))+'</button>'+(rows.map(card).join('')||'<small>Randevu yok</small>')+'</section>'}).join('')+'</div>'}
-  function decorate(target){target.querySelectorAll('[data-appointment-id]').forEach(function(node){var item=all().find(function(row){return String(row.id)===node.dataset.appointmentId});if(!item)return;node.style.setProperty('--staff-color',color(item));node.setAttribute('aria-label',item.customer+', '+item.staff+', '+item.time+', '+item.operation+', '+price(item)+', '+label(item))})}
+  function decorate(target){target.querySelectorAll('[data-appointment-id]').forEach(function(node){var item=all().find(function(row){return String(row.id)===node.dataset.appointmentId});if(!item)return;var tone=serviceTone(item);node.style.setProperty('--service-bg',tone.bg);node.style.setProperty('--service-color',tone.edge);node.setAttribute('aria-label',item.customer+', '+item.staff+', '+item.time+', '+item.operation+', '+price(item)+', '+label(item))})}
   function bind(target){target.querySelectorAll('[data-smart-id]').forEach(function(node){node.onclick=function(){open(node.dataset.smartId)}});target.querySelectorAll('[data-smart-time]').forEach(function(node){node.onclick=function(){window.openTeamSlot(node.dataset.smartTime,manager()?teamCalendarMember||'':user().name)}});target.querySelectorAll('[data-smart-day]').forEach(function(node){node.onclick=function(){teamCalendarDate=node.dataset.smartDay;teamCalendarMode='day';window.renderCalendar()}});target.querySelectorAll('[data-week-move]').forEach(function(node){node.onclick=function(){window.moveTeamCalendar(Number(node.dataset.weekMove))}})}
   function panel(){var el=document.getElementById('smartAppointmentPanel');if(el)return el;el=document.createElement('div');el.id='smartAppointmentPanel';el.className='smart-panel-backdrop';el.innerHTML='<section class="smart-panel" role="dialog" aria-modal="true" aria-labelledby="smartPanelTitle"><div class="smart-panel-handle"></div><button type="button" class="smart-panel-close" aria-label="Kapat">×</button><h2 id="smartPanelTitle"></h2><div id="smartPanelDetails"></div><div id="smartPanelActions"></div></section>';el.addEventListener('click',function(e){if(e.target===el||e.target.closest('.smart-panel-close'))close()});document.body.appendChild(el);return el}
   function close(){document.getElementById('smartAppointmentPanel')?.classList.remove('show')}
