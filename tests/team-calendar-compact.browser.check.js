@@ -48,12 +48,15 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.web
       assert.match(await card.innerText(),/₺\s*750/);
       assert.equal(await page.locator('#calendarContent button[aria-label^="Önceki"],#calendarContent button[aria-label^="Sonraki"]').count(),0);
       assert.doesNotMatch(await page.locator('#calendarContent').innerText(),/Ay görünümü|Aylık görünüm|Tüm ekip randevuları|Çalışan seçin/);
-      const geometry=await page.evaluate(()=>({viewport:innerWidth,body:document.documentElement.scrollWidth,grid:document.querySelector('#calendar .duration-hour-grid').getBoundingClientRect().toJSON(),background:getComputedStyle(document.querySelector('[data-appointment-id="fixture-one"]')).backgroundColor,border:getComputedStyle(document.querySelector('[data-appointment-id="fixture-one"]')).borderLeftColor}));
+      const geometry=await page.evaluate(()=>({viewport:innerWidth,body:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight,viewportHeight:innerHeight,grid:document.querySelector('#calendar .duration-hour-grid').getBoundingClientRect().toJSON(),background:getComputedStyle(document.querySelector('[data-appointment-id="fixture-one"]')).backgroundColor,border:getComputedStyle(document.querySelector('[data-appointment-id="fixture-one"]')).borderLeftColor}));
       assert(geometry.body<=geometry.viewport+1,`No horizontal scroll at ${width}px: ${JSON.stringify(geometry)}`);
+      assert(geometry.scrollHeight<=geometry.viewportHeight+1,`No vertical scroll at ${width}px: ${JSON.stringify(geometry)}`);
+      assert(geometry.grid.bottom>=geometry.viewportHeight-8&&geometry.grid.bottom<=geometry.viewportHeight+1,`Calendar fills viewport at ${width}px: ${JSON.stringify(geometry)}`);
       assert.notEqual(geometry.background,'rgb(234, 216, 189)');
       assert.equal(geometry.border,'rgb(37, 99, 235)');
-      const colors=await page.locator('#calendar .duration-hour-grid > button.team-head').evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).borderBottomColor));
-      assert.deepEqual(colors,['rgb(234, 88, 12)','rgb(37, 99, 235)','rgb(21, 128, 61)','rgb(124, 58, 237)']);
+      const headers=await page.locator('#calendar .duration-hour-grid > button.team-head').evaluateAll(nodes=>nodes.map(node=>({background:getComputedStyle(node).backgroundColor,border:getComputedStyle(node).borderBottomColor})));
+      assert.equal(new Set(headers.map(node=>node.background)).size,1,'Employee headings share a neutral background');
+      assert.equal(new Set(headers.map(node=>node.border)).size,1,'Employee headings have no individual color stripe');
       await page.locator('#smartFilters summary').click();
       assert.equal(await page.locator('#smartService').isVisible(),true);
       await page.locator('#smartFilters summary').click();

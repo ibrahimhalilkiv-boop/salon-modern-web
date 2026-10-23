@@ -29,17 +29,23 @@
 #smartPanelActions button{min-width:0;min-height:47px;border:0;border-radius:10px;background:#e6f0e8;color:#19503a;font-weight:700;font-size:14px;cursor:pointer}
 #smartPanelActions button.danger{background:#fce6e2;color:#963e38}
 @media(max-width:640px){.calendar-smart-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.smart-week{grid-template-columns:1fr}.smart-week section{display:block}.smart-mobile-day{display:block}.smart-mobile-slot{display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px;border-bottom:1px solid #e4eae5;min-height:36px;align-items:start}.smart-mobile-slot>span{font-size:11px;font-weight:700;color:#51635c;padding-top:9px}.smart-empty-slot{width:100%;min-height:33px;border:0;background:#fff;color:#779183;text-align:left;padding-left:9px;border-radius:6px}.smart-mobile-slot:has(.smart-event){min-height:65px}#smartColorList{grid-template-columns:1fr}#smartPanelDetails{grid-template-columns:1fr}.smart-panel{padding-left:17px;padding-right:17px}}
-.app:has(#calendar.active){max-width:1080px}
-#calendar .content{position:relative;padding:4px 4px 56px!important}
+.app:has(#calendar.active){max-width:1080px;height:100dvh;min-height:0;overflow:hidden;padding-bottom:0}
+#calendar.active{height:100%;overflow:hidden}
+#calendar .content{position:relative;box-sizing:border-box;height:100%;overflow:hidden;padding:4px 4px 0!important}
 #calendar .calendar-menu-row{display:flex;align-items:center;min-height:34px;margin:0 0 2px}
 #calendar .calendar-date-nav{justify-content:center;margin:3px 0 5px}
 #calendar .calendar-date-nav strong{min-width:0;text-align:center}
 #calendar .calendar-month-title{cursor:pointer;pointer-events:auto!important}
 #calendar .calendar-month-title:focus-visible{outline:2px solid #986f3b;outline-offset:4px;border-radius:4px}
 #calendar .team-month-grid button:not(:disabled){pointer-events:auto!important}
-#calendar .team-calendar-wrap{width:100%;overflow-x:hidden!important}
-#calendar .team-calendar.duration-hour-grid{width:100%;min-width:0;margin-top:3px}
-#calendar .team-calendar.duration-hour-grid>.team-head{background:color-mix(in srgb,var(--staff-color,#e7e2d8) 13%,white);border-bottom:3px solid var(--staff-color,#e7e2d8)!important}
+#calendar .team-calendar-wrap{width:100%;overflow:hidden!important;padding-bottom:0}
+#calendar .team-calendar.duration-hour-grid{width:100%;min-width:0;min-height:0!important;margin-top:3px;overflow:hidden}
+#calendar .team-calendar.duration-hour-grid>.duration-cell,#calendar .team-calendar.duration-hour-grid>.duration-time,#calendar .team-calendar.duration-hour-grid>.duration-event{min-height:0!important;overflow:hidden}
+#calendar .team-calendar.duration-hour-grid[data-density="tight"]>.duration-event[data-appointment-id] small{display:none!important}
+#calendar .team-calendar.duration-hour-grid[data-density="tight"]>.duration-event[data-appointment-id] strong{font-size:8px;line-height:1}
+#calendar .team-calendar.duration-hour-grid[data-density="tight"]>.duration-event[data-appointment-id] .calendar-price{font-size:7px}
+#calendar .calendar-hint{display:none!important}
+#calendar .team-calendar.duration-hour-grid>.team-head{background:var(--cream);border-bottom:1px solid var(--line)!important}
 #calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id]{background:color-mix(in srgb,var(--staff-color,#526575) 18%,white);border-left:4px solid var(--staff-color,#526575);color:#1c2830}
 #calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id] small{color:#24313b!important;white-space:normal!important;line-height:1.05;display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
 #calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id] .calendar-price{color:#3b4b52}
