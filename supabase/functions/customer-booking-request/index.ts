@@ -126,13 +126,20 @@ async function availability(req: Request, url: URL, own?: { id: string, service_
     : service!.online_duration_minutes
   if (!Number.isSafeInteger(duration) || duration <= 0) return reply(req, { error: 'Bu hizmetin online süresi tanımlı değil. Lütfen salonla iletişime geçin.' }, 400)
   const schedule = await bookingSchedule(date)
-  if (schedule.closed) return reply(req, { date, durationMinutes: duration, slots: [], schedule })
+  if (schedule.closed) {
+    // Keep the operating-hour grid visible, but prevent selection on fully closed days.
+    const allSlots: { time: string, available: boolean, status: string }[] = []
+    for (let minute = Math.ceil(schedule.open / 60) * 60; minute < schedule.close; minute += 60) {
+      allSlots.push({ time: minuteLabel(minute), available: false, status: 'closed' })
+    }
+    return reply(req, { date, durationMinutes: duration, slots: [], allSlots, schedule })
+  }
   const available = await db.rpc('online_booking_slots', {
     p_service: serviceId, p_day: date, p_employee: requestedEmployeeId || null,
     p_exclude: own?.id || null, p_duration_override: own ? duration : null,
   })
   if (available.error) throw available.error
-  return reply(req, { date, durationMinutes: available.data.durationMinutes, slots: available.data.slots, schedule })
+  return reply(req, { date, durationMinutes: available.data.durationMinutes, slots: available.data.slots, allSlots: available.data.allSlots || [], schedule })
 }
 
 async function createRequest(req: Request) {
