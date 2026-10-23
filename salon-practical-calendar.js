@@ -5,6 +5,7 @@
   var colors = { 'halil.kiv': '#2563EB', 'cengiz.bavkir': '#15803D', 'talip.kose': '#7C3AED', 'mehmet.safakoglu': '#EA580C' };
   var statusNames = { confirmed: 'Aktif', completed: 'Tamamlandı', no_show: 'Gelmedi', cancelled: 'İptal' };
   var state = { view: 'day', date: today(), monthSelectedDay: null, staff: '', service: '', status: 'all', rows: [], hours: null, key: '', loading: false, error: '', generation: 0 };
+  var move = { id: '', active: false, target: null, timer: null, startX: 0, startY: 0, suppressClickUntil: 0, busy: false };
 
   function user() { return typeof currentUser === 'undefined' ? null : currentUser; }
   function manager() { return user()?.role === 'yonetici'; }
@@ -41,6 +42,7 @@
     document.getElementById('calendar').after(page);
     page.addEventListener('click', click);
     installDaySwipe(page.querySelector('#practicalBody'));
+    installMoving(page.querySelector('#practicalBody'));
     window.setInterval(function () { if (isActive()) updateCurrentTimeLine(); }, 30000);
     document.getElementById('practicalJump').addEventListener('click', function (event) {
       if (typeof event.currentTarget.showPicker === 'function') {
@@ -80,8 +82,7 @@
     if (state.staff && String(item.employeeId) !== String(state.staff)) return false;
     if (!manager() && String(item.employeeId) !== String(user()?.id)) return false;
     if (state.service && item.operation !== state.service) return false;
-    if (state.status === 'active') return item.status === 'confirmed' && !item.checkedInAt;
-    if (state.status === 'arrived') return item.status === 'confirmed' && !!item.checkedInAt;
+    if (state.status === 'active') return item.status === 'confirmed';
     return state.status === 'all' || item.status === state.status;
   }
 
@@ -125,9 +126,9 @@
         var shade = esc(color({ employeeId: person.id })), rows = bySlot.get(minute + ':' + person.id) || [];
         html += '<div class="practical-cell" style="--staff-color:' + shade + '">';
         if (rows.length) rows.forEach(function (item) {
-          var status = item.checkedInAt && item.status === 'confirmed' ? 'Geldi' : (statusNames[item.status] || 'Aktif');
+          var status = statusNames[item.status] || 'Aktif';
           var amount = Number(item.amount), price = Number.isFinite(amount) ? '₺ ' + amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : 'Ücret belirtilmemiş';
-          html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '" title="' + esc(item.customer + ' · ' + item.operation + ' · ' + price + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + item.operation + ', ' + price + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><span class="practical-event-service">' + esc(item.operation || 'Hizmet belirtilmemiş') + '</span><span class="practical-event-price">' + esc(price) + '</span><span class="practical-event-status">' + esc(status) + '</span></button>';
+          html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '"' + (manager() && window.matchMedia('(pointer: fine)').matches ? ' draggable="true"' : '') + ' title="' + esc(item.customer + ' · ' + item.operation + ' · ' + price + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + item.operation + ', ' + price + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><span class="practical-event-service">' + esc(item.operation || 'Hizmet belirtilmemiş') + '</span><span class="practical-event-price">' + esc(price) + '</span><span class="practical-event-status">' + esc(status) + '</span></button>';
         });
         else {
           var canCreate = manager() && !hours.closed && minute >= hours.open && minute < hours.close;
@@ -145,7 +146,7 @@
       var day = moveDay(start, index), rows = rowsFor(day, items);
       html += '<section class="practical-week-day"><button type="button" class="practical-week-title" data-day="' + day + '">' + esc(title(day, { weekday: 'short', day: 'numeric', month: 'short' })) + '<small>' + rows.length + ' randevu</small></button>';
       rows.forEach(function (item) {
-        var status = item.checkedInAt && item.status === 'confirmed' ? 'Geldi' : (statusNames[item.status] || 'Aktif');
+        var status = statusNames[item.status] || 'Aktif';
         var amount = Number(item.amount), price = Number.isFinite(amount) ? '₺ ' + amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : 'Ücret belirtilmemiş';
         html += '<button type="button" class="practical-week-event" data-appointment="' + esc(item.id) + '" style="--staff-color:' + esc(color(item)) + '"><strong>' + esc(item.time + ' · ' + item.customer) + '</strong><span>' + esc(item.staff + ' · ' + (item.operation || 'Hizmet belirtilmemiş')) + '</span><small>' + esc(price + ' · ' + status) + '</small></button>';
       });
@@ -244,6 +245,98 @@
   }
 
   function setDate(date) { if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return; state.date = date; load(false); }
+  function moveTarget(node) { var target = node?.closest?.('.practical-available[data-slot-time][data-slot-staff]'); return target && !target.disabled ? target : null; }
+  function highlightMoveTarget(target) {
+    if (move.target === target) return;
+    move.target?.classList.remove('move-target');
+    move.target = target;
+    target?.classList.add('move-target');
+  }
+  function resetMove() {
+    clearTimeout(move.timer); move.timer = null;
+    document.querySelector('#practicalBody .practical-event.moving')?.classList.remove('moving');
+    highlightMoveTarget(null);
+    move.id = ''; move.active = false;
+  }
+  async function commitMove(id, target) {
+    if (!manager() || move.busy || state.view !== 'day' || !target || target.disabled) return;
+    var item = state.rows.find(function (row) { return String(row.id) === String(id); });
+    if (!item || item.date !== state.date || item.status === 'cancelled') return;
+    var employeeId = target.dataset.slotStaff, time = target.dataset.slotTime, duration = Number(item.duration || 60);
+    if (String(item.employeeId) === String(employeeId) && item.time === time) return;
+    if (!Number.isFinite(duration) || duration <= 0 || !/^\d{2}:\d{2}$/.test(time)) return;
+    var start = timeMinute(time), end = start + duration;
+    var conflict = state.rows.some(function (row) {
+      var rowStart = timeMinute(row.time);
+      return row.id !== item.id && row.date === state.date && row.status !== 'cancelled' && String(row.employeeId) === String(employeeId) && start < rowStart + Number(row.duration || 60) && end > rowStart;
+    });
+    if (conflict) { window.showAppToast?.('Randevu taşınamadı', 'Bu çalışanla aynı saatte başka bir randevu var.'); return; }
+    if (typeof closedSlotFor === 'function' && closedSlotFor(state.date, time, duration, employeeId)) {
+      window.showAppToast?.('Randevu taşınamadı', 'Seçilen saat çalışan için kapalı.'); return;
+    }
+    move.busy = true;
+    try {
+      var result = await salonDb.from('appointments').update({ employee_id: employeeId, scheduled_at: state.date + 'T' + time + ':00+03:00' })
+        .eq('id', item.id).eq('employee_id', item.employeeId).eq('scheduled_at', item.scheduledAt)
+        .select('id').maybeSingle();
+      if (result.error) throw result.error;
+      if (!result.data) throw Error('Randevu başka bir cihazda değişti. Takvim yeniden yükleniyor.');
+      await window.reloadRemoteData();
+      await load(true);
+    } catch (error) {
+      window.showAppToast?.('Randevu taşınamadı', error.message || 'Takvimi yenileyip tekrar deneyin.');
+      await load(true);
+    } finally { move.busy = false; }
+  }
+  function installMoving(area) {
+    area.addEventListener('dragstart', function (event) {
+      var card = event.target.closest('.practical-event[data-appointment]');
+      if (!manager() || !card || state.view !== 'day') { event.preventDefault(); return; }
+      move.id = card.dataset.appointment; move.active = true; card.classList.add('moving');
+      event.dataTransfer?.setData('text/plain', move.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    });
+    area.addEventListener('dragover', function (event) {
+      if (!manager() || !move.active) return;
+      var target = moveTarget(event.target);
+      if (target) { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; }
+      highlightMoveTarget(target);
+    });
+    area.addEventListener('drop', function (event) {
+      if (!move.active) return;
+      event.preventDefault();
+      var id = move.id, target = moveTarget(event.target);
+      resetMove();
+      if (target) void commitMove(id, target);
+    });
+    area.addEventListener('dragend', resetMove);
+    area.addEventListener('touchstart', function (event) {
+      var card = event.target.closest('.practical-event[data-appointment]');
+      if (!manager() || !card || state.view !== 'day' || event.touches.length !== 1) return;
+      resetMove();
+      move.id = card.dataset.appointment;
+      move.startX = event.touches[0].clientX; move.startY = event.touches[0].clientY;
+      move.timer = setTimeout(function () { move.active = true; card.classList.add('moving'); move.suppressClickUntil = Date.now() + 700; }, 450);
+    }, { passive: true });
+    area.addEventListener('touchmove', function (event) {
+      if (!move.id || event.touches.length !== 1) return;
+      var touch = event.touches[0];
+      if (!move.active && Math.hypot(touch.clientX - move.startX, touch.clientY - move.startY) > 10) { resetMove(); return; }
+      if (!move.active) return;
+      event.preventDefault();
+      highlightMoveTarget(moveTarget(document.elementFromPoint(touch.clientX, touch.clientY)));
+    }, { passive: false });
+    area.addEventListener('touchend', function (event) {
+      if (!move.id) return;
+      var id = move.id, active = move.active, touch = event.changedTouches[0];
+      var target = active && touch ? moveTarget(document.elementFromPoint(touch.clientX, touch.clientY)) : null;
+      if (active) { event.preventDefault(); move.suppressClickUntil = Date.now() + 700; }
+      resetMove();
+      if (target) void commitMove(id, target);
+    }, { passive: false });
+    area.addEventListener('touchcancel', resetMove, { passive: true });
+    area.addEventListener('contextmenu', function (event) { if (manager() && event.target.closest('.practical-event')) event.preventDefault(); });
+  }
   function installDaySwipe(area) {
     var startX = 0, startY = 0, tracking = false;
     area.addEventListener('touchstart', function (event) {
@@ -251,7 +344,7 @@
       if (tracking) { startX = event.touches[0].clientX; startY = event.touches[0].clientY; }
     }, { passive: true });
     area.addEventListener('touchend', function (event) {
-      if (!tracking || state.view !== 'day' || !event.changedTouches.length) return;
+      if (!tracking || move.active || state.view !== 'day' || !event.changedTouches.length) return;
       tracking = false;
       var dx = event.changedTouches[0].clientX - startX, dy = event.changedTouches[0].clientY - startY;
       if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
@@ -276,6 +369,7 @@
     if (button.dataset.employee && manager()) { state.staff = state.staff === button.dataset.employee ? '' : button.dataset.employee; render(); return; }
     if (button.dataset.slotTime && manager() && !button.disabled) { createAppointment(button.dataset.slotTime, button.dataset.slotStaff); return; }
     if (button.dataset.appointment) {
+      if (Date.now() < move.suppressClickUntil && event.pointerType !== 'mouse') return;
       var item = state.rows.find(function (row) { return String(row.id) === button.dataset.appointment; });
       if (item && matches(item)) {
         var globalItem = typeof appts === 'undefined' ? null : appts.find(function (row) { return String(row.id) === String(item.id); });
@@ -283,15 +377,15 @@
         window.SalonCalendarUI?.open(item);
         var actions = document.querySelector('#smartAppointmentPanel.show #smartPanelActions');
         if (manager() && actions) {
-          var move = document.createElement('button');
-          move.type = 'button'; move.dataset.action = 'move'; move.textContent = 'Taşı';
-          move.addEventListener('click', function () {
+          var moveButton = document.createElement('button');
+          moveButton.type = 'button'; moveButton.dataset.action = 'move'; moveButton.textContent = 'Taşı';
+          moveButton.addEventListener('click', function () {
             document.querySelector('#smartAppointmentPanel .smart-panel-close')?.click();
             if (typeof appts !== 'undefined' && !appts.some(function (row) { return String(row.id) === String(item.id); })) appts.push(item);
             window.openAppointmentModal('', item.id);
             document.getElementById('appointmentDate')?.focus();
           });
-          actions.appendChild(move);
+          actions.appendChild(moveButton);
         }
       }
       return;

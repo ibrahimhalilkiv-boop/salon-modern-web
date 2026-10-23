@@ -28,7 +28,10 @@
 #practicalCalendar .practical-available{display:grid;place-items:center;width:100%;min-height:47px;border:1px dashed transparent;border-radius:8px;background:transparent;color:#9ab4a6;font-size:17px}
 #practicalCalendar .practical-available:hover,#practicalCalendar .practical-available:focus-visible{border-color:var(--staff-color);background:color-mix(in srgb,var(--staff-color) 9%,white);color:var(--staff-color)}
 #practicalCalendar .practical-available:disabled{cursor:default;color:transparent}
+#practicalCalendar .practical-available.move-target{border-color:#936329;background:#f0e3cf;box-shadow:inset 0 0 0 2px #cba06b}
 #practicalCalendar .practical-event{box-sizing:border-box;display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:51px;margin:0 0 3px;padding:5px;border:0;border-left:4px solid var(--staff-color);border-radius:7px;background:color-mix(in srgb,var(--staff-color) 17%,white);color:#183b30;text-align:left;overflow-wrap:anywhere}
+#practicalCalendar .practical-event[draggable="true"]{cursor:grab}
+#practicalCalendar .practical-event.moving{opacity:.55;cursor:grabbing}
 #practicalCalendar .practical-event strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;max-width:100%;font-size:12px;line-height:1.15;font-weight:800;color:#111}
 #practicalCalendar .practical-event span{max-width:100%;font-size:10px;line-height:1.15}
 #practicalCalendar .practical-event-price{font-weight:800;font-variant-numeric:tabular-nums}
