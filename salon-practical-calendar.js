@@ -4,7 +4,7 @@
   var employeeOrder = { 'mehmet.safakoglu': 0, 'halil.kiv': 1, 'cengiz.bavkir': 2, 'talip.kose': 3 };
   var colors = { 'halil.kiv': '#2563EB', 'cengiz.bavkir': '#15803D', 'talip.kose': '#7C3AED', 'mehmet.safakoglu': '#EA580C' };
   var statusNames = { confirmed: 'Aktif', completed: 'Tamamlandı', no_show: 'Gelmedi', cancelled: 'İptal' };
-  var state = { view: 'day', date: today(), staff: '', rows: [], hours: null, key: '', loading: false, error: '', generation: 0 };
+  var state = { view: 'day', date: today(), staff: '', service: '', status: 'all', rows: [], hours: null, key: '', loading: false, error: '', generation: 0 };
 
   function user() { return typeof currentUser === 'undefined' ? null : currentUser; }
   function manager() { return user()?.role === 'yonetici'; }
@@ -21,8 +21,8 @@
   function color(item) { var person = profile(item); return person?.calendar_color || colors[person?.username] || '#526575'; }
   function isActive() { return !!document.getElementById('practicalCalendar')?.classList.contains('active'); }
   function visibleRange() {
-    var start = state.view === 'month' ? monday(monthStart(state.date)) : state.date;
-    var end = state.view === 'month' ? moveDay(nextMonth(state.date, 1), 7) : moveDay(start, 1);
+    var start = state.view === 'month' ? monday(monthStart(state.date)) : state.view === 'week' ? monday(state.date) : state.date;
+    var end = state.view === 'month' ? moveDay(nextMonth(state.date, 1), 7) : moveDay(start, state.view === 'week' ? 7 : 1);
     return { start: start + 'T00:00:00+03:00', end: end + 'T00:00:00+03:00' };
   }
   function currentKey() { var range = visibleRange(); return user()?.id + ':' + range.start + ':' + range.end; }
@@ -36,9 +36,22 @@
     var page = document.createElement('section');
     page.id = 'practicalCalendar';
     page.className = 'page';
-    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><h1 class="page-title">Pratik Takvim</h1></div><div class="practical-toolbar"><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki gün veya ay">‹</button><strong id="practicalTitle"></strong><button type="button" data-nav="next" aria-label="Sonraki gün veya ay">›</button><button type="button" data-nav="today">Bugün</button><button type="button" id="practicalMonth" data-view="month" aria-pressed="false">Ay görünümü</button><button type="button" id="practicalDay" data-view="day" hidden aria-pressed="false">Güne dön</button></div></div><button type="button" id="practicalAll" hidden>Tüm Çalışanlar</button><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
+    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><h1 class="page-title">Pratik Takvim</h1></div><div class="practical-toolbar"><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki gün, hafta veya ay">‹</button><label class="practical-date-title" title="Tarih seç"><strong id="practicalTitle"></strong><input id="practicalJump" type="date" aria-label="Tarihe git"></label><button type="button" data-nav="next" aria-label="Sonraki gün, hafta veya ay">›</button><button type="button" data-nav="today">Bugün</button><button type="button" id="practicalMonth" data-view="month" aria-pressed="false">Ay görünümü</button><button type="button" id="practicalDay" data-view="day" hidden aria-pressed="false">Güne dön</button><details id="practicalTools" class="practical-tools"><summary>Seçenekler</summary><div class="practical-tools-body"><label>Görünüm<select id="practicalViewSelect"><option value="day">Gün</option><option value="week">Hafta</option><option value="month">Ay</option></select></label><label>Çalışan<select id="practicalStaff"></select></label><label>İşlem<select id="practicalService"></select></label><label>Durum<select id="practicalStatus"><option value="all">Tümü</option><option value="active">Aktif</option><option value="arrived">Geldi</option><option value="completed">Tamamlandı</option><option value="no_show">Gelmedi</option></select></label></div></details></div></div><button type="button" id="practicalAll" hidden>Tüm Çalışanlar</button><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
     document.getElementById('calendar').after(page);
     page.addEventListener('click', click);
+    document.getElementById('practicalJump').addEventListener('click', function (event) {
+      if (typeof event.currentTarget.showPicker === 'function') {
+        try { event.currentTarget.showPicker(); } catch (_error) { /* Native date input remains usable. */ }
+      }
+    });
+    page.addEventListener('change', function (event) {
+      var id = event.target.id, value = event.target.value;
+      if (id === 'practicalJump') { state.view = 'day'; setDate(value); }
+      else if (id === 'practicalViewSelect') { state.view = value; load(false); }
+      else if (id === 'practicalStaff') { state.staff = manager() ? value : user().id; render(); }
+      else if (id === 'practicalService') { state.service = value; render(); }
+      else if (id === 'practicalStatus') { state.status = value; render(); }
+    });
   }
 
   function ensureMenu() {
@@ -57,19 +70,34 @@
     calendar.after(practical);
   }
 
+  function options(id, pairs, value) {
+    var element = document.getElementById(id), html = pairs.map(function (pair) { return '<option value="' + esc(pair[0]) + '">' + esc(pair[1]) + '</option>'; }).join('');
+    if (element.innerHTML !== html) element.innerHTML = html;
+    element.value = value;
+  }
   function controls() {
     if (!manager()) state.staff = user()?.id || '';
     document.querySelectorAll('#practicalCalendar [data-view]').forEach(function (button) { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-pressed', String(button.dataset.view === state.view)); });
     document.getElementById('practicalMonth').hidden = state.view === 'month';
     document.getElementById('practicalDay').hidden = state.view === 'day';
     document.getElementById('practicalAll').hidden = !manager() || !state.staff || state.view !== 'day';
+    document.getElementById('practicalViewSelect').value = state.view;
+    options('practicalStaff', (manager() ? [['', 'Tüm çalışanlar']] : []).concat(employees().map(function (person) { return [person.id, person.full_name]; })), state.staff);
+    document.getElementById('practicalStaff').disabled = !manager();
+    var services = Array.from(new Set(remoteServices.map(function (service) { return service.name; }).concat(state.rows.map(function (item) { return item.operation; })).filter(Boolean))).sort(function (a, b) { return a.localeCompare(b, 'tr'); });
+    if (state.service && !services.includes(state.service)) services.push(state.service);
+    options('practicalService', [['', 'Tüm işlemler']].concat(services.map(function (service) { return [service, service]; })), state.service);
+    document.getElementById('practicalStatus').value = state.status;
   }
 
   function matches(item) {
     if (item.status === 'cancelled') return false;
     if (state.staff && String(item.employeeId) !== String(state.staff)) return false;
     if (!manager() && String(item.employeeId) !== String(user()?.id)) return false;
-    return true;
+    if (state.service && item.operation !== state.service) return false;
+    if (state.status === 'active') return item.status === 'confirmed' && !item.checkedInAt;
+    if (state.status === 'arrived') return item.status === 'confirmed' && !!item.checkedInAt;
+    return state.status === 'all' || item.status === state.status;
   }
 
   function rowsFor(day, items) { return items.filter(function (item) { return item.date === day; }).sort(function (a, b) { return a.time.localeCompare(b.time) || a.customer.localeCompare(b.customer, 'tr'); }); }
@@ -116,10 +144,27 @@
           var amount = Number(item.amount), price = Number.isFinite(amount) ? '₺ ' + amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : 'Ücret belirtilmemiş';
           html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '" title="' + esc(item.customer + ' · ' + item.operation + ' · ' + price + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + item.operation + ', ' + price + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><span class="practical-event-time">' + esc(item.time) + '</span><span class="practical-event-service">' + esc(item.operation || 'Hizmet belirtilmemiş') + '</span><span class="practical-event-price">' + esc(price) + '</span><span class="practical-event-status">' + esc(status) + '</span></button>';
         });
-        else html += '<button type="button" class="practical-available" data-slot-time="' + esc(time) + '" data-slot-staff="' + esc(person.id) + '" aria-label="' + esc(person.full_name + ' ' + time + ' boş saat') + '"' + (manager() ? '' : ' disabled') + '><span aria-hidden="true">＋</span></button>';
+        else {
+          var canCreate = manager() && !hours.closed && minute >= hours.open && minute < hours.close;
+          html += '<button type="button" class="practical-available" data-slot-time="' + esc(time) + '" data-slot-staff="' + esc(person.id) + '" aria-label="' + esc(person.full_name + ' ' + time + (canCreate ? ' boş saat; randevu oluştur' : ' çalışma saati dışında')) + '"' + (canCreate ? '' : ' disabled') + '></button>';
+        }
         html += '</div>';
       });
       html += '</div>';
+    }
+    return html + '</div>';
+  }
+  function weekGrid(items) {
+    var start = monday(state.date), html = '<div class="practical-week">';
+    for (var index = 0; index < 7; index++) {
+      var day = moveDay(start, index), rows = rowsFor(day, items);
+      html += '<section class="practical-week-day"><button type="button" class="practical-week-title" data-day="' + day + '">' + esc(title(day, { weekday: 'short', day: 'numeric', month: 'short' })) + '<small>' + rows.length + ' randevu</small></button>';
+      rows.forEach(function (item) {
+        var status = item.checkedInAt && item.status === 'confirmed' ? 'Geldi' : (statusNames[item.status] || 'Aktif');
+        var amount = Number(item.amount), price = Number.isFinite(amount) ? '₺ ' + amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : 'Ücret belirtilmemiş';
+        html += '<button type="button" class="practical-week-event" data-appointment="' + esc(item.id) + '" style="--staff-color:' + esc(color(item)) + '"><strong>' + esc(item.time + ' · ' + item.customer) + '</strong><span>' + esc(item.staff + ' · ' + (item.operation || 'Hizmet belirtilmemiş')) + '</span><small>' + esc(price + ' · ' + status) + '</small></button>';
+      });
+      html += '</section>';
     }
     return html + '</div>';
   }
@@ -137,15 +182,17 @@
     if (!user()) return;
     ensurePage(); controls();
     var notice = document.getElementById('practicalNotice'), body = document.getElementById('practicalBody');
-    document.getElementById('practicalTitle').textContent = state.view === 'month' ? title(monthStart(state.date), { month: 'long', year: 'numeric' }) : title(state.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    document.getElementById('practicalTitle').textContent = state.view === 'month' ? title(monthStart(state.date), { month: 'long', year: 'numeric' }) : state.view === 'week' ? title(monday(state.date), { day: 'numeric', month: 'short' }) + ' – ' + title(moveDay(monday(state.date), 6), { day: 'numeric', month: 'short', year: 'numeric' }) : title(state.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    document.getElementById('practicalJump').value = state.date;
     if (state.loading) { notice.textContent = 'Randevular yükleniyor…'; body.replaceChildren(); return; }
     if (state.error) { notice.textContent = 'Randevular yüklenemedi: ' + state.error; body.replaceChildren(); return; }
     var items = state.rows.filter(matches);
-    var firstVisible = state.view === 'month' ? monthStart(state.date) : state.date;
-    var lastVisible = state.view === 'month' ? nextMonth(state.date, 1) : moveDay(firstVisible, 1);
+    var firstVisible = state.view === 'month' ? monthStart(state.date) : state.view === 'week' ? monday(state.date) : state.date;
+    var lastVisible = state.view === 'month' ? nextMonth(state.date, 1) : moveDay(firstVisible, state.view === 'week' ? 7 : 1);
     var visibleCount = items.filter(function (item) { return item.date >= firstVisible && item.date < lastVisible; }).length;
     notice.textContent = visibleCount + ' randevu';
     if (state.view === 'month') { body.innerHTML = monthGrid(items); return; }
+    if (state.view === 'week') { body.innerHTML = weekGrid(items); return; }
     body.innerHTML = dayGrid(items);
   }
 
@@ -191,19 +238,31 @@
     if (button.dataset.view) { state.view = button.dataset.view; load(false); return; }
     if (button.dataset.nav) {
       if (button.dataset.nav === 'today') { state.view = 'day'; setDate(today()); }
-      else { var amount = button.dataset.nav === 'next' ? 1 : -1; setDate(state.view === 'month' ? nextMonth(state.date, amount) : moveDay(state.date, amount)); }
+      else { var amount = button.dataset.nav === 'next' ? 1 : -1; setDate(state.view === 'month' ? nextMonth(state.date, amount) : moveDay(state.date, amount * (state.view === 'week' ? 7 : 1))); }
       return;
     }
     if (button.dataset.day) { state.view = 'day'; setDate(button.dataset.day); return; }
     if (button.dataset.employee && manager()) { state.staff = button.dataset.employee; render(); return; }
     if (button.id === 'practicalAll' && manager()) { state.staff = ''; render(); return; }
-    if (button.dataset.slotTime && manager()) { createAppointment(button.dataset.slotTime, button.dataset.slotStaff); return; }
+    if (button.dataset.slotTime && manager() && !button.disabled) { createAppointment(button.dataset.slotTime, button.dataset.slotStaff); return; }
     if (button.dataset.appointment) {
       var item = state.rows.find(function (row) { return String(row.id) === button.dataset.appointment; });
       if (item && matches(item)) {
         var globalItem = typeof appts === 'undefined' ? null : appts.find(function (row) { return String(row.id) === String(item.id); });
         if (globalItem) Object.assign(globalItem, item);
         window.SalonCalendarUI?.open(item);
+        var actions = document.querySelector('#smartAppointmentPanel.show #smartPanelActions');
+        if (manager() && actions) {
+          var move = document.createElement('button');
+          move.type = 'button'; move.dataset.action = 'move'; move.textContent = 'Taşı';
+          move.addEventListener('click', function () {
+            document.querySelector('#smartAppointmentPanel .smart-panel-close')?.click();
+            if (typeof appts !== 'undefined' && !appts.some(function (row) { return String(row.id) === String(item.id); })) appts.push(item);
+            window.openAppointmentModal('', item.id);
+            document.getElementById('appointmentDate')?.focus();
+          });
+          actions.appendChild(move);
+        }
       }
       return;
     }
