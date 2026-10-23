@@ -6,7 +6,8 @@ function toast(title,body){if(typeof showAppToast==='function')showAppToast(titl
 function fitCalendar(){
   var grid=document.querySelector('#calendarContent .duration-hour-grid');if(!grid)return;
   var slots=Math.max(1,parseInt(grid.querySelector(':scope > .duration-end')?.style.gridRow,10)-2);
-  grid.style.setProperty('grid-template-rows','auto repeat('+slots+',minmax(8px,1fr)) 0px','important');
+  var slotFloor=24;
+  grid.style.setProperty('grid-template-rows','auto repeat('+slots+',minmax('+slotFloor+'px,1fr)) 0px','important');
   var endLabel=grid.querySelector(':scope > .duration-end');if(endLabel){endLabel.textContent='';endLabel.setAttribute('aria-label','Takvim sonu')}
   var hint=document.querySelector('#calendarContent .calendar-hint');if(hint)hint.textContent=hint.textContent.replace(/Takvim (.+?)–\d{2}\.\d{2} arasını gösterir\. Online kapanış (\d{2}\.\d{2});/,'Takvim $1–$2 ayarını kullanır;');
   var viewportHeight=window.visualViewport?.height||window.innerHeight;
@@ -14,7 +15,7 @@ function fitCalendar(){
   var hintStyle=hint?getComputedStyle(hint):null;
   var hintSpace=hint?hint.getBoundingClientRect().height+parseFloat(hintStyle.marginTop||0)+parseFloat(hintStyle.marginBottom||0):0;
   var available=Math.max(0,Math.floor(viewportHeight-gridTop-hintSpace-14));
-  grid.style.setProperty('height','calc('+available+'px - env(safe-area-inset-bottom, 0px))','important');
+  grid.style.setProperty('height','calc('+Math.max(available,slots*slotFloor+36)+'px - env(safe-area-inset-bottom, 0px))','important');
 }
 function removeAdminFromStaff(){if(typeof staff==='undefined'||!Array.isArray(staff))return;staff=staff.filter(function(member){return member[0]!=='Salon Modern'})}
 function installAdminProfileFilters(){if(window.__salonAdminProfileFiltersInstalled)return;window.__salonAdminProfileFiltersInstalled=true;['phase2OccupancyCards','phase2RenderEmployeePerformance','employeeFrom','visibleProfiles'].forEach(function(name){var original=window[name];if(typeof original!=='function')return;window[name]=function(){var profiles=window.remoteProfiles;window.remoteProfiles=(profiles||[]).filter(function(profile){return profile.username!=='salon.modern'});try{return original.apply(this,arguments)}finally{window.remoteProfiles=profiles}}});if(typeof renderHomeSummary==='function')renderHomeSummary()}
@@ -41,7 +42,7 @@ var minute=Number(values.hour)*60+Number(values.minute),cells=Array.from(grid.qu
 var time=cell.dataset.calendarTime.split(':'),fraction=(minute-Number(time[0])*60-Number(time[1]))/30,line=document.createElement('div');line.className='current-time-line';line.setAttribute('aria-label','Şu an '+values.hour+':'+values.minute);line.style.cssText='grid-column:2 / -1;grid-row:'+cell.style.gridRow+';align-self:start;transform:translateY('+(cell.getBoundingClientRect().height*fraction)+'px);border-top:2px solid #d1594f;z-index:30;pointer-events:none';grid.appendChild(line);
 if(typeof syncCurrentTimeLineVisibility==='function')syncCurrentTimeLineVisibility();
 }
-var previousRender=window.renderCalendar;window.renderCalendar=function(){removeAdminFromStaff();var result=previousRender.apply(this,arguments);fitCalendar();requestAnimationFrame(function(){fitCalendar();updateCurrentTimeLine()});return result};
+var previousRender=window.renderCalendar;window.renderCalendar=function(){removeAdminFromStaff();var result=previousRender.apply(this,arguments);window.salonEnhanceTeamCalendar?.();fitCalendar();requestAnimationFrame(function(){fitCalendar();updateCurrentTimeLine()});return result};
 function watchCalendarLayout(){var content=document.getElementById('calendarContent');if(!content||content.__salonLayoutObserver)return;var frame=0;content.__salonLayoutObserver=new MutationObserver(function(){if(frame)return;frame=requestAnimationFrame(function(){frame=0;fitCalendar();updateCurrentTimeLine()})});content.__salonLayoutObserver.observe(content,{childList:true});fitCalendar()}
 watchCalendarLayout();
 setInterval(updateCurrentTimeLine,60000);
