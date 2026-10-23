@@ -47,8 +47,11 @@
       var item=appts.concat(cancelled.rows).find(function(row){return String(row.id)===node.dataset.appointmentId});
       if(!item)return;
       var strong=node.querySelector('strong'),small=node.querySelector('small');
-      if(strong)strong.innerHTML='<span class="calendar-customer">'+esc(item.customer)+'</span><span class="calendar-price">'+esc(cardPrice(item))+'</span>';
+      if(strong)strong.innerHTML='<span class="calendar-customer">'+esc(item.customer)+'</span>';
       if(small)small.textContent=item.operation;
+      var amount=node.querySelector('.calendar-price');
+      if(!amount){amount=document.createElement('span');amount.className='calendar-price';(small||strong)?.after(amount)}
+      amount.textContent=cardPrice(item);
       node.style.setProperty('--staff-color',color(item));
       node.title=item.customer+' · '+item.operation+' · '+price(item);
     });

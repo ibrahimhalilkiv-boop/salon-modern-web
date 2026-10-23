@@ -70,6 +70,9 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.web
       assert(missingPrice.bottom<=missingPrice.cardBottom+1,`Missing-price label must fit card height at ${width}px: ${JSON.stringify(missingPrice)}`);
       const serviceStyle=await page.locator('#calendar [data-appointment-id="fixture-missing-price"] small').evaluate(node=>({whiteSpace:getComputedStyle(node).whiteSpace,display:getComputedStyle(node).display}));
       assert.equal(serviceStyle.whiteSpace,'nowrap','Service stays on one line');
+      const cardOrder=await page.locator('#calendar [data-appointment-id="fixture-missing-price"]').evaluate(node=>{const service=node.querySelector('small'),price=node.querySelector('.calendar-price');return {children:Array.from(node.children).map(child=>child.className||child.tagName),serviceBottom:service.getBoundingClientRect().bottom,priceTop:price.getBoundingClientRect().top,serviceVisible:getComputedStyle(service).display!=='none'}});
+      assert.deepEqual(cardOrder.children,['STRONG','SMALL','calendar-price']);
+      if(cardOrder.serviceVisible)assert(cardOrder.serviceBottom<=cardOrder.priceTop+1,'Service appears above the price');
       await page.locator('#calendar [data-appointment-id="fixture-missing-price"]').click();
       assert.match(await page.locator('#smartPanelDetails').innerText(),/Ücret belirtilmemiş/,'Full missing-price detail remains available');
       await page.locator('.smart-panel-close').click();
