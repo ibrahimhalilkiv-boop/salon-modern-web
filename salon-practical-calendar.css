@@ -2,7 +2,6 @@
 #practicalCalendar button{cursor:pointer}
 #practicalCalendar .practical-heading{display:flex;align-items:center;gap:10px;margin-bottom:5px}
 #practicalCalendar .practical-heading .menu-button{background:var(--dark);border-color:var(--dark);flex:none}
-#practicalCalendar .practical-heading h1{margin:0;font-size:23px}
 #practicalCalendar .practical-toolbar{margin-bottom:5px}
 #practicalCalendar .practical-nav{display:flex;align-items:center;gap:5px;min-width:0}
 #practicalCalendar .practical-date-title{position:relative;flex:1;min-width:0;min-height:38px;display:grid;place-items:center;cursor:pointer}
@@ -22,8 +21,9 @@
 #practicalCalendar .practical-tools-body select{box-sizing:border-box;width:100%;min-height:38px;padding:5px 8px;border:1px solid #bfd0c5;border-radius:8px;background:#fff;color:#18382f;font-size:13px}
 #practicalNotice{min-height:17px;margin:0 0 5px;color:#526c60;font-size:12px}
 #practicalCalendar .practical-empty{padding:14px;margin:0;border:1px dashed #c8d8cd;border-radius:11px;color:#647c70}
-#practicalCalendar #practicalAll{min-height:36px;margin:0 0 6px;padding:5px 11px;border:1px solid #98bbac;border-radius:9px;background:#e8f3ed;color:#194c38;font-weight:800}
-#practicalCalendar .practical-schedule{width:100%;overflow:hidden;border:1px solid #d6e4de;border-radius:12px;background:#f8fbf9}
+#practicalCalendar .practical-schedule{position:relative;width:100%;overflow:hidden;border:1px solid #d6e4de;border-radius:12px;background:#f8fbf9}
+#practicalCalendar .practical-current-time{position:absolute;left:50px;right:0;height:0;border-top:2px solid #d1594f;box-shadow:0 1px 0 #fff8;z-index:4;pointer-events:none}
+#practicalCalendar .practical-current-time::before{content:"";position:absolute;top:-5px;left:-4px;width:8px;height:8px;border-radius:50%;background:#d1594f}
 #practicalCalendar .practical-schedule-head,#practicalCalendar .practical-schedule-row{display:grid;grid-template-columns:50px repeat(var(--practical-columns),minmax(0,1fr));width:100%}
 #practicalCalendar .practical-schedule-head{position:sticky;top:0;z-index:3;background:#f2f7f3}
 #practicalCalendar .practical-schedule-head>span{display:grid;place-items:center;color:#38594b;font-size:11px;font-weight:800}
@@ -38,7 +38,7 @@
 #practicalCalendar .practical-event{box-sizing:border-box;display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:51px;margin:0 0 3px;padding:5px;border:0;border-left:4px solid var(--staff-color);border-radius:7px;background:color-mix(in srgb,var(--staff-color) 17%,white);color:#183b30;text-align:left;overflow-wrap:anywhere}
 #practicalCalendar .practical-event strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;max-width:100%;font-size:11px;line-height:1.14;font-weight:800}
 #practicalCalendar .practical-event span{max-width:100%;font-size:10px;line-height:1.15}
-#practicalCalendar .practical-event-time,#practicalCalendar .practical-event-price{font-weight:800;font-variant-numeric:tabular-nums}
+#practicalCalendar .practical-event-price{font-weight:800;font-variant-numeric:tabular-nums}
 #practicalCalendar .practical-event-status{font-weight:700}
 #practicalCalendar .practical-schedule.single .practical-event{padding:9px 12px}
 #practicalCalendar .practical-schedule.single .practical-event strong{font-size:15px;-webkit-line-clamp:3;line-clamp:3}
@@ -46,7 +46,6 @@
 #practicalCalendar .practical-schedule.single .practical-cell{min-height:66px}
 #practicalCalendar .practical-schedule.single .practical-available{min-height:62px}
 #practicalCalendar.practical-month-mode .practical-heading{margin-bottom:2px}
-#practicalCalendar.practical-month-mode .practical-heading h1{font-size:16px;color:#557166}
 #practicalCalendar.practical-month-mode .practical-nav{display:grid;grid-template-columns:46px minmax(0,1fr) 46px;gap:7px}
 #practicalCalendar.practical-month-mode .practical-nav>[data-nav=previous]{grid-column:1;grid-row:1}
 #practicalCalendar.practical-month-mode .practical-date-title{grid-column:2;grid-row:1;min-height:50px}
@@ -79,7 +78,6 @@
 #practicalCalendar .practical-week-event span,#practicalCalendar .practical-week-event small{font-size:11px}
 @media(max-width:700px){
   #practicalCalendar .practical-content{padding-left:8px;padding-right:8px}
-  #practicalCalendar .practical-heading h1{font-size:20px}
   #practicalCalendar .practical-nav{flex-wrap:wrap}
   #practicalCalendar .practical-date-title{order:0;flex:1 1 calc(100% - 90px)}
   #practicalCalendar .practical-nav button[data-nav=previous]{order:-1}

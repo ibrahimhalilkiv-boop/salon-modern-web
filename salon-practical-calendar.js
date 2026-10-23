@@ -36,10 +36,12 @@
     var page = document.createElement('section');
     page.id = 'practicalCalendar';
     page.className = 'page';
-    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button><h1 class="page-title">Takvim</h1></div><div class="practical-toolbar"><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki gün, hafta veya ay">‹</button><label class="practical-date-title" title="Tarih seç"><strong id="practicalTitle"></strong><input id="practicalJump" type="date" aria-label="Tarihe git"></label><button type="button" data-nav="next" aria-label="Sonraki gün, hafta veya ay">›</button><button type="button" data-nav="today">Bugün</button><button type="button" id="practicalMonth" data-view="month" aria-pressed="false">Ay görünümü</button><button type="button" id="practicalDay" data-view="day" hidden aria-pressed="false">Güne dön</button><details id="practicalTools" class="practical-tools"><summary>Seçenekler</summary><div class="practical-tools-body"><label>Görünüm<select id="practicalViewSelect"><option value="day">Gün</option><option value="week">Hafta</option><option value="month">Ay</option></select></label><label>Çalışan<select id="practicalStaff"></select></label><label>İşlem<select id="practicalService"></select></label><label>Durum<select id="practicalStatus"><option value="all">Tümü</option><option value="active">Aktif</option><option value="arrived">Geldi</option><option value="completed">Tamamlandı</option><option value="no_show">Gelmedi</option></select></label></div></details></div></div><button type="button" id="practicalAll" hidden>Tüm Çalışanlar</button><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
+    page.setAttribute('aria-label', 'Pratik Takvim');
+    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button></div><div class="practical-toolbar"><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki gün, hafta veya ay">‹</button><label class="practical-date-title" title="Tarih seç"><strong id="practicalTitle"></strong><input id="practicalJump" type="date" aria-label="Tarihe git"></label><button type="button" data-nav="next" aria-label="Sonraki gün, hafta veya ay">›</button><button type="button" data-nav="today">Bugün</button><button type="button" id="practicalMonth" data-view="month" aria-pressed="false">Ay görünümü</button><button type="button" id="practicalDay" data-view="day" hidden aria-pressed="false">Güne dön</button><details id="practicalTools" class="practical-tools"><summary>Seçenekler</summary><div class="practical-tools-body"><label>Görünüm<select id="practicalViewSelect"><option value="day">Gün</option><option value="week">Hafta</option><option value="month">Ay</option></select></label><label>Çalışan<select id="practicalStaff"></select></label><label>İşlem<select id="practicalService"></select></label><label>Durum<select id="practicalStatus"><option value="all">Tümü</option><option value="active">Aktif</option><option value="arrived">Geldi</option><option value="completed">Tamamlandı</option><option value="no_show">Gelmedi</option></select></label></div></details></div></div><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
     document.getElementById('calendar').after(page);
     page.addEventListener('click', click);
     installDaySwipe(page.querySelector('#practicalBody'));
+    window.setInterval(function () { if (isActive()) updateCurrentTimeLine(); }, 30000);
     document.getElementById('practicalJump').addEventListener('click', function (event) {
       if (typeof event.currentTarget.showPicker === 'function') {
         try { event.currentTarget.showPicker(); } catch (_error) { /* Native date input remains usable. */ }
@@ -82,7 +84,6 @@
     document.querySelectorAll('#practicalCalendar [data-view]').forEach(function (button) { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-pressed', String(button.dataset.view === state.view)); });
     document.getElementById('practicalMonth').hidden = state.view === 'month';
     document.getElementById('practicalDay').hidden = state.view === 'day';
-    document.getElementById('practicalAll').hidden = !manager() || !state.staff || state.view !== 'day';
     document.getElementById('practicalViewSelect').value = state.view;
     options('practicalStaff', (manager() ? [['', 'Tüm çalışanlar']] : []).concat(employees().map(function (person) { return [person.id, person.full_name]; })), state.staff);
     document.getElementById('practicalStaff').disabled = !manager();
@@ -131,20 +132,20 @@
     var single = people.length === 1, html = '<div class="practical-schedule' + (single ? ' single' : '') + '" style="--practical-columns:' + people.length + '"><div class="practical-schedule-head"><span>Saat</span>';
     people.forEach(function (person) {
       var sample = { employeeId: person.id }, shade = esc(color(sample)), name = person.full_name.split(' ')[0];
-      html += '<button type="button" data-employee="' + esc(person.id) + '" style="--staff-color:' + shade + '"' + (manager() ? '' : ' disabled') + '>' + esc(single ? person.full_name : name) + '</button>';
+      html += '<button type="button" data-employee="' + esc(person.id) + '" style="--staff-color:' + shade + '" aria-label="' + esc(person.full_name + (single ? ', dört çalışanlı görünüme dön' : ', tek çalışan görünümüne geç')) + '" aria-pressed="' + single + '"' + (manager() ? '' : ' disabled') + '>' + esc(single ? person.full_name : name) + '</button>';
     });
     html += '</div>';
     if (start >= end) return html + '<div class="practical-empty">Bu gün işletme kapalı; kayıtlı randevu yok.</div></div>';
     for (var minute = start; minute < end; minute += 30) {
       var time = timeLabel(minute);
-      html += '<div class="practical-schedule-row"><span class="practical-slot-time">' + esc(time) + '</span>';
+      html += '<div class="practical-schedule-row" data-minute="' + minute + '"><span class="practical-slot-time">' + esc(time) + '</span>';
       people.forEach(function (person) {
         var shade = esc(color({ employeeId: person.id })), rows = bySlot.get(minute + ':' + person.id) || [];
         html += '<div class="practical-cell" style="--staff-color:' + shade + '">';
         if (rows.length) rows.forEach(function (item) {
           var status = item.checkedInAt && item.status === 'confirmed' ? 'Geldi' : (statusNames[item.status] || 'Aktif');
           var amount = Number(item.amount), price = Number.isFinite(amount) ? '₺ ' + amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : 'Ücret belirtilmemiş';
-          html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '" title="' + esc(item.customer + ' · ' + item.operation + ' · ' + price + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + item.operation + ', ' + price + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><span class="practical-event-time">' + esc(item.time) + '</span><span class="practical-event-service">' + esc(item.operation || 'Hizmet belirtilmemiş') + '</span><span class="practical-event-price">' + esc(price) + '</span><span class="practical-event-status">' + esc(status) + '</span></button>';
+          html += '<button type="button" class="practical-event" data-appointment="' + esc(item.id) + '" title="' + esc(item.customer + ' · ' + item.operation + ' · ' + price + ' · ' + status) + '" aria-label="' + esc(item.time + ' ' + item.customer + ', ' + person.full_name + ', ' + item.operation + ', ' + price + ', ' + status) + '"><strong>' + esc(item.customer) + '</strong><span class="practical-event-service">' + esc(item.operation || 'Hizmet belirtilmemiş') + '</span><span class="practical-event-price">' + esc(price) + '</span><span class="practical-event-status">' + esc(status) + '</span></button>';
         });
         else {
           var canCreate = manager() && !hours.closed && minute >= hours.open && minute < hours.close;
@@ -202,6 +203,26 @@
     if (state.view === 'month') { body.innerHTML = monthGrid(items); return; }
     if (state.view === 'week') { body.innerHTML = weekGrid(items); return; }
     body.innerHTML = dayGrid(items);
+    updateCurrentTimeLine();
+  }
+
+  function updateCurrentTimeLine(now) {
+    var schedule = document.querySelector('#practicalBody .practical-schedule');
+    if (!schedule) return;
+    var line = schedule.querySelector('.practical-current-time');
+    if (state.view !== 'day' || state.date !== today()) { line?.remove(); return; }
+    var clock = (now || new Date()).toLocaleTimeString('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hour12: false });
+    var minute = timeMinute(clock), slot = Math.floor(minute / 30) * 30;
+    var row = schedule.querySelector('.practical-schedule-row[data-minute="' + slot + '"]');
+    if (!row) { line?.remove(); return; }
+    if (!line) {
+      line = document.createElement('div');
+      line.className = 'practical-current-time';
+      line.setAttribute('aria-label', 'Şu anki saat ' + clock);
+      schedule.appendChild(line);
+    }
+    line.setAttribute('aria-label', 'Şu anki saat ' + clock);
+    line.style.top = row.offsetTop + row.offsetHeight * ((minute - slot) / 30) + 'px';
   }
 
   async function fetchPages(start, end) {
@@ -266,8 +287,7 @@
       return;
     }
     if (button.dataset.day) { state.view = 'day'; setDate(button.dataset.day); return; }
-    if (button.dataset.employee && manager()) { state.staff = button.dataset.employee; render(); return; }
-    if (button.id === 'practicalAll' && manager()) { state.staff = ''; render(); return; }
+    if (button.dataset.employee && manager()) { state.staff = state.staff === button.dataset.employee ? '' : button.dataset.employee; render(); return; }
     if (button.dataset.slotTime && manager() && !button.disabled) { createAppointment(button.dataset.slotTime, button.dataset.slotStaff); return; }
     if (button.dataset.appointment) {
       var item = state.rows.find(function (row) { return String(row.id) === button.dataset.appointment; });
@@ -328,5 +348,5 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden && isActive()) load(true); });
   window.addEventListener('focus', function () { if (isActive()) load(true); });
   ensurePage(); ensureMenu();
-  window.SalonPracticalCalendar = { render: render, load: load, state: state };
+  window.SalonPracticalCalendar = { render: render, load: load, updateCurrentTimeLine: updateCurrentTimeLine, state: state };
 })();
