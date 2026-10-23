@@ -11,7 +11,37 @@ function choose(container,key,value){state[key]=value;Array.from(q(container).qu
 function renderCatalogue(){var services=catalogue.services.slice();q('services').innerHTML=services.map(function(item){return '<button type="button" class="choice" data-value="'+escapeHtml(item.id)+'"><span><b>'+escapeHtml(item.name)+'</b></span><strong>₺ '+Number(item.price||0).toLocaleString('tr-TR')+'</strong></button>'}).join('')||'<p class="muted">Aktif hizmet bulunamadı.</p>';q('employees').innerHTML=catalogue.employees.map(function(item){return '<button type="button" class="choice" data-value="'+escapeHtml(item.id)+'"><span><b>'+escapeHtml(item.full_name)+'</b></span></button>'}).join('')+'<button type="button" class="choice" data-value="">Fark etmez</button>';q('services').addEventListener('click',function(event){var button=event.target.closest('button');if(button&&services.some(function(item){return item.id===button.dataset.value})){choose('services','serviceId',button.dataset.value);state.time='';show(2)}});q('employees').addEventListener('click',function(event){var button=event.target.closest('button');if(button&&(button.dataset.value===''||catalogue.employees.some(function(item){return item.id===button.dataset.value}))){choose('employees','employeeId',button.dataset.value);state.employeeChosen=true;state.date='';state.time='';q('bookingDate').value='';show(3)}})}
 async function loadCatalogue(){try{catalogue=await json(API+'?action=catalogue',{cache:'no-store'});if(catalogue.onlineBookingEnabled===false){q('bookingCard').innerHTML='<div class="success"><div class="success-mark">⏸</div><h2>Online randevu geçici olarak kapalı</h2><p>Şu anda online randevu oluşturulamıyor. Lütfen daha sonra tekrar deneyin.</p></div>';return}var notice=q('todayClosedNotice');if(catalogue.todaySchedule&&catalogue.todaySchedule.closed){notice.innerHTML='Bugün salon kapalı<small>Başka bir açık tarih için online randevu alabilirsiniz.</small>';notice.hidden=false}else if(catalogue.todaySchedule&&catalogue.todaySchedule.hasRemainingWindow===false){notice.innerHTML='Bugün için randevu saatleri sona erdi<small>Başka bir açık tarih için online randevu alabilirsiniz.</small>';notice.hidden=false}else notice.hidden=true;renderCatalogue()}catch(ex){q('services').innerHTML='<p class="error">'+escapeHtml(ex.message)+'</p>'}}
 function show(next){step=next;document.querySelectorAll('.step').forEach(function(node){node.classList.toggle('active',Number(node.dataset.step)===step)});document.querySelectorAll('.steps span').forEach(function(node,index){node.classList.toggle('active',index<step)});q('backButton').hidden=step===1;q('nextButton').hidden=step!==4;q('submitButton').hidden=step!==5;error('');window.scrollTo({top:q('bookingCard').offsetTop-12,behavior:'smooth'})}
-async function loadSlots(){var requestedDate=state.date;q('slots').innerHTML='<p class="loading">Müsait saatler kontrol ediliyor…</p>';try{var url=API+'?action=availability&date='+encodeURIComponent(state.date)+'&service='+encodeURIComponent(state.serviceId)+(state.employeeId?'&employee='+encodeURIComponent(state.employeeId):''),data=await json(url,{cache:'no-store'});if(step!==3||state.date!==requestedDate)return false;if(data.schedule&&data.schedule.closed){var closedMessage=data.schedule.onlineBookingEnabled===false?'Online randevu geçici olarak kapalı.':'Seçtiğiniz tarihte salon kapalı. Lütfen başka bir tarih seçin.';q('slots').innerHTML='<p class="muted">'+closedMessage+'</p>';q('pendingHint').hidden=true;error(closedMessage);return false}if(!data.slots.length){var emptyMessage='Bu tarihte uygun saat kalmadı. Lütfen başka bir tarih seçin.';q('slots').innerHTML='<p class="muted">'+emptyMessage+'</p>';q('pendingHint').hidden=true;error(emptyMessage);return false}q('slots').innerHTML=data.slots.map(function(item){return '<button type="button" class="slot" data-value="'+item.time+'">'+item.time+'</button>'}).join('');q('pendingHint').hidden=false;q('slots').onclick=function(event){var button=event.target.closest('button');if(button)choose('slots','time',button.dataset.value)};return true}catch(ex){if(step!==3||state.date!==requestedDate)return false;q('slots').innerHTML='<p class="error">'+escapeHtml(ex.message)+'</p>';error(ex.message);return false}}
+async function loadSlots(){
+  var requestedDate=state.date;
+  q('slots').innerHTML='<p class="loading">Saatler kontrol ediliyor…</p>';
+  try{
+    var url=API+'?action=availability&date='+encodeURIComponent(state.date)+'&service='+encodeURIComponent(state.serviceId)+(state.employeeId?'&employee='+encodeURIComponent(state.employeeId):'');
+    var data=await json(url,{cache:'no-store'});
+    if(step!==3||state.date!==requestedDate)return false;
+    var available=data.slots||[];
+    var all=Array.isArray(data.allSlots)&&data.allSlots.length?data.allSlots:available.map(function(slot){return {time:slot.time,available:true,status:'available'}});
+    if(!all.length){
+      var empty=data.schedule&&data.schedule.closed?'Seçtiğiniz tarihte salon kapalı. Lütfen başka bir tarih seçin.':'Bu tarih için gösterilecek saat bulunamadı.';
+      q('slots').innerHTML='<p class="muted">'+escapeHtml(empty)+'</p>';
+      q('pendingHint').hidden=true;error(empty);return false;
+    }
+    q('slots').innerHTML=all.map(function(item){
+      var active=item.available===true&&available.some(function(slot){return slot.time===item.time});
+      var label=active?'Müsait':item.status==='closed'?'Kapalı':item.status==='past'?'Geçti':'Dolu';
+      return '<button type="button" class="slot'+(active?'':' slot-unavailable')+'" data-value="'+escapeHtml(item.time)+'" aria-label="'+escapeHtml(item.time+' '+label)+'"'+(active?'':' disabled aria-disabled="true"')+'><strong>'+escapeHtml(item.time)+'</strong><small>'+label+'</small></button>';
+    }).join('');
+    var hint=q('pendingHint');
+    hint.hidden=false;
+    hint.textContent=available.length?'Yalnızca müsait saatler seçilebilir. Müsaitlik kayıt sırasında yeniden kontrol edilir.':'Bu tarihte seçilebilir saat yok. Dolu ve kapalı saatler görüntülenir; başka tarih veya çalışan seçebilirsiniz.';
+    if(data.schedule&&data.schedule.closed)hint.textContent='Salon seçili gün kapalı. Saatler yalnızca bilgi amaçlı gösteriliyor.';
+    q('slots').onclick=function(event){var button=event.target.closest('button');if(button&&!button.disabled)choose('slots','time',button.dataset.value)};
+    return true;
+  }catch(ex){
+    if(step!==3||state.date!==requestedDate)return false;
+    q('slots').innerHTML='<p class="error">'+escapeHtml(ex.message)+'</p>';
+    error(ex.message);return false;
+  }
+}
 function validate(){if(step===1&&!state.serviceId)return 'Bir hizmet seçin.';if(step===2&&!state.employeeChosen)return 'Bir çalışan seçin.';if(step===3&&!q('bookingDate').value)return 'Bir tarih seçin.';if(step===4&&!state.time)return 'Müsait bir saat seçin.';return ''}
 function summary(){var s=service(),e=employee();q('summary').innerHTML='<p><b>Hizmet:</b> '+escapeHtml(s&&s.name)+'</p><p><b>Çalışan:</b> '+escapeHtml(e?e.full_name:'Fark etmez')+'</p><p><b>Tarih:</b> '+escapeHtml(state.date)+'</p><p><b>Saat:</b> '+escapeHtml(state.time)+'</p>'}
 q('nextButton').onclick=function(){if(step!==4)return;var message=validate();if(message)return error(message);summary();show(5)};
