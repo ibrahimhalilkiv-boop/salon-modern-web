@@ -26,6 +26,7 @@
     if(name.includes('keratin')||name.includes('cilt'))return servicePalette.care;
     if(name.includes('sac')&&name.includes('sakal'))return servicePalette.combo;
     if(name.includes('sakal'))return servicePalette.beard;
+    if(name.includes('sac')&&(/kesim|tiras/.test(name)))return servicePalette.hair;
     if(name.includes('yikama')||name.includes('fon'))return servicePalette.wash;
     if(name.includes('sac')||name.includes('ense')||name.includes('damat'))return servicePalette.hair;
     return servicePalette.other;
