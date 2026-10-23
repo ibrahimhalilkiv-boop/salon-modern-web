@@ -20,6 +20,18 @@ async function loadSlots(){
     if(step!==3||state.date!==requestedDate)return false;
     var available=data.slots||[];
     var all=Array.isArray(data.allSlots)&&data.allSlots.length?data.allSlots:available.map(function(slot){return {time:slot.time,available:true,status:'available'}});
+    // The grid must remain visible when all of tomorrow's hours are occupied,
+    // including during a cached/older API response that only returns free slots.
+    if(!all.length&&data.schedule){
+      var opening=Number(data.schedule.open),closing=Number(data.schedule.close);
+      if(Number.isFinite(opening)&&Number.isFinite(closing)&&closing>opening){
+        for(var minute=Math.ceil(opening/60)*60;minute<closing;minute+=60){
+          var time=String(Math.floor(minute/60)).padStart(2,'0')+':00';
+          var isFriday=/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)&&new Date(requestedDate+'T12:00:00Z').getUTCDay()===5;
+          all.push({time:time,available:false,status:data.schedule.closed||(isFriday&&minute>=720&&minute<840)?'closed':'busy'});
+        }
+      }
+    }
     if(!all.length){
       var empty=data.schedule&&data.schedule.closed?'Seçtiğiniz tarihte salon kapalı. Lütfen başka bir tarih seçin.':'Bu tarih için gösterilecek saat bulunamadı.';
       q('slots').innerHTML='<p class="muted">'+escapeHtml(empty)+'</p>';
