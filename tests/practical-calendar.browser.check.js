@@ -6,7 +6,7 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   try {
-    for (const width of [390, 1280]) {
+    for (const width of [320, 390, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 850 } });
       await page.setContent('<main><section id="calendar" class="page active"><div id="calendarContent">Ekip görünümü korunur</div></section></main><div id="drawerLayer"><aside class="drawer"><button class="menu-item" onclick="drawerPage(\'calendar\')">Takvim</button></aside></div><input id="appointmentDate"><select id="appointmentTime"></select><select id="appointmentStaff"></select>');
       await page.addStyleTag({ content: '.page:not(.active){display:none}body{margin:0;font-family:Arial,sans-serif}#drawerLayer{display:none}' + fs.readFileSync('salon-practical-calendar.css', 'utf8') });
@@ -45,8 +45,10 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
       assert.equal(await page.locator('#practicalCalendar .practical-heading h1,#practicalAll').count(), 0);
       assert.equal(await page.locator('.practical-event').first().locator('.practical-event-status').textContent(), 'Tamamlandı');
       assert.equal(await page.locator('#practicalNotice').textContent(), '1004 randevu');
-      assert.equal(await page.locator('#practicalCreate,#practicalDate,#practicalClear,[data-view="week"]').count(), 0);
-      assert.equal(await page.locator('#practicalTools').getAttribute('open'), null);
+      assert.equal(await page.locator('#practicalCreate,#practicalDate,#practicalClear,#practicalMonth,#practicalTools,[data-view="week"]').count(), 0);
+      assert.equal(await page.locator('#practicalTitleSwitch').getAttribute('aria-label'), 'Aylık takvimi aç');
+      assert.equal(await page.locator('#practicalCalendar').innerText().then(text => /Ay görünümü|Seçenekler/.test(text)), false);
+      assert.equal(await page.locator('.practical-event strong').first().evaluate(el => getComputedStyle(el).fontWeight), '800');
       assert.equal(await page.locator('.practical-available').first().textContent(), '');
       assert.equal(await page.locator('.practical-schedule').evaluate(el => el.scrollWidth <= el.clientWidth), true);
       assert.match(fs.readFileSync('salon-phase2-1.8.0.js', 'utf8'), /phase2-calendar-shortcut" onclick="showPage\(\\'practicalCalendar\\'\)"/);
@@ -96,29 +98,14 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
       await page.locator('#smartPanelActions [data-action="move"]').click();
       assert.equal(await page.evaluate(() => editId), '00000000000000000000000000000001');
       assert.equal(await page.locator('#smartAppointmentPanel.show').count(), 0);
-      await page.locator('#practicalTools summary').click();
-      await page.selectOption('#practicalStaff', '00000000-0000-0000-0000-000000000002');
-      await page.selectOption('#practicalService', 'Boya');
-      await page.selectOption('#practicalStatus', 'active');
-      assert.equal(await page.locator('#practicalBody .practical-event').count(), 1);
       await page.click('[data-nav="next"]');
       await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-event').length === 0);
-      assert.equal(await page.locator('#practicalService').inputValue(), 'Boya');
       await page.click('[data-nav="today"]');
-      await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-event').length === 1);
-      await page.selectOption('#practicalStaff', '');
-      await page.selectOption('#practicalService', '');
-      await page.selectOption('#practicalStatus', 'all');
-      await page.selectOption('#practicalViewSelect', 'week');
-      await page.locator('.practical-week-day').first().waitFor({state:'visible'});
-      assert.equal(await page.locator('.practical-week-day').count(), 7);
-      await page.locator('.practical-week-title[data-day="' + date + '"]').click();
       await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-event').length === 1004);
-      await page.locator('#practicalTools summary').click();
-      await page.click('#practicalMonth');
+      await page.click('#practicalTitleSwitch');
       assert.equal(await page.locator('#practicalBody .practical-month-day').count() >= 35, true);
       assert.equal(await page.locator('.practical-month-day.selected small').textContent(), '1004 randevu');
-      assert.equal(await page.locator('#practicalMonth').isVisible(), false);
+      assert.equal(await page.locator('#practicalTitleSwitch').getAttribute('aria-label'), 'Aylık takvim');
       assert.match(await page.locator('#practicalTitle').textContent(), /\d{4}/);
       assert.match(await page.locator('#practicalNotice').textContent(), /1004 randevu/);
       assert.equal(await page.locator('#practicalBody .practical-month-day.outside').first().textContent(), '');
@@ -131,12 +118,11 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
       await page.click('[data-nav="previous"]');
       await page.locator('.practical-month-day[data-day="' + date + '"]').click();
       await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-event').length === 1004);
-      assert.equal(await page.locator('#practicalMonth').isVisible(), true);
-      assert.equal(await page.locator('#practicalDay').isVisible(), false);
+      assert.equal(await page.locator('#practicalTitleSwitch').getAttribute('aria-label'), 'Aylık takvimi aç');
       await page.locator('.practical-schedule-head button').nth(1).click();
       await page.evaluate(() => { showPage('calendar');showPage('practicalCalendar'); });
       await page.waitForFunction(() => document.querySelectorAll('.practical-schedule-head button').length === 4);
-      assert.equal(await page.locator('#practicalMonth').isVisible(), true);
+      assert.equal(await page.locator('#practicalTitleSwitch').getAttribute('aria-label'), 'Aylık takvimi aç');
       await page.evaluate(() => { baseHours.default_open_time='10:00:00';baseHours.default_close_time='16:00:00';reloadRemoteData(); });
       await page.waitForFunction(() => document.querySelector('.practical-slot-time')?.textContent === '10:00' && [...document.querySelectorAll('.practical-slot-time')].at(-1)?.textContent === '15:30');
       await page.evaluate(date => { overrides[date]={open_time:'11:00:00',close_time:'14:00:00',is_closed:false};reloadRemoteData(); },date);
@@ -188,7 +174,7 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
       assert.match(await page.locator('#practicalNotice').textContent(), /Canlı veri bağlantısı kurulamadı/);
       await page.evaluate(() => { window.salonDb=window.savedDb;SalonPracticalCalendar.load(true); });
       await page.waitForFunction(() => document.querySelectorAll('#practicalBody .practical-event').length === 251);
-      if (width === 390) assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      if (width < 400) assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.SALON_CALENDAR_SCREENSHOT_DIR) {
         await page.evaluate(() => {
           testRows = testRows.filter(r => Number.parseInt(r.id, 16) <= 24);
@@ -201,7 +187,7 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
         await page.screenshot({ path: path.join(process.env.SALON_CALENDAR_SCREENSHOT_DIR, 'practical-' + width + '.png') });
       }
       await page.close();
-      console.log('PASS practical calendar ' + width + 'px: 1005 paged rows, day/week/month, compact filters, move action, blank slots, stored fee, cancellations, hours, manager/staff');
+      console.log('PASS practical calendar ' + width + 'px: 1005 paged rows, daily/month navigation, old-style typography, move action, blank slots, stored fee, cancellations, hours, manager/staff');
     }
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

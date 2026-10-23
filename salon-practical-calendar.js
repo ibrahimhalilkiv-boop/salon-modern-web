@@ -37,7 +37,7 @@
     page.id = 'practicalCalendar';
     page.className = 'page';
     page.setAttribute('aria-label', 'Pratik Takvim');
-    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button></div><div class="practical-toolbar"><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki gün, hafta veya ay">‹</button><label class="practical-date-title" title="Tarih seç"><strong id="practicalTitle"></strong><input id="practicalJump" type="date" aria-label="Tarihe git"></label><button type="button" data-nav="next" aria-label="Sonraki gün, hafta veya ay">›</button><button type="button" data-nav="today">Bugün</button><button type="button" id="practicalMonth" data-view="month" aria-pressed="false">Ay görünümü</button><button type="button" id="practicalDay" data-view="day" hidden aria-pressed="false">Güne dön</button><details id="practicalTools" class="practical-tools"><summary>Seçenekler</summary><div class="practical-tools-body"><label>Görünüm<select id="practicalViewSelect"><option value="day">Gün</option><option value="week">Hafta</option><option value="month">Ay</option></select></label><label>Çalışan<select id="practicalStaff"></select></label><label>İşlem<select id="practicalService"></select></label><label>Durum<select id="practicalStatus"><option value="all">Tümü</option><option value="active">Aktif</option><option value="arrived">Geldi</option><option value="completed">Tamamlandı</option><option value="no_show">Gelmedi</option></select></label></div></details></div></div><div id="practicalNotice" role="status" aria-live="polite"></div><div id="practicalBody"></div></div>';
+    page.innerHTML = '<div class="content practical-content"><div class="practical-heading"><button type="button" class="menu-button" onclick="toggleDrawer()" aria-label="Menüyü aç">☰</button></div><div class="practical-toolbar"><div class="practical-nav"><button type="button" data-nav="previous" aria-label="Önceki gün veya ay">‹</button><button type="button" id="practicalTitleSwitch" class="practical-date-title" aria-label="Aylık takvimi aç"><strong id="practicalTitle"></strong><small id="practicalNotice" role="status" aria-live="polite"></small></button><button type="button" data-nav="next" aria-label="Sonraki gün veya ay">›</button></div><div class="practical-secondary-nav"><button type="button" data-nav="today">Bugün</button><label class="practical-jump" title="Tarihe git">▦<input id="practicalJump" type="date" aria-label="Tarihe git"></label></div></div><div id="practicalBody"></div></div>';
     document.getElementById('calendar').after(page);
     page.addEventListener('click', click);
     installDaySwipe(page.querySelector('#practicalBody'));
@@ -50,10 +50,6 @@
     page.addEventListener('change', function (event) {
       var id = event.target.id, value = event.target.value;
       if (id === 'practicalJump') { state.view = 'day'; setDate(value); }
-      else if (id === 'practicalViewSelect') { if (value === 'month' && state.view !== 'month') state.monthSelectedDay = state.date; state.view = value; load(false); }
-      else if (id === 'practicalStaff') { state.staff = manager() ? value : user().id; render(); }
-      else if (id === 'practicalService') { state.service = value; render(); }
-      else if (id === 'practicalStatus') { state.status = value; render(); }
     });
   }
 
@@ -73,24 +69,10 @@
     calendar.before(practical);
   }
 
-  function options(id, pairs, value) {
-    var element = document.getElementById(id), html = pairs.map(function (pair) { return '<option value="' + esc(pair[0]) + '">' + esc(pair[1]) + '</option>'; }).join('');
-    if (element.innerHTML !== html) element.innerHTML = html;
-    element.value = value;
-  }
   function controls() {
     if (!manager()) state.staff = user()?.id || '';
     document.getElementById('practicalCalendar').classList.toggle('practical-month-mode', state.view === 'month');
-    document.querySelectorAll('#practicalCalendar [data-view]').forEach(function (button) { button.classList.toggle('active', button.dataset.view === state.view); button.setAttribute('aria-pressed', String(button.dataset.view === state.view)); });
-    document.getElementById('practicalMonth').hidden = state.view === 'month';
-    document.getElementById('practicalDay').hidden = state.view === 'day';
-    document.getElementById('practicalViewSelect').value = state.view;
-    options('practicalStaff', (manager() ? [['', 'Tüm çalışanlar']] : []).concat(employees().map(function (person) { return [person.id, person.full_name]; })), state.staff);
-    document.getElementById('practicalStaff').disabled = !manager();
-    var services = Array.from(new Set(remoteServices.map(function (service) { return service.name; }).concat(state.rows.map(function (item) { return item.operation; })).filter(Boolean))).sort(function (a, b) { return a.localeCompare(b, 'tr'); });
-    if (state.service && !services.includes(state.service)) services.push(state.service);
-    options('practicalService', [['', 'Tüm işlemler']].concat(services.map(function (service) { return [service, service]; })), state.service);
-    document.getElementById('practicalStatus').value = state.status;
+    document.getElementById('practicalTitleSwitch').setAttribute('aria-label', state.view === 'month' ? 'Aylık takvim' : 'Aylık takvimi aç');
   }
 
   function matches(item) {
@@ -187,7 +169,7 @@
     if (!user()) return;
     ensurePage(); controls();
     var notice = document.getElementById('practicalNotice'), body = document.getElementById('practicalBody');
-    document.getElementById('practicalTitle').textContent = state.view === 'month' ? title(monthStart(state.date), { month: 'long', year: 'numeric' }) : state.view === 'week' ? title(monday(state.date), { day: 'numeric', month: 'short' }) + ' – ' + title(moveDay(monday(state.date), 6), { day: 'numeric', month: 'short', year: 'numeric' }) : title(state.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    document.getElementById('practicalTitle').textContent = state.view === 'month' ? title(monthStart(state.date), { month: 'long', year: 'numeric' }) : state.view === 'week' ? title(monday(state.date), { day: 'numeric', month: 'short' }) + ' – ' + title(moveDay(monday(state.date), 6), { day: 'numeric', month: 'short', year: 'numeric' }) : title(state.date, { weekday: 'long', day: 'numeric', month: 'long' });
     document.getElementById('practicalJump').value = state.date;
     if (state.loading) { notice.textContent = 'Randevular yükleniyor…'; body.replaceChildren(); return; }
     if (state.error) { notice.textContent = 'Randevular yüklenemedi: ' + state.error; body.replaceChildren(); return; }
@@ -280,7 +262,11 @@
   }
   function click(event) {
     var button = event.target.closest('button'); if (!button) return;
-    if (button.dataset.view) { if (button.dataset.view === 'month' && state.view !== 'month') state.monthSelectedDay = state.date; state.view = button.dataset.view; load(false); return; }
+    if (button.id === 'practicalTitleSwitch') {
+      if (state.view === 'month') document.getElementById('practicalJump').showPicker?.();
+      else { state.monthSelectedDay = state.date; state.view = 'month'; load(false); }
+      return;
+    }
     if (button.dataset.nav) {
       if (button.dataset.nav === 'today') { state.view = 'day'; setDate(today()); }
       else { var amount = button.dataset.nav === 'next' ? 1 : -1; if (state.view === 'month') state.monthSelectedDay = null; setDate(state.view === 'month' ? nextMonth(state.date, amount) : moveDay(state.date, amount * (state.view === 'week' ? 7 : 1))); }
