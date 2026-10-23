@@ -29,9 +29,12 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.web
           {id:'t',full_name:'Talip Köse',username:'talip.kose',calendar_color:'#7c3aed',active:true}
         ];
         remoteServices=[{name:'Saç + Sakal'}];remoteClosedSlots=[];
-        appts=[{id:'fixture-one',date:'2026-10-23',time:'10:30',customer:'Ahmet Yılmaz',staff:'Halil Kıv',operation:'Saç + Sakal',amount:750,duration:30,status:'confirmed',employeeId:'h'}];
+        appts=[
+          {id:'fixture-one',date:'2026-10-23',time:'10:30',customer:'Ahmet Yılmaz',staff:'Halil Kıv',operation:'Saç + Sakal',amount:750,duration:30,status:'confirmed',employeeId:'h'},
+          {id:'fixture-cancel',date:'2026-10-23',time:'11:30',customer:'İptal Müşteri',staff:'Halil Kıv',operation:'Saç',amount:300,duration:30,status:'confirmed',employeeId:'h'}
+        ];
         teamCalendarDate='2026-10-23';teamCalendarMode='day';teamCalendarMember=undefined;
-        window.salonCalendarLoadState={status:'loading'};
+        window.salonCalendarLoadState={status:'ready'};
         document.getElementById('app').classList.remove('hidden');
         document.getElementById('auth').classList.add('hidden');
         document.querySelectorAll('.page').forEach(node=>node.classList.remove('active'));
@@ -58,6 +61,17 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.web
       assert.equal(await page.locator('#smartColorList input[type="color"]').count(),4);
       await page.locator('#smartColors summary').click();
       if(process.env.SALON_CALENDAR_SCREENSHOT&&width===390)await page.screenshot({path:process.env.SALON_CALENDAR_SCREENSHOT,fullPage:true});
+      await page.evaluate(()=>{appts.find(item=>item.id==='fixture-cancel').status='cancelled';renderCalendar()});
+      assert.equal(await page.locator('#calendar [data-appointment-id="fixture-cancel"]').count(),0);
+      assert.match(await page.locator('#calendar .calendar-date-title').innerText(),/1 randevu/);
+      assert.equal(await page.evaluate(()=>appts.find(item=>item.id==='fixture-cancel').status),'cancelled','Cancelled record stays in appointment data');
+      await page.evaluate(()=>{currentUser={id:'h',role:'personel',name:'Halil Kıv'};renderCalendar()});
+      assert.equal(await page.locator('#calendar [data-appointment-id="fixture-cancel"]').count(),0,'Employee calendar hides cancelled');
+      await page.evaluate(()=>{currentUser={id:'manager-fixture',role:'yonetici',name:'Halil Kıv'};renderCalendar()});
+      await page.evaluate(()=>{window.salonCalendarLoadState={status:'ready'};teamCalendarMode='week';renderCalendar()});
+      assert.equal(await page.locator('#calendar [data-smart-id="fixture-cancel"]').count(),0,'Week hides cancelled');
+      assert.equal(await page.locator('#calendar [data-smart-id="fixture-one"]').count(),1);
+      await page.evaluate(()=>{teamCalendarMode='day';renderCalendar()});
       await page.locator('#calendar .duration-hour-grid > button.team-head').filter({hasText:'Halil'}).click();
       assert.equal(await page.locator('#calendar .duration-hour-grid > button.team-head').count(),1);
       await page.locator('#calendar .duration-hour-grid > button.team-head').click();
@@ -65,6 +79,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.web
       await page.locator('#calendar .calendar-date-title').click();
       assert.equal(await page.locator('#calendar .team-month-grid').count(),1);
       assert.doesNotMatch(await page.locator('#calendarContent').innerText(),/Aylık görünüm/);
+      assert.match(await page.locator('#calendar .team-month-grid button').filter({hasText:/^23/}).innerText(),/1 randevu/);
       assert((await page.evaluate(()=>document.documentElement.scrollWidth))<=width+1,'Month fits viewport');
       await page.locator('#calendar .calendar-month-title').click();
       await page.locator('#teamCalendarMonthPicker').fill('2026-11');
@@ -74,6 +89,6 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.web
       assert.deepEqual(errors,[]);
       await page.close();
     }
-    console.log('PASS compact team calendar: four staff, colors, stored amount, service, no horizontal overflow, toggle and month');
+    console.log('PASS team calendar: cancelled record retained but hidden for manager/employee in day, week and month; colors, price, service and layout intact');
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
 })().catch(error=>{console.error(error);process.exitCode=1});
