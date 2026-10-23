@@ -47,8 +47,8 @@
 #calendar .calendar-hint{display:none!important}
 #calendar .team-calendar.duration-hour-grid>.team-head{background:var(--cream);border-bottom:1px solid var(--line)!important}
 #calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id]{background:color-mix(in srgb,var(--staff-color,#526575) 18%,white);border-left:4px solid var(--staff-color,#526575);color:#1c2830}
-#calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id] small{color:#24313b!important;white-space:normal!important;line-height:1.05;display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
-#calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id] .calendar-price{color:#3b4b52}
+#calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id] small{color:#24313b!important;white-space:nowrap!important;line-height:1;display:block!important;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset;line-clamp:unset}
+#calendar .team-calendar.duration-hour-grid>.duration-event[data-appointment-id] .calendar-price{color:#3b4b52;font-size:clamp(7px,2.2vw,9px);line-height:1}
 #salonCalendarControls{position:absolute;right:4px;top:4px;z-index:40;display:flex;align-items:flex-start;gap:4px;margin:0}
 #salonCalendarControls details{margin:0;padding:0;background:transparent;border-radius:8px}
 #salonCalendarControls summary{display:grid;place-items:center;width:32px;height:32px;list-style:none;cursor:pointer;background:#f4ecdf;border-radius:8px;color:#36594d;font-size:18px}
