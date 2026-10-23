@@ -26,7 +26,7 @@ begin
     local_start+make_interval(mins=>p_duration)>day+time '12:00' then
     raise exception 'Cuma 12.00-14.00 saatleri online randevuya kapalıdır.';
   end if;
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION private.online_slot_available(p_employee uuid, p_start timestamp with time zone, p_duration integer, p_exclude uuid DEFAULT NULL::uuid)
@@ -55,7 +55,7 @@ AS $function$
       select 1 from public.closed_time_slots c where c.employee_id=p_employee
         and c.starts_at<p_start+make_interval(mins=>p_duration) and c.ends_at>p_start
     )
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.online_booking_slots(p_service uuid, p_day date, p_employee uuid DEFAULT NULL::uuid, p_exclude uuid DEFAULT NULL::uuid, p_duration_override integer DEFAULT NULL::integer)
