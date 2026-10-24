@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const setupKey = "8437375154bf457f39017528131799d3cc88137678690d77626eab3e10dfd9fc";
+const setupKey = Deno.env.get("SALON_BOOTSTRAP_SETUP_KEY") ?? "";
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
   let payload: { setup_key?: string; accounts?: Array<{ username?: string; password?: string }> };
   try { payload = await req.json(); } catch { return respond({ error: "Geçersiz istek." }, 400); }
 
-  if (payload.setup_key !== setupKey) return respond({ error: "Kurulum anahtarı geçersiz." }, 401);
+  if (!setupKey || payload.setup_key !== setupKey) return respond({ error: "Kurulum anahtarı geçersiz." }, 401);
   if ((count ?? 0) > 0) return respond({ error: "Kurulum zaten tamamlandı." }, 409);
   if (!Array.isArray(payload.accounts) || payload.accounts.length !== expected.length) {
     return respond({ error: "Dört hesap için şifre girilmelidir." }, 400);
