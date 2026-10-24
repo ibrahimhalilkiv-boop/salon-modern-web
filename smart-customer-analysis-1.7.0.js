@@ -167,11 +167,13 @@ window.onSalonContactsSelected=function(payload){
   document.getElementById('contactImportSearch').value='';document.getElementById('contactImportModal').classList.add('show');renderContactImportChoices();
 };
 
-var smartClientLoadPromise=null;
-function smartLoadActiveClients(){
-  if(smartClientLoadPromise)return smartClientLoadPromise;
+var smartClientLoadPromise=null,smartClientLoadUserId=null;
+function smartLoadActiveClients(force){
   var userId=currentUser?.id;
-  smartClientLoadPromise=(async function(){
+  if(!userId)return Promise.resolve([]);
+  if(smartClientLoadPromise&&smartClientLoadUserId===userId&&!force)return smartClientLoadPromise;
+  smartClientLoadUserId=userId;
+  var request=(async function(){
     var rows=[],pageSize=500,cursor=null;
     for(;;){
       var query=salonDb.from('clients').select('id,full_name,phone,note,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by,deleted_at,deleted_by').eq('active',true).order('id').limit(pageSize);
@@ -183,11 +185,12 @@ function smartLoadActiveClients(){
       if(result.data.length<pageSize)break;
       cursor=result.data[result.data.length-1].id;
     }
-    if(currentUser?.id!==userId)return remoteClients;
+    if(currentUser?.id!==userId||smartClientLoadPromise!==request)return [];
     remoteClients=rows.sort(function(left,right){return left.full_name.localeCompare(right.full_name,'tr')});clients=remoteClients.map(function(client){return client.full_name});
     return remoteClients;
-  })().finally(function(){smartClientLoadPromise=null});
-  return smartClientLoadPromise;
+  })().finally(function(){if(smartClientLoadPromise===request){smartClientLoadPromise=null;smartClientLoadUserId=null}});
+  smartClientLoadPromise=request;
+  return request;
 }
 var previousLoadV151Smart=loadV151Supplement;
 loadV151Supplement=async function(){

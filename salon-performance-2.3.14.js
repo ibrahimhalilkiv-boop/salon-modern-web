@@ -30,10 +30,11 @@ window.appointmentRevenue=appointmentRevenue;
 var renderCalendarBeforePrice=renderCalendar;
 renderCalendar=function(){
   var result=renderCalendarBeforePrice.apply(this,arguments);
+  var appointmentById=new Map(appts.map(function(row){return [String(row.id),row]}));
   document.querySelectorAll('#calendarContent .team-event.duration-event:not(.duration-closed-event)').forEach(function(card){
     var handler=card.getAttribute('onclick')||'';
     var match=handler.match(/appointmentClick\((?:'|&quot;)?([^'"&)]+)(?:'|&quot;)?\)/);
-    var item=match&&appts.find(function(row){return String(row.id)===String(match[1])});
+    var item=match&&appointmentById.get(String(match[1]));
     var label=card.querySelector('strong');
     if(item&&label)label.innerHTML=safe(item.customer)+' <span class="calendar-price">· '+safe(priceText(item))+'</span>';
   });

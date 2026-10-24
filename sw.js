@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v178';
+const CACHE_NAME = 'salon-modern-shell-pwa-v179';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownNotifications = new Set();
 let notificationDisplayQueue = Promise.resolve();
@@ -13,7 +13,7 @@ const APP_SHELL = [
   './salon-appointment-data.js?v=150',
   './whatsapp-messages-2.4.5.js?v=148',
   './manual-whatsapp-thank-you-2.4.6.js?v=123',
-  './smart-customer-analysis-1.7.0.js?v=150',
+  './smart-customer-analysis-1.7.0.js?v=179',
   './salon-return-daily.js?v=149',
   './salon-phase2-1.8.0.js?v=145',
   './salon-modern-ai.js?v=143',
@@ -23,7 +23,7 @@ const APP_SHELL = [
   './appointment-list-management.css?v=1',
   './appointment-no-show-2.4.7.js?v=1',
   './salon-ui-2.3.12.js',
-  './salon-performance-2.3.14.js?v=151',
+  './salon-performance-2.3.14.js?v=179',
   './salon-debt-visibility-2.3.15.js',
   './salon-ui-fixes-2.3.16.js?v=150',
   './appointment-management-2.3.26.js?v=127',
@@ -50,7 +50,7 @@ const APP_SHELL = [
   ,'./randevu/booking.css?v=3'
   ,'./randevu/booking.js?v=70'
   ,'./randevu/durum/'
-  ,'./randevu/durum/manage.js?v=94'
+  ,'./randevu/durum/manage.js?v=95'
 ];
 
 self.addEventListener('install', event => {
