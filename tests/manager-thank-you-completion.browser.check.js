@@ -27,7 +27,7 @@ try{
   await page.evaluate(()=>window.SalonAppointmentList.load());
   await page.locator('[data-complete]').click();
   await page.waitForFunction(()=>window.completionDone===true);
-  assert.equal(await page.evaluate(()=>window.draftId),'appointment-1');
+  assert.equal(await page.evaluate(()=>window.draftId),undefined,'Completing an appointment must not automatically open WhatsApp');
   assert.equal(await page.evaluate(()=>window.appointmentStatus),'completed');
   await page.evaluate(()=>{window.appointmentStatus='confirmed';window.failCompletion=true;window.draftId=undefined;window.completionDone=false});
   await page.evaluate(()=>window.SalonAppointmentList.load());
@@ -39,6 +39,6 @@ try{
   await page.locator('[data-complete]').click();
   await page.waitForFunction(()=>window.completionDone===true);
   assert.equal(await page.evaluate(()=>window.draftId),undefined,'Staff completion never opens thank-you draft');
-  console.log('PASS manager completion opens draft; failure and staff completion do not');
+  console.log('PASS manager/staff completion preserves automation without opening manual WhatsApp; failure remains visible');
 }finally{await browser.close()}
 })().catch(error=>{console.error(error);process.exitCode=1});

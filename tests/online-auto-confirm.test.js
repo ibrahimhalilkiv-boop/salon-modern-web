@@ -101,7 +101,7 @@ const create = (payload) => handler(new Request('https://test/?action=create', {
   assert.equal(response.status, 403, 'No-show restriction stays active');
   bookingAllowed = true;
   existing = { id: '12345678-0000-4000-8000-000000000001', public_token: payload.submissionToken,
-    status: 'approved', phone_normalized: '905000000001', service_id: ids[0], employee_id: 'e1',
+    status: 'approved', client_name: payload.customerName, phone_normalized: '905000000001', service_id: ids[0], employee_id: 'e1',
     scheduled_at: '2026-10-05T10:00:00+03:00' };
   const priorCalls = rpcCalls.length;
   response = await create(payload);

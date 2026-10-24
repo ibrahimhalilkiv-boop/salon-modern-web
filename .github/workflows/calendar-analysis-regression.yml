@@ -8,6 +8,12 @@ on:
       - 'salon-performance-2.3.14.js'
       - 'salon-ui-fixes-2.3.16.js'
       - 'smart-customer-analysis-1.7.0.js'
+      - 'sw.js'
+      - 'supabase/functions/bootstrap-salon/index.ts'
+      - 'tests/client-load-race.test.js'
+      - 'tests/calendar-price-index.test.js'
+      - 'tests/pwa-asset-consistency.test.js'
+      - 'tests/bootstrap-auth.test.js'
       - 'supabase/migrations/**'
       - 'tests/appointment-pagination.test.js'
       - 'tests/calendar-preview-race.test.js'
@@ -26,3 +32,7 @@ jobs:
       - run: node tests/appointment-pagination.test.js
       - run: node tests/calendar-preview-race.test.js
       - run: node tests/smart-client-visit-summary.test.js
+      - run: node tests/client-load-race.test.js
+      - run: node tests/calendar-price-index.test.js
+      - run: node tests/pwa-asset-consistency.test.js
+      - run: node tests/bootstrap-auth.test.js

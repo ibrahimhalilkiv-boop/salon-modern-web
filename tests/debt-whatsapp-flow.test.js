@@ -7,7 +7,8 @@ const migration = fs.readFileSync('supabase/migrations/20260924103000_delete_lin
 for (const page of pages) {
   assert.match(page, /appointment_id:saved\.id/, 'Yeni borç oluşturulan randevuya bağlanmalı');
   assert.match(page, /existingDebt=originalId\?remoteDebts\.find\(function\(item\)\{return String\(item\.appointment_id\)===String\(originalId\)\}\)/, 'Aynı randevunun mevcut borcu durumdan bağımsız bulunmalı');
-  assert.match(page, /original_amount:amount,paid_amount:0,debt_date:date,status:'open',paid_at:null/, 'Mevcut ilişkili borç mükerrer kayıt yerine güvenle güncellenmeli');
+  assert.match(page, /if\(onDebt&&!existingDebt\)/, 'Existing appointment debt must not be recreated');
+  assert.doesNotMatch(page, /original_amount:amount,paid_amount:0/, 'Editing an appointment must not erase recorded debt payments');
   assert.doesNotMatch(page, /savedWhatsAppUrl/, 'Borçlu veya normal randevuda ikinci bir WhatsApp taslağı otomatik açılmamalı');
   assert.match(page, /salonDb\.from\('appointments'\)\.insert\(rows\)/, 'Randevu kayıt yolu korunmalı');
 }

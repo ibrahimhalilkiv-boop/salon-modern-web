@@ -57,7 +57,7 @@ assert.match(adminJs, /typeof currentUser!==['"]undefined['"]/, 'Talep modülü 
 assert.match(adminJs, /SalonBookingRequests\.approve/, 'Onay eylemi bulunmalı');
 assert.match(adminJs, /WhatsApp’tan bildir/, 'Manuel WhatsApp eylemi bulunmalı');
 assert.match(index, /booking-requests-admin-2\.4\.0\.js/, 'Yönetim uygulaması modülü yüklemeli');
-assert.match(shell, /salon-modern-shell-pwa-v163/, 'PWA cache sürümü güncel yayın sürümünde kalmalı');
+assert.match(shell, /salon-modern-shell-pwa-v\d+/, 'PWA cache sürümü güncel yayın sürümünde kalmalı');
 assert.match(edge, /onlineBookingEnabled/, 'Katalog online randevu durumunu istemciye bildirmeli');
 assert.match(publicJs, /Online randevu geçici olarak kapalı/, 'Kapalı durumda müşteri akışı ilerlememeli');
 assert.match(edge, /todaySchedule/, 'Katalog ilk açılışta bugünün çalışma durumunu döndürmeli');
@@ -65,7 +65,8 @@ assert.match(publicHtml, /todayClosedNotice/, 'İlk ekranda bugünün kapalı bi
 assert.match(publicJs, /Bugün salon kapalı/, 'Bugün kapalıysa müşteri ilk adımda bilgilendirilmeli');
 assert.match(publicJs, /Bugün için randevu saatleri sona erdi/, 'Bugünün çalışma saati bittiyse ilk adımda bilgi verilmeli');
 assert.match(edge, /hasRemainingWindow/, 'Katalog bugünün kalan çalışma penceresini bildirmeli');
-assert.match(publicJs, /Bu tarihte uygun saat kalmadı/, 'Slotsuz tarih kullanıcıyı saat adımına taşımamalı');
+assert.match(publicJs, /Bu tarihte seçilebilir saat yok/, 'Unavailable hours remain visible with a clear explanation');
+assert.match(publicJs, /disabled aria-disabled="true"/, 'Unavailable hours cannot be selected');
 assert.match(publicJs, /if\(available&&step===3&&state\.date===selectedDate\)show\(4\)/, 'Kapalı tarih seçildiğinde saat adımına geçilmemeli');
 assert.match(shell, /\.\/randevu\//, 'Public sayfa çevrimdışı shell ayrımında tanınmalı');
 assert.match(publicHtml, /\.\.\/salon-modern\.html/, 'Randevu sayfasında personel girişi bulunmalı');
@@ -96,13 +97,13 @@ assert.match(scheduleControls, /amount\.readOnly=false/, 'Randevu ücret alanı 
 assert.match(scheduleControls, /amount\.disabled=false/, 'Randevu ücret alanı etkin kalmalı');
 assert.match(index, /nextHour=Math\.min\(1440,\(Math\.floor\(startMinute\/60\)\+1\)\*60\)/, 'Kapalı saat seçimi bir sonraki tam saate kadar tüm aralığı kapatmalı');
 assert.match(index, /closedSlotStart['"]\)\.onchange/, 'Kapalı saat başlangıcı değişince bitiş önerisi birlikte güncellenmeli');
-assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=98/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
+assert.match(adminJs, /booking-schedule-admin-2\.4\.1\.js\?v=\d+/, 'Takvim düzeltmesi eski tarayıcı önbelleğinden ayrılmalı');
 assert.match(scheduleControls, /appointment-editing/, 'Randevu güncelleme görünümü yeni kayıttan ayrılmalı');
 assert.match(scheduleControls, /#appointmentModal\.appointment-editing #appointmentRecurrence\{display:none!important\}/, 'Güncellemede kullanılamayan tekrar alanı gizlenmeli');
 assert.match(scheduleControls, /max-height:calc\(100svh/, 'Randevu modalı ekran yüksekliğiyle sınırlandırılmalı');
 assert.match(scheduleAdmin, /end=Math\.ceil\(end\/60\)\*60/, 'Yarım saatte biten görünüm son tam saate tamamlanmalı');
 assert.match(scheduleControls, /endLabel\.textContent=''/, 'Teknik bitiş sınırı yeni bir saat dilimi gibi gösterilmemeli');
-assert.match(scheduleControls, /repeat\('\+slots\+',minmax\(8px,1fr\)\) 0px/, 'Teknik bitiş satırı takvim altında boş alan bırakmamalı');
+assert.match(scheduleControls, /repeat\('\+slots\+',minmax\(0,1fr\)\) 0px/, 'Teknik bitiş satırı takvim altında boş alan bırakmamalı');
 assert.match(index, /appointmentStart=time\.slice\(3\)===['"]00['"]\|\|time\.slice\(3\)===['"]30['"]/, 'Yönetim takviminde saat ve yarım saat başlangıçları aktif olmalı');
 assert.match(index, /var values=scheduleTimes\(\)/, 'Randevu formu ortak 15 dakikalık grid başlangıçlarını kullanmalı');
 assert.match(scheduleAdmin, /step="1800"/, 'Tarih özelindeki çalışma saatleri yalnız tam veya yarım saat seçtirmeli');

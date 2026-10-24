@@ -14,7 +14,7 @@ const values = {
   "{yol_tarifi_url}": "https://salonmodern.com.tr/konum",
 };
 const context = {
-  whatsappTemplateConfig: {},
+  whatsappTemplateConfig: { customer_return_reminder: { title: "Return", content: "Merhaba {musteri_adi}", allowed: [] } },
   salonMessageTemplates: {},
   appointmentTemplateValues: () => ({ ...values }),
   renderSavedTemplate(key, replacement) {
@@ -31,7 +31,7 @@ test("four manual WhatsApp drafts match stored text, preserve service and short 
     const row = migration.match(new RegExp("\\('" + key + "','[^']+',\\$message\\$([\\s\\S]*?)\\$message\\$\\)"));
     assert.ok(row, `Missing database message: ${key}`);
     const rendered = context.renderSavedTemplate(key, context.appointmentTemplateValues());
-    const storedRendered = row[1].replace(/\{[^{}]+\}/g, (token) => values[token] ?? token);
+    const storedRendered = row[1].replace(/\r\n/g, '\n').replace(/\{[^{}]+\}/g, (token) => values[token] ?? token);
     assert.equal(rendered, storedRendered, `Frontend and database differ for ${key}`);
     assert.ok(rendered.includes("Çağrı Çığ"));
     assert.ok(rendered.includes("Şefik"));

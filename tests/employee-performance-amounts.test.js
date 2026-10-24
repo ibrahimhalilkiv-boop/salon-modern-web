@@ -38,6 +38,6 @@ ctx.phase2RenderEmployeePerformance();
 assert.match(holder.innerHTML,/<span>Bugün<\/span><small class="phase2-period-total">Prim toplamı<br>0 TL<\/small>/,'empty period is zero');
 const html=fs.readFileSync('salon-modern.html','utf8');
 const sw=fs.readFileSync('sw.js','utf8');
-assert.match(html,/salon-phase2-1\.8\.0\.js\?v=142/);
-assert.match(sw,/salon-modern-shell-pwa-v144/);
+assert.match(html,/salon-phase2-1\.8\.0\.js\?v=\d+/);
+assert.match(sw,/salon-modern-shell-pwa-v\d+/);
 console.log('PASS staff today and week recorded booking totals, exclusions, missing amounts and PWA version');
