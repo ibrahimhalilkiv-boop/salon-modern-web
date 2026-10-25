@@ -125,8 +125,8 @@ async function openNotification(data){
     return
   }
   if(data.kind==='booking_request'||data.type==='booking_request'){
-    showPage('bookingRequests');
-    if(window.SalonBookingRequests)window.SalonBookingRequests.load();
+    if(window.SalonBookingRequests?.openPending)await window.SalonBookingRequests.openPending();
+    else {showPage('bookingRequests');if(window.SalonBookingRequests)await window.SalonBookingRequests.load()}
     return
   }
   if(data.appointmentDate)teamCalendarDate=data.appointmentDate;

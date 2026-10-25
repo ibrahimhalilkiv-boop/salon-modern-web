@@ -163,7 +163,7 @@ async function createRequest(req: Request) {
     if (existing.data) {
       const row = existing.data
       if (row.client_name.trim().toLocaleLowerCase('tr-TR') !== customerName.toLocaleLowerCase('tr-TR') || row.phone_normalized !== customerPhone || row.service_id !== serviceId || (employeeId && row.employee_id !== employeeId) || new Date(row.scheduled_at).getTime() !== new Date(startAt).getTime()) return reply(req, { error: 'Kayıt bilgileri değişti. Sayfayı yenileyin.' }, 409)
-      if (row.status === 'approved') return reply(req, { requestNumber: row.id.slice(0, 8).toUpperCase(), statusToken: row.public_token, status: 'approved' }, 200)
+      return reply(req, { requestNumber: row.id.slice(0, 8).toUpperCase(), statusToken: row.public_token, status: row.status }, 200)
     }
   }
   const permission = await db.rpc('can_create_online_booking', { p_phone: customerPhone })
@@ -200,7 +200,7 @@ async function createRequest(req: Request) {
   const chosen = (availabilityBody.slots || []).find((item: { time: string, employeeIds: string[] }) => item.time === time)
   if (!chosen || (employeeId && !chosen.employeeIds.includes(employeeId))) return reply(req, { error: 'Seçilen saat artık müsait değil.' }, 409)
 
-  const inserted = await db.rpc('create_confirmed_online_booking', { p_booking: {
+  const inserted = await db.rpc('create_pending_online_booking', { p_booking: {
     client_name: customerName, phone: customerPhone, phone_normalized: customerPhone,
     service_id: serviceId, service_name: service.data.name, amount: service.data.price,
     employee_id: employeeId, scheduled_at: startAt,
@@ -208,10 +208,10 @@ async function createRequest(req: Request) {
     public_token: submissionToken || crypto.randomUUID(),
   } })
   if (inserted.error) {
-    console.error('[customer-booking-request] automatic confirmation failed', inserted.error)
+    console.error('[customer-booking-request] pending request failed', inserted.error)
     return reply(req, { error: 'Randevu kaydedilemedi. Seçtiğiniz saat dolmuş veya kapanmış olabilir. Müsait saatleri yenileyin.' }, 409)
   }
-  return reply(req, { requestNumber: inserted.data.id.slice(0, 8).toUpperCase(), statusToken: inserted.data.public_token, status: 'approved' }, 201)
+  return reply(req, { requestNumber: inserted.data.id.slice(0, 8).toUpperCase(), statusToken: inserted.data.public_token, status: inserted.data.status }, 201)
 }
 
 async function publicStatus(req: Request, token: string) {
@@ -223,6 +223,8 @@ async function publicStatus(req: Request, token: string) {
   const outsideCutoff = new Date(starts).getTime() >= Date.now() + 2 * 60 * 60 * 1000
   return reply(req, { status: item && ['completed', 'cancelled', 'no_show'].includes(item.status) ? item.status : row.data.status,
     requested_date: starts, requested_start_at: starts, revision: row.data.customer_revision,
+    request: { customer: row.data.client_name, service: row.data.service_name,
+      employee: row.data.requested_profile?.full_name || '', scheduledAt: row.data.scheduled_at },
     appointment: item ? { customer: item.client_name, service: item.service_name, employee: item.employee?.full_name,
       scheduledAt: starts, durationMinutes: item.duration_minutes, amount: item.amount,
       canManage: item.status === 'confirmed' && row.data.status === 'approved' && outsideCutoff } : null,
@@ -231,11 +233,12 @@ async function publicStatus(req: Request, token: string) {
 
 function validUuid(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }
 type CustomerBookingRow = { status: string, scheduled_at: string, customer_revision: number,
+  client_name: string, service_name: string, requested_profile: null | { full_name: string },
   appointment: null | { id: string, client_name: string, service_name: string, service_id: string, employee_id: string,
     scheduled_at: string, duration_minutes: number, online_protection_minutes: number | null, amount: number, status: string, employee: null | { full_name: string } } }
 async function customerBooking(token: string) {
   const result = await db.from('online_booking_requests')
-    .select('status,scheduled_at,customer_revision,appointment:appointments!online_booking_requests_appointment_id_fkey(id,client_name,service_name,service_id,employee_id,scheduled_at,duration_minutes,online_protection_minutes,amount,status,employee:profiles!appointments_employee_id_fkey(full_name))')
+    .select('status,scheduled_at,customer_revision,client_name,service_name,requested_profile:profiles!online_booking_requests_employee_id_fkey(full_name),appointment:appointments!online_booking_requests_appointment_id_fkey(id,client_name,service_name,service_id,employee_id,scheduled_at,duration_minutes,online_protection_minutes,amount,status,employee:profiles!appointments_employee_id_fkey(full_name))')
     .eq('public_token', token).maybeSingle().returns<CustomerBookingRow>()
   if (result.error) throw result.error
   return result
@@ -302,14 +305,26 @@ async function adminAction(req: Request, action: string) {
   if (!actor) return reply(req, { error: 'Yönetici oturumu gerekli.' }, 401)
   const body = await req.json().catch(() => ({}))
   const requestId = clean(body.requestId, 80)
-  if (!requestId) return reply(req, { error: 'Talep kimliği gerekli.' }, 400)
+  if (!validUuid(requestId)) return reply(req, { error: 'Geçerli talep kimliği gerekli.' }, 400)
+  const userDb = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('authorization') || '' } } })
+  if (action === 'update') {
+    const startAt = clean(body.startAt, 40)
+    const employeeId = clean(body.employeeId, 80)
+    const serviceId = clean(body.serviceId, 80)
+    if (!validUuid(employeeId) || !validUuid(serviceId) || !Number.isFinite(Date.parse(startAt))) {
+      return reply(req, { error: 'Hizmet, çalışan ve tarih/saat gerekli.' }, 400)
+    }
+    const result = await userDb.rpc('update_pending_online_booking_request', {
+      p_request_id: requestId, p_start: startAt, p_employee_id: employeeId, p_service_id: serviceId,
+    })
+    if (result.error) return reply(req, { error: result.error.message }, 409)
+    return reply(req, { updated: true })
+  }
   if (action === 'approve') {
-    const userDb = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('authorization') || '' } } })
     const result = await userDb.rpc('approve_online_booking_request', { p_request_id: requestId })
     if (result.error) return reply(req, { error: result.error.message }, 409)
     return reply(req, { approved: true, result: result.data || null })
   }
-  const userDb = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { headers: { Authorization: req.headers.get('authorization') || '' } } })
   const result = await userDb.rpc('reject_online_booking_request', { p_request_id: requestId })
   if (result.error) return reply(req, { error: result.error.message }, 409)
   const reason = clean(body.reason, 300) || null
@@ -329,7 +344,7 @@ Deno.serve(async (req) => {
     if (req.method === 'GET' && action === 'admin-list') return await adminList(req)
     if (req.method === 'POST' && action === 'create') return await createRequest(req)
     if (req.method === 'POST' && (action === 'customer-update' || action === 'customer-cancel')) return await customerAction(req, action === 'customer-update' ? 'update' : 'cancel')
-    if (req.method === 'POST' && (action === 'approve' || action === 'reject')) return await adminAction(req, action)
+    if (req.method === 'POST' && (action === 'approve' || action === 'reject' || action === 'update')) return await adminAction(req, action)
     return reply(req, { error: 'İşlem bulunamadı.' }, 404)
   } catch (error) {
     console.error('[customer-booking-request]', error)
