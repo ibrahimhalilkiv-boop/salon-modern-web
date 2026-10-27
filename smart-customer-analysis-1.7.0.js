@@ -2,6 +2,7 @@
 'use strict';
 
 var smartSelectedClientId=null;
+window.salonSelectClientForAppointment=function(id){smartSelectedClientId=id};
 var smartPendingAction=null;
 var smartVisitSummaries=new Map(),smartSummaryState='loading',smartSummaryGeneration=0;
 function smartToday(){return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Istanbul'})}
@@ -112,8 +113,9 @@ ensureRemoteClient=async function(name,phone){
   var exact=uniqueRemoteClients().filter(function(client){return customerNameKey(client.full_name)===customerNameKey(name)});
   if(exact.length===1){smartSelectedClientId=exact[0].id;return exact[0].id}
   if(exact.length>1)throw new Error('Aynı isimde birden fazla müşteri var. Öneri listesinden doğru müşteriyi seçin.');
-  var payload={full_name:name,phone:normalizedPhone||null,created_by:currentUser&&currentUser.id};
-  var result=await salonDb.from('clients').insert(payload).select('id,full_name,phone,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by').single();
+  var result=currentUser&&currentUser.role==='yonetici'
+    ?await salonDb.from('clients').insert({full_name:name,phone:normalizedPhone||null,created_by:currentUser.id}).select('id,full_name,phone,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by').single()
+    :await salonDb.rpc('staff_create_client',{p_name:name,p_phone:normalizedPhone||null}).single();
   if(result.error)throw result.error;
   remoteClients.push(result.data);clients=remoteClients.map(function(client){return client.full_name});smartSelectedClientId=result.data.id;return result.data.id;
 };
@@ -176,9 +178,12 @@ function smartLoadActiveClients(force){
   var request=(async function(){
     var rows=[],pageSize=500,cursor=null;
     for(;;){
-      var query=salonDb.from('clients').select('id,full_name,phone,note,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by,deleted_at,deleted_by').eq('active',true).order('id').limit(pageSize);
-      if(cursor)query=query.gt('id',cursor);
-      var result=await query;
+      var result;
+      if(currentUser.role==='yonetici'){
+        var query=salonDb.from('clients').select('id,full_name,phone,note,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by,deleted_at,deleted_by').eq('active',true).order('id').limit(pageSize);
+        if(cursor)query=query.gt('id',cursor);
+        result=await query;
+      }else result=await salonDb.rpc('staff_owned_clients',{p_after:cursor,p_limit:pageSize});
       if(result.error)throw result.error;
       if(!Array.isArray(result.data))throw new Error('Müşteri listesi eksik döndü.');
       rows.push.apply(rows,result.data);

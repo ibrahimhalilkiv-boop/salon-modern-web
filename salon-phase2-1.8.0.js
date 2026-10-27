@@ -51,7 +51,19 @@ function phase2CanUseNote(clientId){
 
 async function phase2LoadIntelligence(force){
   if(!currentUser||(!force&&phase2LoadedAt&&Date.now()-phase2LoadedAt<60000))return phase2Rows();
-  var result=await salonDb.from('client_visit_intelligence').select('client_id,full_name,phone,note,visit_count,distinct_visit_days,last_visit_date,average_visit_days,expected_next_visit_date,preferred_employee_id,preferred_service_id,preferred_service_name,recorded_spend,spend_reliable');
+  var result;
+  if(currentUser.role==='yonetici'){
+    result=await salonDb.from('client_visit_intelligence').select('client_id,full_name,phone,note,visit_count,distinct_visit_days,last_visit_date,average_visit_days,expected_next_visit_date,preferred_employee_id,preferred_service_id,preferred_service_name,recorded_spend,spend_reliable');
+  }else{
+    var rows=[],after=null,batch=[];
+    do{
+      result=await salonDb.rpc('staff_client_intelligence',{p_after:after,p_limit:500});
+      if(result.error)break;
+      batch=result.data||[];rows.push.apply(rows,batch);
+      after=batch.length?batch[batch.length-1].client_id:null;
+    }while(batch.length===500);
+    if(!result.error)result={data:rows,error:null};
+  }
   if(result.error){
     console.warn('Salon intelligence could not be loaded',result.error.message||result.error);
     phase2Intelligence=(window.SalonSmartTest&&SalonSmartTest.analyses?SalonSmartTest.analyses().map(function(item){return {client_id:item.client.id,full_name:item.client.full_name,phone:item.client.phone,note:item.client.note,visit_count:item.count,distinct_visit_days:item.count,last_visit_date:item.last,average_visit_days:item.average,expected_next_visit_date:phase2DateAdd(item.last,item.average),preferred_employee_id:item.preferredEmployeeId,preferred_service_id:null,preferred_service_name:null,recorded_spend:null,spend_reliable:false}}):[]);

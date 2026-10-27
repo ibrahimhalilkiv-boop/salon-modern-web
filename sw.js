@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v180';
+const CACHE_NAME = 'salon-modern-shell-pwa-v181';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownNotifications = new Set();
 let notificationDisplayQueue = Promise.resolve();
@@ -13,9 +13,9 @@ const APP_SHELL = [
   './salon-appointment-data.js?v=150',
   './whatsapp-messages-2.4.5.js?v=148',
   './manual-whatsapp-thank-you-2.4.6.js?v=123',
-  './smart-customer-analysis-1.7.0.js?v=179',
+  './smart-customer-analysis-1.7.0.js?v=181',
   './salon-return-daily.js?v=149',
-  './salon-phase2-1.8.0.js?v=145',
+  './salon-phase2-1.8.0.js?v=181',
   './salon-modern-ai.js?v=143',
   './salon-modern-ai.css?v=143',
   './salon-finance-2.3.0.js?v=100',
@@ -38,7 +38,7 @@ const APP_SHELL = [
   './appointment-cancel-button-2.3.27.js?v=90',
   './appointment-debt-warning-2.3.28.js',
   './debt-account-groups-2.3.29.js'
-  ,'./appointment-form-actions-2.3.30.js?v=127'
+  ,'./appointment-form-actions-2.3.30.js?v=181'
   ,'./booking-requests-admin-2.4.0.js?v=180'
   ,'./appointment-whatsapp-status.js?v=127',
   './salon-calendar-status.js?v=142',
