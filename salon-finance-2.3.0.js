@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-window.SALON_APP_VERSION='2.3.15';
+window.SALON_APP_VERSION='2.3.16';
 var financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',pendingSale:null,pendingUsage:null,loaded:false,loading:false};
 var finance230Busy=false,finance230ConfirmResolver=null;
 var finance230DateRequest=0;
@@ -269,9 +269,28 @@ var previousShowPage=showPage;
 showPage=function(id){if(['salonFinance','salonProducts','finance230ProductAction'].includes(id)&&!manager())id='calendar';previousShowPage(id);if(id==='salonFinance')loadFinance230(false);if(id==='salonProducts')loadFinance230(false).then(renderProducts)};
 function syncFinance230Version(){var value='v'+window.SALON_APP_VERSION;document.querySelectorAll('#appVersion,[data-app-version]').forEach(function(node){node.textContent=value});document.querySelectorAll('.auth small').forEach(function(node){if(/^v\d+\.\d+\.\d+$/.test(node.textContent.trim()))node.textContent=value})}
 var previousEnterApp=typeof enterApp==='function'?enterApp:null;
-if(previousEnterApp)enterApp=function(){var result=previousEnterApp.apply(this,arguments);setTimeout(function(){syncFinance230Version();if(manager())loadFinance230(false)},150);return result};
+var financePreloadPending=null;
+if(previousEnterApp)enterApp=function(){
+  var result=previousEnterApp.apply(this,arguments);
+  syncFinance230Version();
+  if(manager()){
+    var preload=function(){
+      financePreloadPending=null;
+      var run=function(){if(manager()&&currentUser)loadFinance230(false)};
+      if(typeof requestIdleCallback==='function')requestIdleCallback(run,{timeout:2500});
+      else setTimeout(run,500);
+    };
+    if(financePreloadPending)window.removeEventListener('salon:data-ready',financePreloadPending);
+    if(window.salonRemoteMode&&window.salonHistoryState!=='ready'){
+      financePreloadPending=preload;
+      window.addEventListener('salon:data-ready',preload,{once:true});
+    }
+    else preload();
+  }
+  return result;
+};
 var previousLogout=typeof logout==='function'?logout:null;
-if(previousLogout)logout=async function(){finance230DateRequest++;finance230PeriodRequest++;finance230PeriodFilter=null;finance230PeriodExpenses=[];financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',loaded:false,loading:false};return previousLogout.apply(this,arguments)};
+if(previousLogout)logout=async function(){if(financePreloadPending){window.removeEventListener('salon:data-ready',financePreloadPending);financePreloadPending=null}finance230DateRequest++;finance230PeriodRequest++;finance230PeriodFilter=null;finance230PeriodExpenses=[];financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',loaded:false,loading:false};return previousLogout.apply(this,arguments)};
 
 var style=document.createElement('style');style.textContent=
   '.finance230-title{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.finance230-title .page-title{margin-bottom:2px}.finance230-title small{color:var(--muted)}'+

@@ -14,6 +14,13 @@
     return { start: month + '-01T00:00:00+03:00', end: next.toISOString().slice(0, 7) + '-01T00:00:00+03:00' };
   }
 
+  function dayBounds(day) {
+    var date = /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? day : new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+    var next = new Date(date + 'T12:00:00Z');
+    next.setUTCDate(next.getUTCDate() + 1);
+    return { start: date + 'T00:00:00+03:00', end: next.toISOString().slice(0, 10) + 'T00:00:00+03:00' };
+  }
+
   async function pages(db, columns, start, end) {
     var rows = [];
     var cursor = null;
@@ -43,11 +50,20 @@
     return pages(db, columns, bounds.start, bounds.end);
   }
 
-  async function load(db, columns, day, onVisible) {
+  async function load(db, columns, day, onVisible, onDay) {
     var bounds = monthBounds(day);
-    // Read the visible month first. Complete the global set for history,
-    // performance, commissions and modules that still use `appts`.
-    var visible = await pages(db, columns, bounds.start, bounds.end);
+    // Start the month request in parallel, but publish the selected day first.
+    // A busy month can require several sequential pages before it is complete.
+    var monthRequest = pages(db, columns, bounds.start, bounds.end)
+      .then(function (rows) { return { rows: rows }; }, function (error) { return { error: error }; });
+    if (onDay) {
+      var today = dayBounds(day);
+      var dayRows = await pages(db, columns, today.start, today.end);
+      await onDay(dayRows);
+    }
+    var monthResult = await monthRequest;
+    if (monthResult.error) throw monthResult.error;
+    var visible = monthResult.rows;
     if (onVisible) await onVisible(visible);
     var other = await Promise.all([
       pages(db, columns, null, bounds.start),
@@ -58,5 +74,5 @@
     });
   }
 
-  window.SalonAppointmentData = { load: load, loadVisible: loadVisible, nextGeneration: nextGeneration, isCurrent: isCurrent, monthBounds: monthBounds };
+  window.SalonAppointmentData = { load: load, loadVisible: loadVisible, nextGeneration: nextGeneration, isCurrent: isCurrent, monthBounds: monthBounds, dayBounds: dayBounds };
 })();

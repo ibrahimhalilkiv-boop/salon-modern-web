@@ -63,7 +63,7 @@ var teamCalendarMember;function selectTeamMember(name){teamCalendarMember=name;t
 var NOTIFICATION_KEY='salonModernNotificationsV1';function getNotifications(){try{return JSON.parse(localStorage.getItem(NOTIFICATION_KEY)||'[]')}catch{return []}}function saveNotifications(notes){localStorage.setItem(NOTIFICATION_KEY,JSON.stringify(notes))}function showAppToast(title,detail){document.querySelector('.app-toast')?.remove();const toast=document.createElement('div');toast.className='app-toast';toast.innerHTML=`<strong>${safe(title)}</strong><small>${safe(detail)}</small>`;document.body.appendChild(toast);setTimeout(()=>toast.remove(),6000)}function notifyEmployee(staffName,appointment){const notes=getNotifications();notes.push({id:crypto.randomUUID(),recipient:staffName,title:'Yeni randevu atandı',detail:`${appointment.customer} · ${appointment.date} ${appointment.time} · ${appointment.operation}`,read:false,createdAt:Date.now()});saveNotifications(notes);if(currentUser?.name===staffName)checkNotifications()}function checkNotifications(){if(!currentUser)return;const notes=getNotifications(),unread=notes.filter(n=>n.recipient===currentUser.name&&!n.read);if(!unread.length)return;unread.forEach(n=>n.read=true);saveNotifications(notes);const latest=unread[unread.length-1];showAppToast(latest.title,latest.detail)}function saveAppointment(event){event.preventDefault();const customer=document.getElementById('appointmentCustomer').value.trim(),operation=document.getElementById('appointmentOperation').value.trim(),date=document.getElementById('appointmentDate').value,amount=Number(document.getElementById('appointmentAmount').value);let assigned=document.getElementById('appointmentStaff').value;if(currentUser?.role!=='yonetici')assigned=currentUser.name;if(!clients.some(c=>c.toLocaleLowerCase('tr')===customer.toLocaleLowerCase('tr'))){clients.push(customer);localStorage.setItem('salonModernClientsV1',JSON.stringify(clients))}lastOperation=operation;localStorage.setItem('salonModernLastOperationV1',lastOperation);const values={time:document.getElementById('appointmentTime').value.trim(),customer,operation,staff:assigned,date,amount},existing=editingAppointmentId?appts.find(a=>a.id===editingAppointmentId):null,shouldNotify=!existing||existing.staff!==assigned;if(existing)Object.assign(existing,values);else appts.unshift({id:crypto.randomUUID(),...values});editingAppointmentId=null;saveAppointments();if(shouldNotify)notifyEmployee(assigned,{...values});closeAppointmentModal();renderHomeSummary();render();renderCalendar();renderStatistics();showPage('appointments')}function simplifyNavigation(){const calendarMenu=document.querySelector("[onclick=\"drawerPage('calendar')\"]"),appointmentMenu=document.querySelector("[onclick=\"drawerPage('appointments')\"]"),teamMenu=document.querySelector("[onclick=\"drawerPage('team')\"]"),adminMenu=document.querySelector("[onclick=\"drawerPage('admin')\"]"),gear=document.querySelector('.bell'),actions=document.querySelector('.actions'),isAdmin=currentUser?.role==='yonetici';if(calendarMenu){calendarMenu.classList.toggle('hidden',!isAdmin);calendarMenu.textContent='▦   Takvim'}if(appointmentMenu)appointmentMenu.classList.add('hidden');if(teamMenu)teamMenu.classList.add('hidden');if(adminMenu)adminMenu.classList.toggle('hidden',!isAdmin);if(gear)gear.classList.toggle('hidden',!isAdmin);if(actions){actions.classList.add('hidden');const quickHeading=actions.previousElementSibling;if(quickHeading?.classList.contains('section'))quickHeading.classList.add('hidden')}}window.addEventListener('storage',event=>{if(event.key===NOTIFICATION_KEY)checkNotifications()});setTimeout(checkNotifications,0);setInterval(checkNotifications,4000);
 function simplifyNavigation(){const homeMenu=document.querySelector("[onclick=\"drawerPage('home')\"]"),calendarMenu=document.querySelector("[onclick=\"drawerPage('calendar')\"]"),appointmentMenu=document.querySelector("[onclick=\"drawerPage('appointments')\"]"),teamMenu=document.querySelector("[onclick=\"drawerPage('team')\"]"),adminMenu=document.querySelector("[onclick=\"drawerPage('admin')\"]"),gear=document.querySelector('.bell'),actions=document.querySelector('.actions'),isAdmin=currentUser?.role==='yonetici';if(homeMenu)homeMenu.classList.add('hidden');if(calendarMenu){calendarMenu.classList.toggle('hidden',!isAdmin);calendarMenu.textContent='▦   Takvim'}if(appointmentMenu)appointmentMenu.classList.add('hidden');if(teamMenu)teamMenu.classList.add('hidden');if(adminMenu)adminMenu.classList.toggle('hidden',!isAdmin);if(gear)gear.classList.toggle('hidden',!isAdmin);if(actions){actions.classList.add('hidden');const quickHeading=actions.previousElementSibling;if(quickHeading?.classList.contains('section'))quickHeading.classList.add('hidden')}}
 function installSalonLogo(){const mark='<span aria-hidden="true" style="display:inline-grid;place-items:center;width:31px;height:31px;margin-right:8px;vertical-align:middle;border-radius:10px;background:linear-gradient(135deg,#0d2925,#27463e);box-shadow:inset 0 0 0 1px #dcb986,0 5px 14px #0d292544"><svg viewBox="0 0 32 32" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 7.5c3.8 2.9 10.2 2.9 14 0M9 24.5c3.8-2.9 10.2-2.9 14 0" stroke="#F3D59B" stroke-width="2.2" stroke-linecap="round"/><path d="M11.2 10.2c2.6 1.9 7 1.9 9.6 0v11.6c-2.6-1.9-7-1.9-9.6 0V10.2Z" fill="#F3D59B" fill-opacity=".18" stroke="#F3D59B" stroke-width="1.5"/><circle cx="16" cy="16" r="2.1" fill="#F3D59B"/></svg></span>';document.querySelectorAll('.auth-brand,.brand').forEach(el=>{if(el.dataset.luxeLogo)return;el.dataset.luxeLogo='1';el.innerHTML=mark+'<span style="letter-spacing:.02em">Salon <b style="color:#dcb986;font-weight:800">Modern</b></span>';el.style.display='flex';el.style.alignItems='center'})}installSalonLogo();
-</script><script src="supabase-2.49.1.js"></script><script src="salon-appointment-data.js?v=150"></script><script>
+</script><script src="supabase-2.49.1.js"></script><script src="salon-appointment-data.js?v=151"></script><script>
 var salonDb=window.supabase.createClient('https://oxuwwjsakhcqimjsfris.supabase.co','sb_publishable_8prafGqYcxU0YQp6iqWGXA_rT20Q4AH',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
 var remoteProfiles=[],remoteServices=[],remoteClients=[],salonChannel=null;
 function remoteError(message){const box=document.getElementById('loginError');if(box){box.textContent=message;box.style.display='block'}}
@@ -86,7 +86,7 @@ async function loadRemoteSession(){
   const result=await salonDb.auth.getUser();if(result.error||!result.data.user){setRemoteAuth(false);return}
   const profileResult=await salonDb.from('profiles').select('id,username,full_name,role,commission_pct,active').eq('id',result.data.user.id).maybeSingle();
   const profile=profileResult.data;if(!profile||!profile.active){await salonDb.auth.signOut();remoteError('Bu kullanıcı hesabı aktif değil.');setRemoteAuth(false);return}
-  currentUser=profileToUser(profile);window.salonRemoteMode=true;window.salonHistoryState='loading';
+  currentUser=profileToUser(profile);window.salonRemoteMode=true;window.salonHistoryState='loading';window.salonCalendarPreviewMonth=null;
   var entered=false,refreshComplete=true;
   window.salonOnCalendarPreview=function(){
     if(entered)return;entered=true;window.salonSuppressCalendarReload=true;
@@ -96,7 +96,7 @@ async function loadRemoteSession(){
   window.salonOnCalendarPreview=null;
   var appointmentsLoaded=window.salonCalendarLoadState?.status==='ready';
   subscribeSalon();
-  if(!entered){enterApp();showPage(appointmentsLoaded?'home':'calendar')}
+  if(!entered){enterApp();showPage('calendar')}
   if(refreshComplete)showAppToast('Canlı bağlantı açık','Randevu ve bildirimler anlık eşitlenir.');
   else if(appointmentsLoaded)showAppToast('Ek veriler yüklenemedi','Takvim yüklendi; diğer veriler için bağlantıyı kontrol edin.');
 }
@@ -104,6 +104,7 @@ var salonPreviewMonthSequence=0;
 window.salonPreviewCalendarMonth=async function(){
   if(window.salonHistoryState==='ready'){renderCalendar();return}
   var date=selectedTeamDate(),month=date.slice(0,7),userId=currentUser?.id;
+  if(window.salonCalendarPendingMonth===month){window.salonCalendarLoadState={status:'loading',date:date};renderCalendar();return}
   if(window.salonCalendarPreviewMonth===month){renderCalendar();return}
   var requestId=++salonPreviewMonthSequence,bounds=SalonAppointmentData.monthBounds(date);
   window.salonCalendarLoadState={status:'loading',date:date};renderCalendar();
@@ -142,40 +143,56 @@ remoteAppointment=function(item){const slot=toIstanbul(item.scheduled_at),owner=
 getServices=function(){return remoteServices.filter(function(item){return item.active}).map(function(item){return {id:item.id,name:item.name,price:Number(item.price),duration:Number(item.duration_minutes||60)}}).sort(function(a,b){return b.price-a.price||a.name.localeCompare(b.name,'tr')})}
 reloadRemoteData=async function(){
   if(!currentUser)return;
-  var userId=currentUser.id,version=SalonAppointmentData.nextGeneration();
-  window.salonCalendarLoadState={status:'loading',date:selectedTeamDate()};
+  var userId=currentUser.id,version=SalonAppointmentData.nextGeneration(),loadDate=selectedTeamDate(),initialPreview=window.salonHistoryState!=='ready';
+  window.salonCalendarLoadState={status:'loading',date:loadDate};
+  window.salonCalendarPendingMonth=loadDate.slice(0,7);
   if(document.getElementById('calendar')?.classList.contains('active'))renderCalendar();
   var columns='*';
   try{
     var profileRequest=Promise.resolve(salonDb.from('profiles').select('id,username,full_name,role,commission_pct,active,calendar_color').order('full_name'));
     var serviceRequest=Promise.resolve(salonDb.from('services').select('id,name,price,duration_minutes,online_duration_minutes,active').order('name'));
-    var clientRequest=currentUser.role==='yonetici'?salonDb.from('clients').select('id,full_name,note,last_service_id,last_employee_id,last_appointment_at').order('full_name'):Promise.resolve({data:[]});
+    var dayBounds=initialPreview?SalonAppointmentData.dayBounds(loadDate):null;
+    var dayClosedRequest=initialPreview?Promise.resolve(salonDb.from('closed_time_slots').select('id,employee_id,starts_at,ends_at,note').lt('starts_at',dayBounds.end).gt('ends_at',dayBounds.start).order('starts_at')):null;
+    var clientRequest;
+    function publishCalendar(rows,closed,monthComplete){
+      remoteProfiles=profiles.data||[];remoteServices=services.data||[];
+      staff=remoteProfiles.filter(function(profile){return profile.active&&profile.username!=='salon.modern'}).map(function(profile){return [profile.full_name,profile.role==='manager'?'Yönetici':'Çalışan',Number(profile.commission_pct),avatarFor(profile.full_name)]});
+      appts=rows.map(remoteAppointment);remoteClosedSlots=closed.data||[];
+      if(monthComplete){window.salonCalendarPreviewMonth=loadDate.slice(0,7);window.salonCalendarPendingMonth=null}
+      window.salonCalendarLoadState={status:'ready',date:selectedTeamDate()};
+      renderCalendar();
+      if(typeof window.salonOnCalendarPreview==='function')window.salonOnCalendarPreview();
+    }
+    var profiles,services;
     var results=await Promise.all([
       profileRequest,
       serviceRequest,
-      SalonAppointmentData.load(salonDb,columns,selectedTeamDate(),async function(visible){
+      SalonAppointmentData.load(salonDb,columns,loadDate,async function(visible){
         var setup=await Promise.all([profileRequest,serviceRequest]);
-        if(setup[0].error||setup[1].error)throw setup[0].error||setup[1].error;
+        profiles=setup[0];services=setup[1];
+        if(profiles.error||services.error)throw profiles.error||services.error;
+        clientRequest=currentUser.role==='yonetici'?Promise.resolve(salonDb.from('clients').select('id,full_name,note,last_service_id,last_employee_id,last_appointment_at').order('full_name')):Promise.resolve({data:[]});
         if(!SalonAppointmentData.isCurrent(version)||currentUser?.id!==userId)return;
-        var bounds=SalonAppointmentData.monthBounds(selectedTeamDate());
+        var bounds=SalonAppointmentData.monthBounds(loadDate);
         var closed=await salonDb.from('closed_time_slots').select('id,employee_id,starts_at,ends_at,note').lt('starts_at',bounds.end).gt('ends_at',bounds.start).order('starts_at');
         if(closed.error)throw closed.error;
         if(!SalonAppointmentData.isCurrent(version)||currentUser?.id!==userId)return;
-        remoteProfiles=setup[0].data||[];remoteServices=setup[1].data||[];
-        staff=remoteProfiles.filter(function(profile){return profile.active&&profile.username!=='salon.modern'}).map(function(profile){return [profile.full_name,profile.role==='manager'?'Yönetici':'Çalışan',Number(profile.commission_pct),avatarFor(profile.full_name)]});
-        appts=visible.map(remoteAppointment);
-        remoteClosedSlots=closed.data||[];window.salonCalendarPreviewMonth=selectedTeamDate().slice(0,7);
-        window.salonCalendarLoadState={status:'ready',date:selectedTeamDate()};
-        renderCalendar();
-        if(typeof window.salonOnCalendarPreview==='function')window.salonOnCalendarPreview();
-      }),
-      clientRequest
+        if(selectedTeamDate().slice(0,7)===loadDate.slice(0,7))publishCalendar(visible,closed,true);
+      },initialPreview?async function(dayRows){
+        var setup=await Promise.all([profileRequest,serviceRequest,dayClosedRequest]);
+        profiles=setup[0];services=setup[1];
+        if(profiles.error||services.error||setup[2].error)throw profiles.error||services.error||setup[2].error;
+        if(!SalonAppointmentData.isCurrent(version)||currentUser?.id!==userId||selectedTeamDate()!==loadDate||teamCalendarMode==='month')return;
+        publishCalendar(dayRows,setup[2],false);
+      }:null)
     ]);
-    if(results[0].error||results[1].error||results[3].error)throw results[0].error||results[1].error||results[3].error;
+    if(results[0].error||results[1].error)throw results[0].error||results[1].error;
+    var clientResult=await (clientRequest||Promise.resolve({data:[]}));
+    if(clientResult.error)throw clientResult.error;
     if(!SalonAppointmentData.isCurrent(version)||currentUser?.id!==userId)return;
     remoteProfiles=results[0].data||[];
     remoteServices=results[1].data||[];
-    remoteClients=results[3].data||[];
+    remoteClients=clientResult.data||[];
     staff=remoteProfiles.filter(function(profile){return profile.active&&profile.username!=='salon.modern'}).map(function(profile){return [profile.full_name,profile.role==='manager'?'Yönetici':'Çalışan',Number(profile.commission_pct),avatarFor(profile.full_name)]});
     appts=results[2].map(remoteAppointment);
     window.salonHistoryState='ready';
@@ -183,6 +200,7 @@ reloadRemoteData=async function(){
     lastOperation=remoteServices[0]?remoteServices[0].name:lastOperation;
     window.salonCalendarLoadState={status:'ready',date:selectedTeamDate()};
     renderHomeSummary();render();renderUsers();renderCalendar();renderStatistics();
+    window.dispatchEvent(new Event('salon:data-ready'));
   }catch(error){
     if(SalonAppointmentData.isCurrent(version)&&currentUser?.id===userId){
       if(window.salonHistoryState==='loading')window.salonHistoryState='error';
@@ -191,6 +209,8 @@ reloadRemoteData=async function(){
       showAppToast('Takvim yüklenemedi',error.message||'Bağlantıyı kontrol edip yeniden deneyin.');
     }
     throw error;
+  }finally{
+    if(SalonAppointmentData.isCurrent(version)&&window.salonCalendarPendingMonth===loadDate.slice(0,7))window.salonCalendarPendingMonth=null;
   }
 }
 function renderServiceOptions(selected){const select=ensureServicePicker(),services=getServices();select.innerHTML=services.map(function(service){return '<option value="'+safe(service.name)+'">'+safe(service.name)+' — '+Number(service.price).toLocaleString('tr-TR')+' TL · '+service.duration+' dk</option>'}).join('');if(selected&&!services.some(function(service){return service.name===selected}))select.insertAdjacentHTML('afterbegin','<option value="'+safe(selected)+'">'+safe(selected)+' — 60 dk</option>');select.value=selected&&Array.from(select.options).some(function(option){return option.value===selected})?selected:(services[0]?.name||'')}
@@ -1560,10 +1580,10 @@ function installCalendarDaySwipe(){
 installCalendarDaySwipe();
 ensureDebtDeleteModal();
 installV151Shell();
-document.querySelectorAll('#appVersion').forEach(function(node){node.textContent='v1.6.19'});document.querySelectorAll('.auth small').forEach(function(node){if(/^v1\.[56]\./.test(node.textContent))node.textContent='v1.6.19'});
+document.querySelectorAll('#appVersion').forEach(function(node){node.textContent='v2.3.16'});document.querySelectorAll('.auth small').forEach(function(node){if(/^v\d+\.\d+\.\d+$/.test(node.textContent))node.textContent='v2.3.16'});
 installCustomerReturnTools();
 installMessageFolder();
 installCashTracking();
 syncCurrentTimeLineVisibility();
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(function(error){console.warn('Service worker kaydedilemedi:',error)});document.addEventListener('DOMContentLoaded',function(){startRemoteApp()},{once:true});
-</script><script src="whatsapp-messages-2.4.5.js?v=148"></script><script src="smart-customer-analysis-1.7.0.js?v=181"></script><script src="salon-return-daily.js?v=149"></script><script src="salon-phase2-1.8.0.js?v=181"></script><script src="salon-modern-ai.js?v=143"></script><script src="salon-finance-2.3.0.js?v=100"></script><script src="salon-ui-2.3.12.js"></script><script src="salon-performance-2.3.14.js?v=179"></script><script src="salon-debt-visibility-2.3.15.js"></script><script src="salon-ui-fixes-2.3.16.js?v=150"></script><script>(function(){var originalShowPage=window.showPage,refreshInFlight=false;window.showPage=function(id){var target=id==='appointments'?'calendar':id;if(window.salonHistoryState&&window.salonHistoryState!=='ready'&&target!=='calendar'){if(typeof window.showAppToast==='function')window.showAppToast('Geçmiş yükleniyor','Randevu geçmişi tamamlanmadan bu ekran açılmaz.');return}var result=originalShowPage.apply(this,arguments);if(target==='calendar'&&window.currentUser&&!window.salonSuppressCalendarReload&&!refreshInFlight&&typeof window.reloadRemoteData==='function'){refreshInFlight=true;Promise.resolve(window.reloadRemoteData()).catch(function(error){if(typeof window.showAppToast==='function')window.showAppToast('Takvim güncellenemedi',error&&error.message||'Randevular alınamadı.');}).finally(function(){refreshInFlight=false})}return result};window.remoteAppointment=(function(previous){return function(item){var mapped=previous(item);mapped.status=item&&item.status||'confirmed';mapped.clientPhone=item&&item.client_phone||mapped.phone||'';mapped.checkedInAt=item&&item.checked_in_at||null;mapped.scheduledAt=item&&item.scheduled_at||null;return mapped}})(window.remoteAppointment);})();</script><script src="appointment-management-2.3.26.js?v=127"></script><script src="salon-web-push.js?v=180"></script><script src="pwa-stability-2.3.20.js?v=104"></script><script src="pwa-recovery-2.3.21.js?v=81"></script><script src="pwa-device-session-2.3.22.js?v=96"></script><script src="pwa-back-navigation-2.3.23.js"></script><script src="pwa-desktop-layout-2.3.24.js"></script><script src="pwa-auth-contact-cleanup-2.3.25.js"></script><script src="appointment-cancel-button-2.3.27.js?v=90"></script><script src="appointment-debt-warning-2.3.28.js"></script><script src="debt-account-groups-2.3.29.js"></script><script src="appointment-form-actions-2.3.30.js?v=181"></script><script src="booking-requests-admin-2.4.0.js?v=180"></script><script src="appointment-list-management-2.4.4.js?v=180"></script><script src="manual-whatsapp-thank-you-2.4.6.js?v=123"></script><script src="salon-menu-order.js?v=153"></script><script src="appointment-whatsapp-status.js?v=127"></script><script src="salon-calendar-status.js?v=142"></script><script src="appointment-no-show-2.4.7.js?v=1"></script><script src="salon-calendar-smart.js?v=11"></script></body></html>
+</script><script src="whatsapp-messages-2.4.5.js?v=148"></script><script src="smart-customer-analysis-1.7.0.js?v=181"></script><script src="salon-return-daily.js?v=149"></script><script src="salon-phase2-1.8.0.js?v=181"></script><script src="salon-modern-ai.js?v=143"></script><script src="salon-finance-2.3.0.js?v=101"></script><script src="salon-ui-2.3.12.js"></script><script src="salon-performance-2.3.14.js?v=179"></script><script src="salon-debt-visibility-2.3.15.js"></script><script src="salon-ui-fixes-2.3.16.js?v=150"></script><script>(function(){var originalShowPage=window.showPage,refreshInFlight=false;window.showPage=function(id){var target=id==='appointments'?'calendar':id;if(window.salonHistoryState&&window.salonHistoryState!=='ready'&&target!=='calendar'){if(typeof window.showAppToast==='function')window.showAppToast('Geçmiş yükleniyor','Randevu geçmişi tamamlanmadan bu ekran açılmaz.');return}var result=originalShowPage.apply(this,arguments);if(target==='calendar'&&window.currentUser&&!window.salonSuppressCalendarReload&&!refreshInFlight&&typeof window.reloadRemoteData==='function'){refreshInFlight=true;Promise.resolve(window.reloadRemoteData()).catch(function(error){if(typeof window.showAppToast==='function')window.showAppToast('Takvim güncellenemedi',error&&error.message||'Randevular alınamadı.');}).finally(function(){refreshInFlight=false})}return result};window.remoteAppointment=(function(previous){return function(item){var mapped=previous(item);mapped.status=item&&item.status||'confirmed';mapped.clientPhone=item&&item.client_phone||mapped.phone||'';mapped.checkedInAt=item&&item.checked_in_at||null;mapped.scheduledAt=item&&item.scheduled_at||null;return mapped}})(window.remoteAppointment);})();</script><script src="appointment-management-2.3.26.js?v=127"></script><script src="salon-web-push.js?v=180"></script><script src="pwa-stability-2.3.20.js?v=104"></script><script src="pwa-recovery-2.3.21.js?v=81"></script><script src="pwa-device-session-2.3.22.js?v=96"></script><script src="pwa-back-navigation-2.3.23.js"></script><script src="pwa-desktop-layout-2.3.24.js"></script><script src="pwa-auth-contact-cleanup-2.3.25.js"></script><script src="appointment-cancel-button-2.3.27.js?v=90"></script><script src="appointment-debt-warning-2.3.28.js"></script><script src="debt-account-groups-2.3.29.js"></script><script src="appointment-form-actions-2.3.30.js?v=181"></script><script src="booking-requests-admin-2.4.0.js?v=180"></script><script src="appointment-list-management-2.4.4.js?v=180"></script><script src="manual-whatsapp-thank-you-2.4.6.js?v=123"></script><script src="salon-menu-order.js?v=153"></script><script src="appointment-whatsapp-status.js?v=127"></script><script src="salon-calendar-status.js?v=142"></script><script src="appointment-no-show-2.4.7.js?v=1"></script><script src="salon-calendar-smart.js?v=11"></script></body></html>

@@ -69,5 +69,34 @@ function db(role) {
   assert.equal(loader.isCurrent(second), true);
   assert.deepEqual(JSON.parse(JSON.stringify(loader.monthBounds('2026-12-31'))),
     { start: '2026-12-01T00:00:00+03:00', end: '2027-01-01T00:00:00+03:00' });
+  assert.deepEqual(JSON.parse(JSON.stringify(loader.dayBounds('2026-12-31'))),
+    { start: '2026-12-31T00:00:00+03:00', end: '2027-01-01T00:00:00+03:00' });
+  rows = allRows.slice(0, 1200).concat(allRows.slice(49000, 49006));
+  let releaseMonth, dayReady;
+  const monthGate = new Promise(resolve => { releaseMonth = resolve; });
+  const daySignal = new Promise(resolve => { dayReady = resolve; });
+  const delayedDb = { from(table) {
+    const query = db('manager').from(table);
+    let lower = '', upper = '';
+    const gte = query.gte, lt = query.lt, then = query.then;
+    query.gte = function(column, value) { if (column === 'scheduled_at') lower = value; return gte.call(this, column, value); };
+    query.lt = function(column, value) { if (column === 'scheduled_at') upper = value; return lt.call(this, column, value); };
+    query.then = function(resolve, reject) {
+      if (lower === '2026-10-01T00:00:00+03:00' && upper === '2026-11-01T00:00:00+03:00')
+        return monthGate.then(() => then.call(this, resolve, reject));
+      return then.call(this, resolve, reject);
+    };
+    return query;
+  } };
+  const stages = [];
+  const pending = loader.load(delayedDb, '*', '2026-10-19',
+    visible => stages.push(['month', visible.length]),
+    day => { stages.push(['day', day.length]); dayReady(); });
+  await daySignal;
+  assert.deepEqual(stages, [['day', 6]], 'selected day appears while the month is still loading');
+  releaseMonth();
+  const priorityRows = await pending;
+  assert.deepEqual(stages, [['day', 6], ['month', 6]]);
+  assert.equal(priorityRows.length, 1206, 'background history completes without losing records');
   console.log('PASS 999 through 50,000 paginated appointments, late visible date, RLS-shaped employee result, generation and month rollover');
 })().catch(error => { console.error(error); process.exitCode = 1; });
