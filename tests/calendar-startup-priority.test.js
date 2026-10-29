@@ -12,6 +12,7 @@ const monthGate = new Promise(resolve => { releaseMonth = resolve; });
 let dayShown;
 const daySignal = new Promise(resolve => { dayShown = resolve; });
 const requests = [];
+const toasts = [];
 const rows = [{ id: 'today', client_name: 'Bugün' }, { id: 'older', client_name: 'Önce' }];
 const currentUser = { id: 'manager', role: 'yonetici' };
 const window = {
@@ -42,12 +43,13 @@ const SalonAppointmentData = {
 };
 const context = {
   window, currentUser, salonDb, SalonAppointmentData, Promise, Event,
+  salonCalendarToday: () => '2026-10-29',
   selectedTeamDate: () => '2026-10-29', teamCalendarMode: 'day',
   document: { getElementById: () => ({ classList: { contains: () => false } }) },
   remoteProfiles: [], remoteServices: [], remoteClients: [], staff: [], appts: [], clients: [], lastOperation: '',
   remoteAppointment: row => ({ id: row.id }), avatarFor: () => 'H',
   renderCalendar() {}, renderHomeSummary() {}, render() {}, renderUsers() {}, renderStatistics() {},
-  showAppToast(title) { throw Error('Unexpected toast: ' + title); }
+  showAppToast(title) { toasts.push(title); }
 };
 vm.runInNewContext(html.slice(begin, end), context);
 
@@ -64,5 +66,23 @@ vm.runInNewContext(html.slice(begin, end), context);
   assert.equal(window.salonHistoryState, 'ready');
   assert.equal(requests.includes('clients'), true);
   assert.equal(requests.includes('salon:data-ready'), true);
+  window.salonHistoryState = 'loading';
+  SalonAppointmentData.load = async (db, columns, date, onVisible, onDay) => {
+    await onDay(rows.slice(0, 1));
+    await onVisible(rows);
+    throw new Error('history offline');
+  };
+  await assert.rejects(context.reloadRemoteData(), /history offline/);
+  assert.equal(window.salonHistoryState, 'error');
+  assert.equal(window.salonCalendarLoadState.status, 'ready', 'history failure does not hide the loaded calendar');
+  assert.equal(toasts.at(-1), 'Geçmiş veriler yüklenemedi');
+  window.salonHistoryState = 'loading';
+  SalonAppointmentData.load = async (db, columns, date, onVisible, onDay) => {
+    await onDay(rows.slice(0, 1));
+    throw new Error('month offline');
+  };
+  await assert.rejects(context.reloadRemoteData(), /month offline/);
+  assert.equal(window.salonCalendarLoadState.status, 'ready', 'selected day stays usable if the month request fails');
+  assert.equal(toasts.at(-1), 'Ay verileri yüklenemedi');
   console.log('PASS selected day is visible before month, history and client list finish');
 })().catch(error => { console.error(error); process.exitCode = 1; });

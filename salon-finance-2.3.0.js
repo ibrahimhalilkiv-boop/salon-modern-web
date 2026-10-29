@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-window.SALON_APP_VERSION='2.3.16';
+window.SALON_APP_VERSION='2.3.17';
 var financeState={products:[],sales:[],movements:[],rules:[],closings:[],ledger:[],expenses:[],clients:[],cart:new Map(),salePrices:new Map(),saleDebt:false,saleClientId:'',saleClientQuery:'',pendingSale:null,pendingUsage:null,loaded:false,loading:false};
 var finance230Busy=false,finance230ConfirmResolver=null;
 var finance230DateRequest=0;

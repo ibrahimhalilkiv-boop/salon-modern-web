@@ -21,6 +21,12 @@
     return { start: date + 'T00:00:00+03:00', end: next.toISOString().slice(0, 10) + 'T00:00:00+03:00' };
   }
 
+  function calendarBounds(day, earliestDay) {
+    var bounds = monthBounds(day);
+    if (earliestDay) bounds.start = bounds.start > dayBounds(earliestDay).start ? bounds.start : dayBounds(earliestDay).start;
+    return bounds;
+  }
+
   async function pages(db, columns, start, end) {
     var rows = [];
     var cursor = null;
@@ -45,13 +51,14 @@
     }
   }
 
-  async function loadVisible(db, columns, day) {
-    var bounds = monthBounds(day);
+  async function loadVisible(db, columns, day, earliestDay) {
+    var bounds = calendarBounds(day, earliestDay);
+    if (bounds.start >= bounds.end) return [];
     return pages(db, columns, bounds.start, bounds.end);
   }
 
-  async function load(db, columns, day, onVisible, onDay) {
-    var bounds = monthBounds(day);
+  async function load(db, columns, day, onVisible, onDay, earliestDay) {
+    var bounds = calendarBounds(day, earliestDay);
     // Start the month request in parallel, but publish the selected day first.
     // A busy month can require several sequential pages before it is complete.
     var monthRequest = pages(db, columns, bounds.start, bounds.end)
@@ -74,5 +81,5 @@
     });
   }
 
-  window.SalonAppointmentData = { load: load, loadVisible: loadVisible, nextGeneration: nextGeneration, isCurrent: isCurrent, monthBounds: monthBounds, dayBounds: dayBounds };
+  window.SalonAppointmentData = { load: load, loadVisible: loadVisible, nextGeneration: nextGeneration, isCurrent: isCurrent, monthBounds: monthBounds, dayBounds: dayBounds, calendarBounds: calendarBounds };
 })();

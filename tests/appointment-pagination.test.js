@@ -71,6 +71,16 @@ function db(role) {
     { start: '2026-12-01T00:00:00+03:00', end: '2027-01-01T00:00:00+03:00' });
   assert.deepEqual(JSON.parse(JSON.stringify(loader.dayBounds('2026-12-31'))),
     { start: '2026-12-31T00:00:00+03:00', end: '2027-01-01T00:00:00+03:00' });
+  rows = Array.from({ length: 1205 }, (_, n) => ({ id: String(n).padStart(6, '0'), scheduled_at: '2026-10-30T10:00:00+03:00', status: 'confirmed', employee_id: 'manager' }))
+    .concat(Array.from({ length: 15 }, (_, n) => ({ id: String(1300 + n), scheduled_at: '2026-10-28T10:00:00+03:00', status: 'completed', employee_id: 'manager' })))
+    .concat([{ id: '999999', scheduled_at: '2026-10-30T10:00:00+03:00', status: 'cancelled', employee_id: 'manager' }]);
+  const upcoming = await loader.loadVisible(db('manager'), '*', '2026-10-29', '2026-10-29');
+  assert.equal(upcoming.length, 1205, 'calendar keeps over 1000 upcoming appointments');
+  assert.equal(new Set(upcoming.map(row => row.id)).size, 1205);
+  let upcomingPreview;
+  const history = await loader.load(db('manager'), '*', '2026-10-29', visible => { upcomingPreview = visible; }, null, '2026-10-29');
+  assert.equal(upcomingPreview.length, 1205, 'past and cancelled rows stay off the calendar');
+  assert.equal(history.length, 1220, 'past appointments remain available to finance and history');
   rows = allRows.slice(0, 1200).concat(allRows.slice(49000, 49006));
   let releaseMonth, dayReady;
   const monthGate = new Promise(resolve => { releaseMonth = resolve; });

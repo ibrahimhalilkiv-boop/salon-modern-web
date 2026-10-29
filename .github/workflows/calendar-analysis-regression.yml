@@ -17,8 +17,12 @@ on:
       - 'tests/bootstrap-auth.test.js'
       - 'supabase/migrations/**'
       - 'tests/appointment-pagination.test.js'
+      - 'tests/appointment-list-management.test.js'
+      - 'tests/finance-close-day.test.js'
+      - 'tests/finance-date-records.test.js'
       - 'tests/calendar-preview-race.test.js'
       - 'tests/calendar-startup-priority.test.js'
+      - 'tests/calendar-date-boundary.test.js'
       - 'tests/finance-startup-priority.test.js'
       - 'tests/smart-client-visit-summary.test.js'
       - '.github/workflows/calendar-analysis-regression.yml'
@@ -33,8 +37,12 @@ jobs:
         with:
           node-version: '22'
       - run: node tests/appointment-pagination.test.js
+      - run: node tests/appointment-list-management.test.js
+      - run: node tests/finance-close-day.test.js
+      - run: node tests/finance-date-records.test.js
       - run: node tests/calendar-preview-race.test.js
       - run: node tests/calendar-startup-priority.test.js
+      - run: node tests/calendar-date-boundary.test.js
       - run: node tests/finance-startup-priority.test.js
       - run: node tests/smart-client-visit-summary.test.js
       - run: node tests/client-load-race.test.js

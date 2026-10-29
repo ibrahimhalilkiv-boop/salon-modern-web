@@ -144,11 +144,12 @@ var preferAppointmentOnlyReload=false;
 async function refreshAppointmentsOnly(){
   if(!currentUser)return;
   var userId=currentUser.id,version=SalonAppointmentData.nextGeneration();
+  var previousCalendarState=window.salonCalendarLoadState;
   window.salonCalendarLoadState={status:'loading',date:selectedTeamDate()};
   if(document.getElementById('calendar')?.classList.contains('active'))renderCalendar();
   var rows;
-  try{rows=await SalonAppointmentData.load(salonDb,'*',selectedTeamDate())}
-  catch(error){if(SalonAppointmentData.isCurrent(version)){window.salonCalendarLoadState={status:'error',date:selectedTeamDate(),message:error.message||String(error)};renderCalendar()}throw error}
+  try{rows=await SalonAppointmentData.load(salonDb,'*',selectedTeamDate(),null,null,salonCalendarToday())}
+  catch(error){if(SalonAppointmentData.isCurrent(version)){window.salonCalendarLoadState=previousCalendarState?.status==='ready'?previousCalendarState:{status:'error',date:selectedTeamDate(),message:error.message||String(error)};renderCalendar()}throw error}
   if(!SalonAppointmentData.isCurrent(version)||currentUser?.id!==userId)return;
   appts=rows.map(function(row){var mapped=remoteAppointment(row);mapped.status=row.status;mapped.note=row.note||'';mapped.updatedBy=row.updated_by||null;mapped.debtOriginalAmount=Number(row.debt_original_amount||0);return mapped});
   window.salonHistoryState='ready';

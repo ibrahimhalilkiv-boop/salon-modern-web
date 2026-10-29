@@ -28,6 +28,7 @@ const closed = { select() { return this; }, lt() { return this; }, gt() { return
 const ctx = {
   window: { salonHistoryState: 'loading', salonCalendarPreviewMonth: '2026-09' },
   currentUser: { id: 'manager' }, appts: [{ id: 'old' }], remoteClosedSlots: [],
+  salonCalendarToday: () => '2026-10-20',
   selectedTeamDate: () => date, renderCalendar() {}, remoteAppointment: row => row,
   showAppToast() {}, salonDb: { from() { return closed; } },
   SalonAppointmentData: {
