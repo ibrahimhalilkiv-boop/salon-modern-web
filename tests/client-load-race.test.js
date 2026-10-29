@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('smart-customer-analysis-1.7.0.js', 'utf8');
 const pending = [];
-const ctx = vm.createContext({ currentUser: { id: 'first' }, remoteClients: [], clients: [],
+const ctx = vm.createContext({ currentUser: { id: 'first', role: 'yonetici' }, remoteClients: [], clients: [],
   salonDb: { from() {
     const query = { select() { return this; }, eq() { return this; }, order() { return this; },
       limit() { return this; }, gt() { return this; },
@@ -18,7 +18,7 @@ const row = name => ({ id: name, full_name: name, phone: 'shared-phone' });
   const first = ctx.smartLoadActiveClients();
   assert.equal(ctx.smartLoadActiveClients(), first, 'Same user shares one in-flight read');
   await tick();
-  ctx.currentUser = { id: 'second' };
+  ctx.currentUser = { id: 'second', role: 'yonetici' };
   const second = ctx.smartLoadActiveClients();
   await tick();
   assert.equal(pending.length, 2, 'New login must issue its own authorized read');

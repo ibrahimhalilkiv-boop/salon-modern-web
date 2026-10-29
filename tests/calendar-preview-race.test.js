@@ -8,10 +8,12 @@ assert(source.includes('window.salonPreviewCalendarMonth=async function()'));
 assert(html.includes("window.salonHistoryState!=='ready'&&target!=='calendar'"));
 assert.doesNotMatch(html,/from\('appointments'\)\.select\('\*'\)\.neq\('status','cancelled'\)\.order\('scheduled_at'\)/,
   'Unpaged legacy appointment reader must not return');
-assert.match(html,/salon-appointment-data\.js\?v=150/);
+const loaderAsset = html.match(/salon-appointment-data\.js\?v=\d+/)?.[0];
+assert.ok(loaderAsset, 'Calendar data loader must be versioned');
 const worker = fs.readFileSync('sw.js','utf8');
 const listAsset = html.match(/appointment-list-management-2\.4\.4\.js\?v=\d+/)?.[0];
 assert.match(worker,/salon-modern-shell-pwa-v\d+/);
+assert.ok(worker.includes(loaderAsset), 'App and service worker must cache the same calendar data loader');
 assert.ok(listAsset && worker.includes(listAsset), 'App and service worker must cache the same appointment manager script');
 const performance=fs.readFileSync('salon-performance-2.3.14.js','utf8');
 assert.match(performance,/status==='SUBSCRIBED'[\s\S]*subscribedOnce[\s\S]*appointment-reconnect/,

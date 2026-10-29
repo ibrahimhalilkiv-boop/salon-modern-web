@@ -5,6 +5,7 @@ on:
     paths:
       - 'salon-appointment-data.js'
       - 'salon-modern.html'
+      - 'salon-finance-2.3.0.js'
       - 'salon-performance-2.3.14.js'
       - 'salon-ui-fixes-2.3.16.js'
       - 'smart-customer-analysis-1.7.0.js'
@@ -17,6 +18,8 @@ on:
       - 'supabase/migrations/**'
       - 'tests/appointment-pagination.test.js'
       - 'tests/calendar-preview-race.test.js'
+      - 'tests/calendar-startup-priority.test.js'
+      - 'tests/finance-startup-priority.test.js'
       - 'tests/smart-client-visit-summary.test.js'
       - '.github/workflows/calendar-analysis-regression.yml'
   pull_request:
@@ -31,6 +34,8 @@ jobs:
           node-version: '22'
       - run: node tests/appointment-pagination.test.js
       - run: node tests/calendar-preview-race.test.js
+      - run: node tests/calendar-startup-priority.test.js
+      - run: node tests/finance-startup-priority.test.js
       - run: node tests/smart-client-visit-summary.test.js
       - run: node tests/client-load-race.test.js
       - run: node tests/calendar-price-index.test.js

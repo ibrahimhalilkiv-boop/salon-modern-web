@@ -18,6 +18,7 @@ const ctx = {
   uniqueRemoteClients: () => clients,
   renderSmartAnalysisPage() {}, renderSmartDailyPanels() {}, renderCustomerReturnAlerts() {}, renderCustomerDetail() {}
 };
+ctx.window = ctx;
 vm.createContext(ctx);
 vm.runInContext(core, ctx);
 vm.runInContext("smartToday=function(){return '2026-10-20'}", ctx);
