@@ -141,6 +141,8 @@ async function requestPhoneCode(req: Request) {
   if (!customerPhone || !normalizedName) return reply(req, { error: 'Ad soyad ve telefon numaranızı kontrol edin.' }, 400)
   const config = ycloudOtpConfig()
   if (!config) return reply(req, { error: 'WhatsApp doğrulaması şu anda kullanılamıyor.' }, 503)
+  if (`+${customerPhone}` === config.sender)
+    return reply(req, { error: 'Bu numara Salon Modern’in WhatsApp gönderici numarasıdır. Doğrulama için farklı bir WhatsApp numarası girin.' }, 400)
   const ip = (req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown').split(',')[0].trim()
   const id = crypto.randomUUID(), code = randomOtp()
   const [phoneHash, nameHash, ipHash, codeHash] = await Promise.all([
@@ -161,15 +163,23 @@ async function requestPhoneCode(req: Request) {
   const payload = { from: config.sender, to: `+${customerPhone}`, type: 'template', externalId: id,
     template: { name: OTP_TEMPLATE, language: { code: 'tr' }, components: [
       { type: 'body', parameters: [{ type: 'text', text: code }] },
-      { type: 'button', sub_type: 'url', index: 0, parameters: [{ type: 'text', text: code }] },
+      { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
     ] } }
   let delivery: 'sent' | 'failed' | 'unknown' = 'unknown', messageId: string | null = null
+  let providerStatus: number | null = null, providerCode: string | null = null
   try {
     const response = await fetch('https://api.ycloud.com/v2/whatsapp/messages/sendDirectly', {
       method: 'POST', headers: { 'X-API-Key': config.key, 'Content-Type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(payload), signal: AbortSignal.timeout(10000),
     })
-    if (!response.ok) delivery = 'failed'
+    providerStatus = response.status
+    if (!response.ok) {
+      delivery = 'failed'
+      const result = await response.json().catch(() => null)
+      const codeValue = result?.code ?? result?.error?.code ?? result?.error?.whatsappApiError?.code
+      if (typeof codeValue === 'string' || typeof codeValue === 'number')
+        providerCode = String(codeValue).slice(0, 40).replace(/[^a-zA-Z0-9_.-]/g, '')
+    }
     else {
       const result = await response.json()
       if (result?.status === 'failed') delivery = 'failed'
@@ -178,7 +188,7 @@ async function requestPhoneCode(req: Request) {
   } catch { /* A timeout may happen after acceptance; never resend automatically. */ }
   const marked = await db.rpc('mark_customer_phone_verification_delivery', { p_id: id, p_status: delivery, p_message_id: messageId })
   if (marked.error) throw marked.error
-  if (delivery === 'failed') return reply(req, { error: 'WhatsApp kodu gönderilemedi. Lütfen daha sonra tekrar deneyin.' }, 503)
+  if (delivery === 'failed') return reply(req, { error: 'WhatsApp kodu gönderilemedi. Lütfen daha sonra tekrar deneyin.', providerStatus, providerCode }, 503)
   return reply(req, { challenge: id, message: 'WhatsApp kodunu bekleyin. Kod 5 dakika geçerlidir.' })
 }
 
