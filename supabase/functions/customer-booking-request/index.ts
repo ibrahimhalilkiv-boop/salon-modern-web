@@ -63,6 +63,154 @@ function minuteLabel(minutes: number) {
 
 const CUSTOMER_CONTACT_MESSAGE = 'Online randevu oluşturma işleminiz için lütfen Salon Modern ile iletişime geçiniz.'
 const CUSTOMER_CHANGE_CUTOFF_MESSAGE = 'Randevunuza 2 saatten az kaldığı için online değişiklik veya iptal yapılamamaktadır. Lütfen Salon Modern ile iletişime geçiniz.'
+const OTP_TEMPLATE = 'salon_modern_giris_kodu'
+let otpTemplateCache = { until: 0, ready: false }
+const NEW_CUSTOMER_EMPLOYEES = new Set([
+  'd2bc11fe-e0dd-4609-bd26-f691ef049e32', // Cengiz
+  '5fdd9b99-9669-4e36-9183-1380d61ea5bb', // Talip
+])
+
+function normalizedCustomerName(value: unknown) {
+  const name = clean(value, 120).normalize('NFKC').replace(/\s+/g, ' ').trim()
+  return name.split(' ').length >= 2 ? name.toLocaleLowerCase('tr-TR') : ''
+}
+
+async function otpHash(value: string) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SERVICE_ROLE_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const raw = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(raw)).map((n) => n.toString(16).padStart(2, '0')).join('')
+}
+
+function randomOtp() {
+  const values = new Uint32Array(1)
+  const limit = Math.floor(0x100000000 / 1000000) * 1000000
+  do crypto.getRandomValues(values); while (values[0] >= limit)
+  return String(values[0] % 1000000).padStart(6, '0')
+}
+
+function randomSession() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(32))).map((n) => n.toString(16).padStart(2, '0')).join('')
+}
+
+function ycloudOtpConfig() {
+  const key = Deno.env.get('YCLOUD_API_KEY') || ''
+  const waba = Deno.env.get('YCLOUD_WABA_ID') || ''
+  const sender = Deno.env.get('YCLOUD_PHONE_NUMBER') || ''
+  return key && /^\d+$/.test(waba) && /^\+[1-9]\d{7,14}$/.test(sender) ? { key, waba, sender } : null
+}
+
+async function approvedOtpTemplate(config: { key: string, waba: string }) {
+  if (otpTemplateCache.until > Date.now()) return otpTemplateCache.ready
+  const response = await fetch(`https://api.ycloud.com/v2/whatsapp/templates/${config.waba}/${OTP_TEMPLATE}/tr`, {
+    headers: { 'X-API-Key': config.key, accept: 'application/json' }, signal: AbortSignal.timeout(5000),
+  })
+  const template = response.ok ? await response.json() : null
+  const ready = String(template?.wabaId) === config.waba && template?.name === OTP_TEMPLATE
+    && template?.language === 'tr' && template?.category === 'AUTHENTICATION' && template?.status === 'APPROVED'
+  otpTemplateCache = { until: Date.now() + 60_000, ready }
+  return ready
+}
+
+async function verifiedPhoneSession(body: Record<string, unknown>) {
+  const customerPhone = phone(body.phone)
+  const normalizedName = normalizedCustomerName(body.name)
+  const token = String(body.session || '')
+  if (!customerPhone || !normalizedName || !/^[a-f0-9]{64}$/.test(token)) return null
+  const [sessionHash, phoneHash, nameHash] = await Promise.all([
+    sha256(token), otpHash(`phone:${customerPhone}`), otpHash(`name:${normalizedName}`),
+  ])
+  const valid = await db.rpc('customer_phone_session_valid', {
+    p_session_hash: sessionHash, p_phone_hash: phoneHash, p_name_hash: nameHash,
+  })
+  if (valid.error) throw valid.error
+  return valid.data === true ? { customerPhone, normalizedName } : null
+}
+
+async function bookingEmployees(customerPhone: string, customerName: string) {
+  const [registered, profiles] = await Promise.all([
+    db.rpc('online_booking_customer_registered', { p_phone: customerPhone, p_name: customerName }),
+    db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern').order('full_name'),
+  ])
+  if (registered.error || profiles.error) throw registered.error || profiles.error
+  return (profiles.data || []).filter((profile) => registered.data === true || NEW_CUSTOMER_EMPLOYEES.has(profile.id))
+}
+
+async function requestPhoneCode(req: Request) {
+  const body = await req.json().catch(() => ({}))
+  const customerPhone = phone(body.phone), normalizedName = normalizedCustomerName(body.name)
+  if (!customerPhone || !normalizedName) return reply(req, { error: 'Ad soyad ve telefon numaranızı kontrol edin.' }, 400)
+  const config = ycloudOtpConfig()
+  if (!config) return reply(req, { error: 'WhatsApp doğrulaması şu anda kullanılamıyor.' }, 503)
+  const ip = (req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown').split(',')[0].trim()
+  const id = crypto.randomUUID(), code = randomOtp()
+  const [phoneHash, nameHash, ipHash, codeHash] = await Promise.all([
+    otpHash(`phone:${customerPhone}`), otpHash(`name:${normalizedName}`),
+    otpHash(`ip:${ip}`), otpHash(`code:${id}:${code}`),
+  ])
+  const issue = await db.rpc('begin_customer_phone_verification', {
+    p_id: id, p_phone_hash: phoneHash, p_name_hash: nameHash, p_ip_hash: ipHash, p_code_hash: codeHash,
+  })
+  if (issue.error) throw issue.error
+  if (issue.data !== true) return reply(req, { error: 'Çok fazla kod istendi. Lütfen biraz sonra tekrar deneyin.' }, 429)
+  let templateReady = false
+  try { templateReady = await approvedOtpTemplate(config) } catch { /* Provider lookup failed. */ }
+  if (!templateReady) {
+    await db.rpc('mark_customer_phone_verification_delivery', { p_id: id, p_status: 'failed' })
+    return reply(req, { error: 'WhatsApp doğrulaması şu anda kullanılamıyor.' }, 503)
+  }
+  const payload = { from: config.sender, to: `+${customerPhone}`, type: 'template', externalId: id,
+    template: { name: OTP_TEMPLATE, language: { code: 'tr' }, components: [
+      { type: 'body', parameters: [{ type: 'text', text: code }] },
+      { type: 'button', sub_type: 'url', index: 0, parameters: [{ type: 'text', text: code }] },
+    ] } }
+  let delivery: 'sent' | 'failed' | 'unknown' = 'unknown', messageId: string | null = null
+  try {
+    const response = await fetch('https://api.ycloud.com/v2/whatsapp/messages/sendDirectly', {
+      method: 'POST', headers: { 'X-API-Key': config.key, 'Content-Type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(10000),
+    })
+    if (!response.ok) delivery = 'failed'
+    else {
+      const result = await response.json()
+      if (result?.status === 'failed') delivery = 'failed'
+      else if (result?.id && result?.externalId === id) { delivery = 'sent'; messageId = String(result.id) }
+    }
+  } catch { /* A timeout may happen after acceptance; never resend automatically. */ }
+  const marked = await db.rpc('mark_customer_phone_verification_delivery', { p_id: id, p_status: delivery, p_message_id: messageId })
+  if (marked.error) throw marked.error
+  if (delivery === 'failed') return reply(req, { error: 'WhatsApp kodu gönderilemedi. Lütfen daha sonra tekrar deneyin.' }, 503)
+  return reply(req, { challenge: id, message: 'WhatsApp kodunu bekleyin. Kod 5 dakika geçerlidir.' })
+}
+
+async function verifyPhoneCode(req: Request) {
+  const body = await req.json().catch(() => ({}))
+  if (!validUuid(String(body.challenge || '')) || !/^\d{6}$/.test(String(body.code || '')))
+    return reply(req, { error: 'Kod geçersiz veya süresi dolmuş.' }, 400)
+  const session = randomSession()
+  const [codeHash, sessionHash] = await Promise.all([
+    otpHash(`code:${body.challenge}:${body.code}`), sha256(session),
+  ])
+  const result = await db.rpc('finish_customer_phone_verification', {
+    p_id: body.challenge, p_code_hash: codeHash, p_session_hash: sessionHash,
+  })
+  if (result.error) throw result.error
+  if (result.data !== true) return reply(req, { error: 'Kod geçersiz veya süresi dolmuş.' }, 401)
+  return reply(req, { session, expiresInSeconds: 1800 })
+}
+
+async function bookingIdentity(req: Request) {
+  const body = await req.json().catch(() => ({}))
+  const identity = await verifiedPhoneSession(body)
+  if (!identity) return reply(req, { error: 'Telefon doğrulaması geçersiz veya süresi dolmuş.' }, 401)
+  return reply(req, { employees: await bookingEmployees(identity.customerPhone, String(body.name || '')) })
+}
+
+async function verificationReady(req: Request) {
+  const config = ycloudOtpConfig()
+  if (!config) return reply(req, { available: false })
+  try { return reply(req, { available: await approvedOtpTemplate(config) }) }
+  catch { return reply(req, { available: false }) }
+}
 
 async function bookingSchedule(date: string) {
   const [settings, override] = await Promise.all([
@@ -156,6 +304,15 @@ async function createRequest(req: Request) {
   if (customerName.length < 3 || !customerPhone || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) || !/^\d{2}:\d{2}$/.test(time)) {
     return reply(req, { error: 'Bilgileri kontrol edin.' }, 400)
   }
+  const verificationSetting = await db.from('booking_settings').select('online_booking_verification_enabled').eq('id', true).maybeSingle()
+  if (verificationSetting.error) throw verificationSetting.error
+  if (verificationSetting.data?.online_booking_verification_enabled === true) {
+    const identity = await verifiedPhoneSession({ phone: customerPhone, name: customerName, session: body.verificationSession })
+    if (!identity) return reply(req, { error: 'Telefon doğrulaması geçersiz veya süresi dolmuş. Sayfayı yenileyin.' }, 401)
+    const allowedEmployees = await bookingEmployees(customerPhone, customerName)
+    if (!employeeId || !allowedEmployees.some((item) => item.id === employeeId))
+      return reply(req, { error: 'Bu müşteri için uygun çalışan seçin.' }, 403)
+  }
   const startAt = slotIso(requestedDate, time)
   if (submissionToken) {
     const existing = await db.from('online_booking_requests').select('id,public_token,status,client_name,phone_normalized,service_id,employee_id,scheduled_at').eq('public_token', submissionToken).maybeSingle()
@@ -185,11 +342,6 @@ async function createRequest(req: Request) {
   if (phoneCount.error || ipCount.error || service.error) throw phoneCount.error || ipCount.error || service.error
   if ((phoneCount.count || 0) >= 3 || (ipCount.count || 0) >= 10) return reply(req, { error: 'Çok fazla talep gönderildi. Lütfen daha sonra deneyin.' }, 429)
   if (!service.data) return reply(req, { error: 'Hizmet bulunamadı.' }, 404)
-  if (employeeId) {
-    const profile = await db.from('profiles').select('id').eq('id', employeeId).eq('active', true).maybeSingle()
-    if (!profile.data) return reply(req, { error: 'Çalışan bulunamadı.' }, 404)
-  }
-
   const availabilityUrl = new URL(req.url)
   availabilityUrl.searchParams.set('date', requestedDate)
   availabilityUrl.searchParams.set('service', serviceId)
@@ -338,11 +490,15 @@ Deno.serve(async (req) => {
     const url = new URL(req.url)
     const action = url.searchParams.get('action') || ''
     if (req.method === 'GET' && action === 'catalogue') return await catalogue(req)
+    if (req.method === 'GET' && action === 'verification-ready') return await verificationReady(req)
     if (req.method === 'GET' && action === 'availability') return await availability(req, url)
     if (req.method === 'GET' && action === 'status') return await publicStatus(req, url.searchParams.get('token') || '')
     if (req.method === 'GET' && action === 'customer-availability') return await customerAvailability(req, url)
     if (req.method === 'GET' && action === 'admin-list') return await adminList(req)
     if (req.method === 'POST' && action === 'create') return await createRequest(req)
+    if (req.method === 'POST' && action === 'phone-request-code') return await requestPhoneCode(req)
+    if (req.method === 'POST' && action === 'phone-verify-code') return await verifyPhoneCode(req)
+    if (req.method === 'POST' && action === 'booking-identity') return await bookingIdentity(req)
     if (req.method === 'POST' && (action === 'customer-update' || action === 'customer-cancel')) return await customerAction(req, action === 'customer-update' ? 'update' : 'cancel')
     if (req.method === 'POST' && (action === 'approve' || action === 'reject' || action === 'update')) return await adminAction(req, action)
     return reply(req, { error: 'İşlem bulunamadı.' }, 404)

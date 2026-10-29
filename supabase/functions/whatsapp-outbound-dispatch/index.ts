@@ -183,6 +183,9 @@ async function processReturnDelivery(db: any, delivery: any) {
 }
 
 async function processDelivery(db: any, delivery: any) {
+  if (delivery.template_key === "appointment_thank_you") return db.from("whatsapp_message_logs")
+    .update({ status: "skipped_event_invalid", last_error: "automatic_thank_you_disabled", updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
   if (delivery.template_key === "customer_return_reminder") return processReturnDelivery(db, delivery);
   const appointmentResult = await db.from("appointments").select("id,client_id,client_name,client_phone,service_name,amount,employee_id,scheduled_at,status,reminder_eligible,reminder_target_at,completed_at").eq("id", delivery.appointment_id).maybeSingle();
   const appointment = appointmentResult.data;
@@ -325,16 +328,13 @@ Deno.serve(async (request) => {
   const url = Deno.env.get("SUPABASE_URL") ?? "", key = getAdminKey();
   if (!url || !key) return json({ ok: false, error: "server_not_configured" }, 503);
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const [reminders, thankYous] = await Promise.all([
-    db.rpc("whatsapp_enqueue_due_reminders"),
-    db.rpc("whatsapp_enqueue_due_thank_yous"),
-  ]);
+  const reminders = await db.rpc("whatsapp_enqueue_due_reminders");
   const claimed = await db.rpc("whatsapp_claim_message_logs", { p_limit: 25 });
-  if (reminders.error || thankYous.error || claimed.error) return json({ ok: false, error: reminders.error?.message ?? thankYous.error?.message ?? claimed.error?.message }, 500);
+  if (reminders.error || claimed.error) return json({ ok: false, error: reminders.error?.message ?? claimed.error?.message }, 500);
   const outcomes = [];
   for (const delivery of claimed.data ?? []) {
     try { await processDelivery(db, delivery); outcomes.push({ id: delivery.id, ok: true }); }
     catch (error) { await db.from("whatsapp_message_logs").update({ status: "failed", last_error: error instanceof Error ? error.message : String(error), updated_at: new Date().toISOString() }).eq("id", delivery.id); outcomes.push({ id: delivery.id, ok: false }); }
   }
-  return json({ ok: true, safe_mode: SAFE_MODE, queued: { reminders: reminders.data, thank_yous: thankYous.data }, processed: outcomes });
+  return json({ ok: true, safe_mode: SAFE_MODE, queued: { reminders: reminders.data, thank_yous: { appointment_thank_yous_enqueued: 0 } }, processed: outcomes });
 });
