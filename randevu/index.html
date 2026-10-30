@@ -35,15 +35,11 @@
           <div id="services" class="choice-grid"><p class="loading">Hizmetler yükleniyor…</p></div>
         </section>
         <section class="step" data-step="2">
-          <small>2 / 6</small><h2>Telefonunuzu doğrulayın</h2>
+          <small>2 / 6</small><h2>İletişim bilgilerinizi girin</h2>
           <label>Ad Soyad<input id="customerName" autocomplete="name" maxlength="120" required placeholder="Adınız ve soyadınız"></label>
           <label>WhatsApp telefon numarası<input id="customerPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="17" required placeholder="05XX XXX XX XX"></label>
-          <div class="verification-actions"><button type="button" id="requestCodeButton">WhatsApp kodu gönder</button></div>
-          <div id="codeEntry" hidden>
-            <label>Doğrulama kodu<input id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 haneli kod"></label>
-            <div class="verification-actions"><button type="button" id="verifyCodeButton">Kodu doğrula</button></div>
-          </div>
-          <p id="verificationMessage" class="hint" role="status" aria-live="polite"></p>
+          <p class="hint">Doğrulama kodu gönderilmeyecek. Talebiniz yönetici onayına sunulur.</p>
+          <div class="verification-actions"><button type="button" id="continueCustomerButton">Çalışan seçimine devam et</button></div>
         </section>
         <section class="step" data-step="3">
           <small>3 / 6</small><h2>Çalışan tercihi</h2>
@@ -86,6 +82,6 @@
 
     <footer><a href="durum/">Randevumun durumunu kontrol et</a><br><a href="../salon-modern.html">Personel Girişi</a><br><a href="https://salonmodern.com.tr/">Salon Modern web sitesine dön</a></footer>
   </main>
-  <script src="booking.js?v=181"></script>
+  <script src="booking.js?v=182"></script>
 </body>
 </html>

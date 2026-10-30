@@ -17,8 +17,6 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     await page.route('https://oxuwwjsakhcqimjsfris.supabase.co/**', route => {
       const action = new URL(route.request().url()).searchParams.get('action');
       if (action === 'catalogue') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ services: [{ id: 's1', name: 'Saç sakal ağda maske yıkama ve uzun hizmet adı', price: 1000 }], employees: [] }) });
-      if (action === 'phone-request-code') { codeRequests++; return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ challenge: '11111111-1111-4111-8111-111111111111', message: 'Kod gönderildi' }) }); }
-      if (action === 'phone-verify-code') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session: 'a'.repeat(64), expiresInSeconds: 1800 }) });
       if (action === 'booking-identity') { const registered = JSON.parse(route.request().postData()).name === 'Kayıtlı Müşteri'; return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ employees: registered ? [{ id: 'c1', full_name: 'Cengiz' }, { id: 'h1', full_name: 'Halil' }, { id: 'm1', full_name: 'Mehmet' }, { id: 't1', full_name: 'Talip' }] : [{ id: 'c1', full_name: 'Cengiz' }, { id: 't1', full_name: 'Talip' }] }) }); }
       assert.equal(route.request().method(), 'GET', 'The test must not create a real appointment');
       assert.equal(action, 'availability');
@@ -40,12 +38,10 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     assert.equal(await page.locator('#nextButton').isVisible(), false);
     await page.locator('#customerName').fill('Örnek Müşteri');
     await page.locator('#customerPhone').fill('0555 111 22 33');
-    await page.locator('#requestCodeButton').click();
-    await page.locator('#otpCode').fill('123456');
-    await page.locator('#verifyCodeButton').click();
+    await page.locator('#continueCustomerButton').click();
     await page.locator('.step[data-step="3"]').waitFor({ state: 'visible' });
     assert(await page.locator('.step[data-step="3"]').isVisible());
-    assert.equal(codeRequests, 1);
+    assert.equal(codeRequests, 0, 'No verification code should be requested');
     assert.deepEqual(await page.locator('#employees button').allInnerTexts(), ['Cengiz', 'Talip']);
     await page.locator('#employees button').first().click();
     assert(await page.locator('.step[data-step="4"]').isVisible());
@@ -70,12 +66,10 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     await page.locator('#backButton').click();
     await page.locator('#backButton').click();
     await page.locator('#customerName').fill('Kayıtlı Müşteri');
-    await page.locator('#requestCodeButton').click();
-    await page.locator('#otpCode').fill('123456');
-    await page.locator('#verifyCodeButton').click();
+    await page.locator('#continueCustomerButton').click();
     await page.locator('.step[data-step="3"]').waitFor({ state: 'visible' });
     assert.deepEqual(await page.locator('#employees button').allInnerTexts(), ['Cengiz', 'Halil', 'Mehmet', 'Talip']);
-    assert.equal(codeRequests, 2);
-    console.log('PASS online booking form: mobile price, WhatsApp verification, staff routing, empty slots, back and employee reselection');
+    assert.equal(codeRequests, 0, 'No verification code should be requested');
+    console.log('PASS online booking form: mobile price, code-free customer details, staff routing, empty slots, back and employee reselection');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
