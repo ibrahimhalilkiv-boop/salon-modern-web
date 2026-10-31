@@ -29,11 +29,12 @@ const ctx = {
   window: { salonHistoryState: 'loading', salonCalendarPreviewMonth: '2026-09' },
   currentUser: { id: 'manager' }, appts: [{ id: 'old' }], remoteClosedSlots: [],
   salonCalendarToday: () => '2026-10-20',
+  salonCalendarEarliestDay: () => '2026-10-19',
   selectedTeamDate: () => date, renderCalendar() {}, remoteAppointment: row => row,
   showAppToast() {}, salonDb: { from() { return closed; } },
   SalonAppointmentData: {
     monthBounds(day) { return { start: day.slice(0, 7) + '-01', end: day.slice(0, 7) + '-31' }; },
-    loadVisible(db, columns, day) { return new Promise((resolve, reject) => pending.set(day, { resolve, reject })); }
+    loadVisible(db, columns, day, earliest) { assert.equal(earliest, '2026-10-19'); return new Promise((resolve, reject) => pending.set(day, { resolve, reject })); }
   }
 };
 vm.createContext(ctx);
