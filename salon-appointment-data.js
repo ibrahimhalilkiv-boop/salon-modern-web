@@ -59,15 +59,16 @@
 
   async function load(db, columns, day, onVisible, onDay, earliestDay) {
     var bounds = calendarBounds(day, earliestDay);
-    // Start the month request in parallel, but publish the selected day first.
-    // A busy month can require several sequential pages before it is complete.
-    var monthRequest = pages(db, columns, bounds.start, bounds.end)
-      .then(function (rows) { return { rows: rows }; }, function (error) { return { error: error }; });
+    // Prioritize the selected day's query on cold startup. Month paging
+    // starts only after the day is shown, so it cannot compete with first paint.
+    // Both paths still use stable keyset pagination; no appointments are omitted.
     if (onDay) {
       var today = dayBounds(day);
       var dayRows = await pages(db, columns, today.start, today.end);
       await onDay(dayRows);
     }
+    var monthRequest = pages(db, columns, bounds.start, bounds.end)
+      .then(function (rows) { return { rows: rows }; }, function (error) { return { error: error }; });
     var monthResult = await monthRequest;
     if (monthResult.error) throw monthResult.error;
     var visible = monthResult.rows;
