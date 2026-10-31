@@ -282,7 +282,7 @@ function finance230ExpensesByMonthHtml(expenses){
   var groups=new Map();
   expenses.forEach(function(row){
     var month=String(row.entry_date||'').slice(0,7);
-    if(!/^\\d{4}-\\d{2}$/.test(month))return;
+    if(!/^\d{4}-\d{2}$/.test(month))return;
     if(!groups.has(month))groups.set(month,{rows:[],total:0});
     var group=groups.get(month);
     group.rows.push(row);
