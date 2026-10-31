@@ -29,7 +29,7 @@ const APP_SHELL = [
   './staff-performance-20261031.js?v=4',
   './salon-holiday-hours-20261101.js?v=1',
   './salon-debt-visibility-2.3.15.js',
-  './salon-ui-fixes-2.3.16.js?v=150',
+  './salon-ui-fixes-2.3.16.js?v=151',
   './appointment-management-2.3.26.js?v=127',
   './salon-web-push.js?v=180',
   './salon-menu-order.js?v=153',
