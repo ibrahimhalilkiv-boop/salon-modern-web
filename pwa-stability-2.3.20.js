@@ -66,6 +66,14 @@
   function setState(next) {
     authState = next;
     document.documentElement.dataset.authState = next;
+    // Native splash and signed-out screen are light. Restore the familiar
+    // dark green status bar only when the management app is visible.
+    var theme = document.querySelector?.('meta[name="theme-color"]');
+    if (theme) {
+      var appVisible = next === AUTH.AUTHENTICATED ||
+        (next === AUTH.TEMPORARY_NETWORK_ERROR && typeof currentUser !== 'undefined' && !!currentUser);
+      theme.setAttribute('content', appVisible ? '#0d2925' : '#f7f6f1');
+    }
     window.dispatchEvent(new CustomEvent('salon:auth-state', { detail: { state: next } }));
   }
 
