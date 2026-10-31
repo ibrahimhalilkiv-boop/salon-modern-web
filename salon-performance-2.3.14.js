@@ -124,7 +124,7 @@ renderStatistics=function(){
   if(!currentUser||currentUser.role!=='yonetici')return result;
   var start=document.getElementById('statsStart')?.value||localDate(0),end=document.getElementById('statsEnd')?.value||start,worker=document.getElementById('statsWorker')?.value||'Tümü';
   if(end<start){var swap=start;start=end;end=swap;}
-  var sorted=visibleAppointments().filter(function(item){var day=appointmentDate(item);return day>=start&&day<=end&&(worker==='Tümü'||item.staff===worker)}).sort(function(a,b){return (appointmentDate(a)+' '+String(a.time||'')).localeCompare(appointmentDate(b)+' '+String(b.time||''))});
+  var sorted=visibleAppointments().filter(function(item){var day=appointmentDate(item);return item.status==='completed'&&(!item.scheduledAt||Date.parse(item.scheduledAt)<=Date.now())&&day>=start&&day<=end&&(worker==='Tümü'||item.staff===worker)}).sort(function(a,b){return (appointmentDate(a)+' '+String(a.time||'')).localeCompare(appointmentDate(b)+' '+String(b.time||''))});
   document.querySelectorAll('#statsAppointmentDetails .stats-customer-row').forEach(function(row,index){
     var item=sorted[index];if(!item)return;
     row.classList.add('stats-price-editable');row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label',(item.customer||'Müşteri')+' ücretini güncelle');
