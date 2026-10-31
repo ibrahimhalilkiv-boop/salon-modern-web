@@ -640,7 +640,7 @@ function calendarEmployeeColor(name){
 }
 function pickTeamMonth(){
   var picker=document.getElementById('teamCalendarMonthPicker');
-  if(!picker){picker=document.createElement('input');picker.id='teamCalendarMonthPicker';picker.type='month';picker.setAttribute('aria-label','Ay seç');picker.style.cssText='position:fixed;left:8px;top:8px;width:1px;height:1px;opacity:0;pointer-events:none';picker.onchange=function(){if(!picker.value||picker.value<salonCalendarEarliestDay().slice(0,7))return;teamCalendarDate=picker.value+'-01';teamCalendarMode='month';window.salonPreviewCalendarMonth?window.salonPreviewCalendarMonth():renderCalendar()};document.body.appendChild(picker)}
+  if(!picker){picker=document.createElement('input');picker.id='teamCalendarMonthPicker';picker.type='month';picker.setAttribute('aria-label','Ay seç');picker.style.cssText='position:fixed;left:8px;top:8px;width:1px;height:1px;opacity:0;pointer-events:none';picker.onchange=function(){var today=salonCalendarToday(),earliest=salonCalendarEarliestDay();if(!picker.value||picker.value<earliest.slice(0,7))return;teamCalendarDate=picker.value===earliest.slice(0,7)&&picker.value!==today.slice(0,7)?earliest:picker.value+'-01';teamCalendarMode='month';window.salonPreviewCalendarMonth?window.salonPreviewCalendarMonth():renderCalendar()};document.body.appendChild(picker)}
   picker.min=salonCalendarEarliestDay().slice(0,7);
   picker.value=selectedTeamDate().slice(0,7);
   if(typeof picker.showPicker==='function')picker.showPicker();else picker.click();
