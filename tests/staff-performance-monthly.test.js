@@ -1,0 +1,37 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+
+const code=fs.readFileSync('staff-performance-20261031.js','utf8');
+const main=fs.readFileSync('salon-modern.html','utf8');
+const cache=fs.readFileSync('sw.js','utf8');
+const start=code.indexOf('function monthBounds(');
+const stop=code.indexOf('function install(',start);
+assert.ok(start>0&&stop>start,'Pure monthly utility functions must exist');
+const helpers=code.slice(start,stop)+'\nreturn {monthBounds,shiftMonthValue,monthLabel};';
+const forDate=date=>new Function('currentDate',helpers)(()=>date);
+const today=forDate('2026-10-31');
+
+assert.deepEqual(today.monthBounds('2026-10'),{start:'2026-10-01',end:'2026-10-31'});
+assert.deepEqual(today.monthBounds('2026-09'),{start:'2026-09-01',end:'2026-09-30'});
+assert.deepEqual(today.monthBounds('2024-02'),{start:'2024-02-01',end:'2024-02-29'});
+assert.deepEqual(today.monthBounds('2025-02'),{start:'2025-02-01',end:'2025-02-28'});
+assert.deepEqual(today.monthBounds('2025-12'),{start:'2025-12-01',end:'2025-12-31'});
+assert.deepEqual(forDate('2026-10-20').monthBounds('2026-10'),{start:'2026-10-01',end:'2026-10-20'});
+assert.throws(()=>today.monthBounds('2026-11'),/İleri tarihli/);
+assert.throws(()=>today.monthBounds('2026-00'),/Geçerli bir ay/);
+assert.throws(()=>today.monthBounds('wrong'),/Geçerli bir ay/);
+assert.equal(today.shiftMonthValue('2026-12',1),'2027-01');
+assert.equal(today.shiftMonthValue('2026-01',-1),'2025-12');
+assert.match(today.monthLabel('2026-10'),/Ekim 2026/i);
+assert.match(code,/id="performanceMonth" type="month"/);
+assert.match(code,/id="performancePrevMonth"/);
+assert.match(code,/id="performanceNextMonth"/);
+assert.match(code,/performanceMonth'\)\.onchange/);
+assert.match(code,/p_start:start,p_end:end,p_employee_id:null/);
+assert.match(code,/label\)+' tamamlanan/);
+assert.doesNotMatch(code,/performanceStart|performanceEnd/);
+assert.match(code,/response\.data\.employees\.some/);
+assert.match(main,/staff-performance-20261031\.js\?v=3/);
+assert.match(cache,/staff-performance-20261031\.js\?v=3/);
+assert.match(cache,/salon-modern-shell-pwa-v189/);
+console.log('PASS monthly performance: selection, current-month clipping, February/leap year, year rollover, future-date protection, employee scope, deployment versions');
