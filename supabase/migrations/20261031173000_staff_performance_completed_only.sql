@@ -1,7 +1,4 @@
--- Staff see only their own completed appointment performance.
--- Managers see all employees (or one selected worker).
--- Cancelled, no_show and upcoming appointments are never counted.
--- The function uses invoker security and keeps existing RLS unchanged.
+-- Role-scoped, completed-only and past-only report, no client PII.
 CREATE OR REPLACE FUNCTION public.staff_performance_report(p_start date, p_end date, p_employee_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -51,6 +48,7 @@ BEGIN
      AND a.scheduled_at >= (p_start::timestamp AT TIME ZONE 'Europe/Istanbul')
      AND a.scheduled_at < ((p_end + 1)::timestamp AT TIME ZONE 'Europe/Istanbul')
      AND a.status = 'completed'
+     AND a.scheduled_at <= now()
 
     GROUP BY w.id,w.full_name,w.role,w.commission_pct,w.active
   )
@@ -60,6 +58,7 @@ BEGIN
       jsonb_build_object(
         'id',id,'name',full_name,'role',role,'active',active,
         'commission_pct',commission_pct,
+        'completed_count',completed_count,
         'revenue',revenue,'commission',commission
       ) ORDER BY full_name
     ),'[]'::jsonb),
@@ -75,6 +74,5 @@ BEGIN
 END
 $function$
 ;
-
 REVOKE ALL ON FUNCTION public.staff_performance_report(date,date,uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.staff_performance_report(date,date,uuid) TO authenticated, service_role;
