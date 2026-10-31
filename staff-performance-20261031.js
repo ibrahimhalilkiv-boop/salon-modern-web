@@ -10,6 +10,48 @@ function escapeText(value){return String(value==null?'':value).replace(/[&<>"']/
 function currentDate(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Istanbul'}).format(new Date())}
 function summary(rows){return rows.reduce(function(t,r){t.completed_count+=Number(r.completed_count||0);t.revenue+=Number(r.revenue||0);t.commission+=Number(r.commission||0);return t},{completed_count:0,revenue:0,commission:0})}
 
+// The report is always a calendar month in the salon's local timezone.
+// Current month ends today; past months include all their days.
+function monthBounds(month){
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Geçerli bir ay seçin.');
+  var today=currentDate(),currentMonth=today.slice(0,7);
+  if(month>currentMonth)throw new Error('İleri tarihli ayın performansı henüz oluşmadı.');
+  var endDay=new Date(month+'-01T12:00:00Z');
+  endDay.setUTCMonth(endDay.getUTCMonth()+1);
+  endDay.setUTCDate(0);
+  var last=endDay.toISOString().slice(0,10);
+  return {start:month+'-01',end:month===currentMonth?today:last};
+}
+function shiftMonthValue(month,offset){
+  var day=new Date(month+'-01T12:00:00Z');
+  if(!Number.isFinite(day.getTime()))throw new Error('Ay seçimi geçersiz.');
+  day.setUTCMonth(day.getUTCMonth()+offset);
+  return day.toISOString().slice(0,7);
+}
+function monthLabel(month){
+  var label=new Intl.DateTimeFormat('tr-TR',{month:'long',year:'numeric',timeZone:'UTC'})
+    .format(new Date(month+'-01T12:00:00Z'));
+  return label.charAt(0).toLocaleUpperCase('tr-TR')+label.slice(1);
+}
+function refreshMonthNavigation(){
+  var monthInput=document.getElementById('performanceMonth');
+  if(!monthInput)return;
+  var thisMonth=currentDate().slice(0,7);
+  monthInput.max=thisMonth;
+  if(monthInput.value>thisMonth)monthInput.value=thisMonth;
+  var next=document.getElementById('performanceNextMonth');
+  if(next)next.disabled=!monthInput.value||monthInput.value>=thisMonth;
+}
+function changeMonth(offset){
+  var input=document.getElementById('performanceMonth');
+  if(!input)return;
+  var candidate=shiftMonthValue(input.value||currentDate().slice(0,7),offset);
+  if(candidate>currentDate().slice(0,7))return;
+  input.value=candidate;
+  refreshMonthNavigation();
+  load();
+}
+
 function install(){
   var drawer=document.querySelector('#drawerLayer .drawer');
   if(drawer&&!document.getElementById('drawerEmployeePerformance')){
@@ -30,18 +72,21 @@ function install(){
   page.innerHTML='<div class="content"><button type="button" class="back" id="staffPerformanceBack">‹ Ana sayfa</button>'+
     '<h1 class="page-title">Çalışan Performansı</h1>'+
     '<p class="hint">Yalnızca tamamlanmış randevular hesaplanır. İptal edilen, gelmeyen ve henüz gerçekleşmemiş randevular dahil edilmez.</p>'+
-    '<div class="finance230-card"><div class="row">'+
-    '<label class="field">Başlangıç<input id="performanceStart" type="date"></label>'+
-    '<label class="field">Bitiş<input id="performanceEnd" type="date"></label></div>'+
-    '<button type="button" class="save" id="performanceRefresh">Performansı göster</button></div>'+
+    '<div class="finance230-card"><label class="field">Performans ayı<input id="performanceMonth" type="month" aria-label="Performans ayını seçin"></label>'+
+    '<div class="row"><button type="button" class="back" id="performancePrevMonth">‹ Önceki ay</button>'+
+    '<button type="button" class="back" id="performanceNextMonth">Sonraki ay ›</button></div>'+
+    '<button type="button" class="save" id="performanceRefresh">Seçilen ayı göster</button></div>'+
     '<div id="performanceResult" role="status" aria-live="polite"></div></div>';
   var app=document.getElementById('app'),nav=app&&app.querySelector(':scope > .nav');
   if(!app)return;
   if(nav)app.insertBefore(page,nav);else app.appendChild(page);
   document.getElementById('staffPerformanceBack').onclick=function(){window.showPage('home')};
   document.getElementById('performanceRefresh').onclick=load;
-  var date=currentDate();document.getElementById('performanceStart').value=date.slice(0,7)+'-01';
-  document.getElementById('performanceEnd').value=date;
+  document.getElementById('performancePrevMonth').onclick=function(){changeMonth(-1)};
+  document.getElementById('performanceNextMonth').onclick=function(){changeMonth(1)};
+  document.getElementById('performanceMonth').onchange=function(){refreshMonthNavigation();load()};
+  document.getElementById('performanceMonth').value=currentDate().slice(0,7);
+  refreshMonthNavigation();
 }
 
 function reset(){
@@ -57,8 +102,8 @@ async function open(){
   // This report reads its own secure RPC, not the paginated calendar history.
   document.querySelectorAll('#app .page').forEach(function(p){p.classList.remove('active')});
   document.getElementById('staffPerformance').classList.add('active');
-  document.getElementById('performanceEnd').value=currentDate();
-  document.getElementById('performanceStart').value=currentDate().slice(0,7)+'-01';
+  document.getElementById('performanceMonth').value=currentDate().slice(0,7);
+  refreshMonthNavigation();
   window.scrollTo(0,0);
   reset();
   await load();
@@ -67,16 +112,19 @@ async function open(){
 async function load(){
   if(!user())return;
   var holder=document.getElementById('performanceResult');
-  var start=document.getElementById('performanceStart').value,
-      end=document.getElementById('performanceEnd').value,
-      button=document.getElementById('performanceRefresh');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||end<start){
-    holder.textContent='Tarih aralığını kontrol edin.';return;
+  var button=document.getElementById('performanceRefresh');
+  var serial=++requestSerial,actor=user().id,month=document.getElementById('performanceMonth').value;
+  refreshMonthNavigation();
+  var period;
+  try{period=monthBounds(month)}
+  catch(error){
+    report=null;
+    holder.textContent=error.message||'Performans ayını kontrol edin.';
+    button.disabled=false;
+    return;
   }
-  var days=(Date.parse(end+'T12:00:00Z')-Date.parse(start+'T12:00:00Z'))/86400000;
-  if(days>366){holder.textContent='En fazla 367 günlük tarih aralığı seçilebilir.';return}
-  var serial=++requestSerial,actor=user().id;
-  report=null;selectedWorker='all';holder.innerHTML='<div class="security">Performans hesaplanıyor…</div>';
+  var start=period.start,end=period.end;
+  report=null;holder.innerHTML='<div class="security">Performans hesaplanıyor…</div>';
   button.disabled=true;
   try{
     var response=await salonDb.rpc('staff_performance_report',{
@@ -111,12 +159,14 @@ function render(){
     people.filter(function(r){return String(r.id)===String(selectedWorker)}):people;
   var sum=summary(shown);
   var average=sum.completed_count?sum.revenue/sum.completed_count:0;
+  var label=monthLabel(String(report.start_date).slice(0,7));
+  var periodHeading='<div class="section"><h2>'+escapeText(label)+' performansı</h2><small>'+escapeText(report.start_date)+' – '+escapeText(report.end_date)+'</small></div>';
   var controls=canSeeAll?'<div class="finance230-card"><label class="field">Çalışan seçimi<select id="performanceWorker">'+
       '<option value="all">Tüm çalışanlar</option>'+
       people.map(function(r){return '<option value="'+escapeText(r.id)+'"'+(r.id===selectedWorker?' selected':'')+'>'+escapeText(r.name)+'</option>'}).join('')+
       '</select></label></div>':'<div class="security">Yalnızca kendi performansınız gösteriliyor.</div>';
   var cards='<div class="stats-grid">'+
-    '<div class="stat-box"><small>Tamamlanan işlem</small><strong>'+sum.completed_count+'</strong></div>'+
+    '<div class="stat-box"><small>'+escapeText(label)+' tamamlanan</small><strong>'+sum.completed_count+'</strong></div>'+
     '<div class="stat-box"><small>Gerçekleşen ciro</small><strong>'+fmt(sum.revenue)+'</strong></div>'+
     '<div class="stat-box"><small>Hesaplanan prim</small><strong>'+fmt(sum.commission)+'</strong></div>'+
     '<div class="stat-box"><small>İşlem başına ortalama</small><strong>'+fmt(average)+'</strong></div></div>';
@@ -130,7 +180,7 @@ function render(){
       '<div><span>Hesaplanan prim</span><strong>'+fmt(r.commission)+'</strong></div>'+
       '</div>'}).join('<hr>')||'<div class="empty">Bu tarih aralığında çalışan kaydı yok.</div>')+
     '</div>';
-  holder.innerHTML=controls+cards+detail;
+  holder.innerHTML=periodHeading+controls+cards+detail;
   var selector=document.getElementById('performanceWorker');
   if(selector)selector.onchange=function(){selectedWorker=this.value;render()};
 }
