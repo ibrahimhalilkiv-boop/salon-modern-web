@@ -54,7 +54,7 @@ function render(){
         '<label class="field">Açılış<input id="holidayRangeOpen" type="time" step="1800" required value="09:00"></label>'+
         '<label class="field">Kapanış<input id="holidayRangeClose" type="time" step="1800" required value="22:00"></label>'+
       '</div>'+
-      '<small class="hint">Saatler yalnızca seçilen günlerde takvim/online randevu saatlerine ve performans doluluğuna uygulanır. Aralıkta pazar varsa o gün de açılır.</small>'+
+      '<small class="hint">Saatler seçilen günlerde online randevu uygunluğunu ve performans doluluk hesabını değiştirir. Takvimdeki mevcut randevular korunur. Aralıkta pazar varsa o gün de açılır.</small>'+
       '<button type="submit" class="save" id="holidayRangeSave">Seçilen günlere uygula</button>'+
       '<button type="button" class="back" id="holidayRangeReset">Bu günlerde özel saatleri kaldır</button>'+
       '<p id="holidayRangeResult" role="status" aria-live="polite"></p>'+
