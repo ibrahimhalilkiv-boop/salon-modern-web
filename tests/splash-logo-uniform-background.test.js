@@ -21,9 +21,9 @@ assert.match(splashCss,/#auth \.salon-auth-logo\s*\{[^}]*width:min\(68vw,265px\)
 
 assert.match(shell,/<div id="salonStartupSplash" role="status" aria-label="Salon Modern açılıyor">/);
 assert.match(shell,/<img src="salon-icon-512\.png" width="512" height="512" alt="Salon Modern" decoding="async" fetchpriority="high">/);
-assert.match(html,/<link rel="apple-touch-icon" href="salon-icon-512\\.png">/);
-assert.match(html,/logo\\.src='salon-icon-512\\.png'/,'Native splash and login use the same artwork');
-assert.doesNotMatch(html,/logo\\.src='salon_brand_logo\\.jpg'/,'Avoid mismatched compressed logo on login');
+assert.match(html,/<link rel="apple-touch-icon" href="salon-icon-512\.png">/);
+assert.match(html,/logo\.src='salon-icon-512\.png'/,'Native splash and login use the same artwork');
+assert.doesNotMatch(html,/logo\.src='salon_brand_logo\.jpg'/,'Avoid mismatched compressed logo on login');
 assert.ok(html.indexOf('id="salonStartupSplash"')<html.indexOf('<section class="auth"'), 'Startup image precedes the app login');
 assert.ok(html.includes('html[data-auth-state="INITIALIZING"] #auth{display:none!important}') ||
           /html\[data-auth-state="INITIALIZING"\] #auth\s*\{\s*display:none!important;\s*\}/.test(html),
