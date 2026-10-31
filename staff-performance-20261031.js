@@ -12,9 +12,9 @@ function summary(rows){return rows.reduce(function(t,r){t.completed_count+=Numbe
 
 function install(){
   var drawer=document.querySelector('#drawerLayer .drawer');
-  if(drawer&&!document.getElementById('drawerStaffPerformance')){
+  if(drawer&&!document.getElementById('drawerEmployeePerformance')){
     var button=document.createElement('button');
-    button.id='drawerStaffPerformance';
+    button.id='drawerEmployeePerformance';
     button.className='menu-item';
     button.type='button';
     button.textContent='▥  Çalışan Performansı';
