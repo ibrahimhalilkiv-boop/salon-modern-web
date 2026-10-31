@@ -28,7 +28,7 @@ assert.match(code,/id="performancePrevMonth"/);
 assert.match(code,/id="performanceNextMonth"/);
 assert.match(code,/performanceMonth'\)\.onchange/);
 assert.match(code,/p_start:start,p_end:end,p_employee_id:null/);
-assert.match(code,/label\)+' tamamlanan/);
+assert.match(code,/escapeText\(label\).+tamamlanan/);
 assert.doesNotMatch(code,/performanceStart|performanceEnd/);
 assert.match(code,/response\.data\.employees\.some/);
 assert.match(main,/staff-performance-20261031\.js\?v=3/);
