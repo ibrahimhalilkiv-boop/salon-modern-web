@@ -48,7 +48,9 @@ function fixture(verified) {
         return history;
       },
       subscribeSalon: () => events.push('realtime'),
-      showAppToast: () => events.push('ready-toast')
+      showAppToast: () => events.push('ready-toast'),
+      setRemoteAuth: () => events.push('login-screen'),
+      remoteError: () => {}
     }
   };
   vm.runInNewContext(source.slice(begin, end), context);
