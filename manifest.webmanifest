@@ -9,7 +9,7 @@
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#f7f6f1",
-  "theme_color": "#0d2925",
+  "theme_color": "#f7f6f1",
   "icons": [
     {
       "src": "salon-launch-v2-192.png",
