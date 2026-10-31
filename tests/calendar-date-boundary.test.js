@@ -79,4 +79,36 @@ assert.match(html,/SalonAppointmentData\.loadVisible\(salonDb,'\*',date,salonCal
  'Preview should fetch yesterday appointments instead of clipping to today');
 assert.match(html,/picker\.min=salonCalendarEarliestDay\(\)\.slice\(0,7\)/,
  'Month picker must allow prior month when yesterday belongs to it');
-console.log('PASS Istanbul yesterday-only boundary, date picker, month rollover, previous year, leap day and preview records');
+// Test the native month picker too: when yesterday is in the previous month,
+// choosing that month must land on yesterday rather than silently reverting to today.
+const pickerStart=html.indexOf('function pickTeamMonth(){');
+const pickerEnd=html.indexOf('renderCalendar=function(){',pickerStart);
+assert.ok(pickerStart>0&&pickerEnd>pickerStart);
+const dom={};
+const pickerCtx={
+  document:{
+    getElementById:id=>dom[id]||null,
+    createElement:tag=>({tagName:tag,style:{},setAttribute(){},showPicker(){}}),
+    body:{appendChild:node=>{dom[node.id]=node}}
+  },
+  salonCalendarToday:()=> '2026-11-01',
+  salonCalendarEarliestDay:()=> '2026-10-31',
+  selectedTeamDate:()=> '2026-11-01',
+  window:{salonPreviewCalendarMonth(){previews++}},
+  renderCalendar(){},teamCalendarDate:null,teamCalendarMode:'day'
+};
+vm.createContext(pickerCtx);
+vm.runInContext(html.slice(pickerStart,pickerEnd),pickerCtx);
+pickerCtx.pickTeamMonth();
+assert.equal(dom.teamCalendarMonthPicker.min,'2026-10');
+dom.teamCalendarMonthPicker.value='2026-10';
+dom.teamCalendarMonthPicker.onchange();
+assert.equal(pickerCtx.teamCalendarDate,'2026-10-31');
+assert.equal(pickerCtx.teamCalendarMode,'month');
+dom.teamCalendarMonthPicker.value='2026-09';
+dom.teamCalendarMonthPicker.onchange();
+assert.equal(pickerCtx.teamCalendarDate,'2026-10-31','Older months blocked in native picker');
+dom.teamCalendarMonthPicker.value='2026-11';
+dom.teamCalendarMonthPicker.onchange();
+assert.equal(pickerCtx.teamCalendarDate,'2026-11-01');
+console.log('PASS Istanbul yesterday-only boundary, native month picker, month/year rollover, leap day and preview records');
