@@ -21,13 +21,13 @@ assert.match(cash, /a.scheduled_at <= now\(\)/);
 assert.doesNotMatch(cash, /a.status<>'cancelled'/);
 
 assert.match(app, /item.status==='completed'/);
-assert.match(app, /staff-performance-20261031\.js\?v=3/);
+assert.match(app, /staff-performance-20261031\.js\?v=4/);
 assert.match(phase, /past=own.filter\(function\(item\)\{return item.status==='completed'/);
 assert.match(stats, /return item.status==='completed'/);
 assert.match(screen, /staff_performance_report/);
 assert.match(screen, /drawerEmployeePerformance/);
 assert.match(screen, /response\.data\.employees\.some/);
 assert.match(finance, /salonDb\.rpc\('calculate_cash_period_summary'/);
-assert.match(sw, /staff-performance-20261031\.js\?v=3/);
-assert.match(sw, /salon-modern-shell-pwa-v189/);
+assert.match(sw, /staff-performance-20261031\.js\?v=4/);
+assert.match(sw, /salon-modern-shell-pwa-v192/);
 console.log('PASS completed-only finance, staff performance, global summaries, role-scope and PWA wiring');
