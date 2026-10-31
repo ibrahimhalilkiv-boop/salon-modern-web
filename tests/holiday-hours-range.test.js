@@ -8,7 +8,7 @@ const sql=fs.readFileSync('supabase/migrations/20261101002000_staff_occupancy_de
 
 assert.match(html,/salon-holiday-hours-20261101\.js\?v=1/);
 assert.match(sw,/salon-holiday-hours-20261101\.js\?v=1/);
-assert.match(sw,/salon-modern-shell-pwa-v195/);
+assert.match(sw,/salon-modern-shell-pwa-v196/);
 assert.match(sql,/EXTRACT\(ISODOW FROM d\.day::date\)=7/);
 assert.match(sql,/o\.schedule_date IS NULL/);
 assert.match(sql,/booking_schedule_overrides/);
