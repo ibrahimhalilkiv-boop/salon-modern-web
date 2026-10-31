@@ -10,7 +10,7 @@ assert.match(source,/\.range\(offset,offset\+pageSize-1\)/);
 assert.doesNotMatch(source,/from\('reserve_ledger'\)[\s\S]{0,270}\.limit\(50\)/);
 assert.match(main,/salon-finance-2\.3\.0\.js\?v=106/);
 assert.match(worker,/salon-finance-2\.3\.0\.js\?v=106/);
-assert.match(worker,/salon-modern-shell-pwa-v191/);
+assert.match(worker,/salon-modern-shell-pwa-v192/);
 
 const start=source.indexOf('function finance230ExpensesByMonthHtml(');
 const end=source.indexOf('async function saveFinance230Rule(',start);
