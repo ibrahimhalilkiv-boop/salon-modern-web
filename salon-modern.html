@@ -110,7 +110,7 @@ window.salonPreviewCalendarMonth=async function(){
   window.salonCalendarLoadState={status:'loading',date:date};renderCalendar();
   try{
     var results=await Promise.all([
-      SalonAppointmentData.loadVisible(salonDb,'*',date,salonCalendarToday()),
+      SalonAppointmentData.loadVisible(salonDb,'*',date,salonCalendarEarliestDay()),
       salonDb.from('closed_time_slots').select('id,employee_id,starts_at,ends_at,note').lt('starts_at',bounds.end).gt('ends_at',bounds.start).order('starts_at')
     ]);
     if(results[1].error)throw results[1].error;
@@ -640,8 +640,8 @@ function calendarEmployeeColor(name){
 }
 function pickTeamMonth(){
   var picker=document.getElementById('teamCalendarMonthPicker');
-  if(!picker){picker=document.createElement('input');picker.id='teamCalendarMonthPicker';picker.type='month';picker.setAttribute('aria-label','Ay seç');picker.style.cssText='position:fixed;left:8px;top:8px;width:1px;height:1px;opacity:0;pointer-events:none';picker.onchange=function(){if(!picker.value||picker.value<salonCalendarToday().slice(0,7))return;teamCalendarDate=picker.value+'-01';teamCalendarMode='month';window.salonPreviewCalendarMonth?window.salonPreviewCalendarMonth():renderCalendar()};document.body.appendChild(picker)}
-  picker.min=salonCalendarToday().slice(0,7);
+  if(!picker){picker=document.createElement('input');picker.id='teamCalendarMonthPicker';picker.type='month';picker.setAttribute('aria-label','Ay seç');picker.style.cssText='position:fixed;left:8px;top:8px;width:1px;height:1px;opacity:0;pointer-events:none';picker.onchange=function(){if(!picker.value||picker.value<salonCalendarEarliestDay().slice(0,7))return;teamCalendarDate=picker.value+'-01';teamCalendarMode='month';window.salonPreviewCalendarMonth?window.salonPreviewCalendarMonth():renderCalendar()};document.body.appendChild(picker)}
+  picker.min=salonCalendarEarliestDay().slice(0,7);
   picker.value=selectedTeamDate().slice(0,7);
   if(typeof picker.showPicker==='function')picker.showPicker();else picker.click();
 }
@@ -1565,20 +1565,32 @@ var salonCalendarReadabilityStyle=document.createElement('style');salonCalendarR
 var rememberControl=document.getElementById('loginRemember');if(rememberControl){rememberControl.checked=true;rememberControl.disabled=true;rememberControl.closest('.remember-login')?.setAttribute('title','Oturum yalnÄ±zca Hesaptan Ã§Ä±kÄ±ÅŸ yap seÃ§ildiÄŸinde kapatÄ±lÄ±r.')}
 document.getElementById('setupForm')?.classList.add('hidden');document.getElementById('loginForm')?.classList.add('hidden');document.getElementById('auth')?.classList.add('hidden');
 function salonCalendarToday(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Istanbul'}).format(new Date())}
-selectedTeamDate=function(){var today=salonCalendarToday();if(!teamCalendarDate||teamCalendarDate<today)teamCalendarDate=today;return teamCalendarDate};
+// The live calendar permits exactly one previous local day (Istanbul time).
+// Booking availability stays future-only; this boundary affects calendar viewing.
+function salonCalendarEarliestDay(){
+  var date=new Date(salonCalendarToday()+'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate()-1);
+  return date.toISOString().slice(0,10);
+}
+selectedTeamDate=function(){
+  var earliest=salonCalendarEarliestDay();
+  if(!teamCalendarDate||teamCalendarDate<earliest)teamCalendarDate=salonCalendarToday();
+  return teamCalendarDate;
+};
 moveTeamCalendar=function(days){
   var current=selectedTeamDate(),date=new Date(current+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+days);
-  var next=date.toISOString().slice(0,10);if(next<salonCalendarToday()||next===current)return;
+  var next=date.toISOString().slice(0,10);if(next<salonCalendarEarliestDay()||next===current)return;
   teamCalendarDate=next;window.salonPreviewCalendarMonth?window.salonPreviewCalendarMonth():renderCalendar();
 };
 moveTeamMonth=function(amount){
   var current=selectedTeamDate(),date=new Date(current.slice(0,7)+'-01T12:00:00Z');date.setUTCMonth(date.getUTCMonth()+amount);
-  var month=date.toISOString().slice(0,7),today=salonCalendarToday();if(month<today.slice(0,7))return;
-  teamCalendarDate=month===today.slice(0,7)?today:month+'-01';
+  var month=date.toISOString().slice(0,7),today=salonCalendarToday(),earliest=salonCalendarEarliestDay();
+  if(month<earliest.slice(0,7))return;
+  teamCalendarDate=month===today.slice(0,7)?today:(month===earliest.slice(0,7)?earliest:month+'-01');
   window.salonPreviewCalendarMonth?window.salonPreviewCalendarMonth():renderCalendar();
 };
 selectTeamDay=function(date){
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<salonCalendarToday())return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<salonCalendarEarliestDay())return;
   teamCalendarDate=date;teamCalendarMode='day';
   window.salonPreviewCalendarMonth?window.salonPreviewCalendarMonth():renderCalendar();
 };
@@ -1586,10 +1598,10 @@ var salonRenderCalendarBeforePastBoundary=renderCalendar;
 renderCalendar=function(){
   var result=salonRenderCalendarBeforePastBoundary.apply(this,arguments);
   if(teamCalendarMode==='month'){
-    var today=salonCalendarToday();
+    var earliest=salonCalendarEarliestDay();
     document.querySelectorAll('#calendarContent .team-month-grid button[onclick]').forEach(function(button){
       var match=(button.getAttribute('onclick')||'').match(/selectTeamDay\(['"](\d{4}-\d{2}-\d{2})['"]\)/);
-      if(match&&match[1]<today){button.disabled=true;button.classList.add('muted');button.removeAttribute('onclick');var count=button.querySelector('small');if(count)count.textContent=''}
+      if(match&&match[1]<earliest){button.disabled=true;button.classList.add('muted');button.removeAttribute('onclick');var count=button.querySelector('small');if(count)count.textContent=''}
     });
   }
   return result;
