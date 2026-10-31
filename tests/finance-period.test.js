@@ -13,6 +13,22 @@ ctx.finance230PeriodFilter={mode:'range',start:'2026-10-02',end:'2026-10-01'};as
 ctx.finance230PeriodFilter={mode:'range',start:'2026-02-30',end:'2026-03-01'};assert.throws(()=>ctx.finance230PeriodDates(),/kontrol/);
 ctx.finance230PeriodFilter={mode:'range',start:'2026-10-01',end:'2026-10-01'};assert.equal(ctx.finance230PeriodDates().end,'2026-10-01');
 let queries=[],rpcCalls=[],oldRpc,oldRows;
+const periodOrderSample=ctx.finance230PeriodSummaryHtml({
+  start_date:'2026-10-01',end_date:'2026-10-31',
+  gross_turnover:501000,service_turnover:488900,product_turnover:12100
+});
+const totalAt=periodOrderSample.indexOf('Toplam ciro');
+const serviceAt=periodOrderSample.indexOf('Hizmet cirosu');
+const productAt=periodOrderSample.indexOf('Ürün cirosu');
+assert.ok(totalAt>0&&totalAt<serviceAt&&serviceAt<productAt,
+  'Period report must show total turnover before service and product turnover');
+assert.match(periodOrderSample.slice(totalAt,totalAt+130),/501000/,
+  'Moving the total must not change its calculated value');
+const dailyRowsStart=source.indexOf('var rows=[',source.indexOf('async function renderFinance230Summary('));
+assert.ok(dailyRowsStart>0);
+assert.match(source.slice(dailyRowsStart,dailyRowsStart+190),
+  /\['Toplam ciro',s\.gross_turnover\],\['Hizmet cirosu',s\.service_turnover\],\['Ürün cirosu',s\.product_turnover\]/,
+  'Daily cash should use the same revenue-first order');
 const summary={start_date:'2026-10-01',end_date:'2026-10-31',gross_turnover:1000,distributable_revenue:800,distributable_amount:500,daily_expenses:50,main_expenses:80,all_expenses:130,reserve_contribution:100,fund_posted_contribution:60,fund_opening_balance:200,fund_closing_balance:180,day_count:31,closed_days:1};
 ctx.salonDb={rpc(name,args){rpcCalls.push({name,args});if(args.p_start==='2026-09-01')return new Promise(resolve=>oldRpc=resolve);return Promise.resolve({data:summary})},from(table){assert.equal(table,'business_expenses');let start,end;return {select(){return this},gte(field,v){assert.equal(field,'expense_date');start=v;return this},lte(field,v){assert.equal(field,'expense_date');end=v;return this},order(){return this},range(offset,last){queries.push({start,end,offset,last});if(start==='2026-09-01')return new Promise(resolve=>oldRows=resolve);return Promise.resolve({data:offset===0?Array.from({length:500},(_,i)=>({id:String(i),expense_date:i<250?'2026-10-02':'2026-10-01',category:i===0?'<unsafe>':'Gider',account_scope:i===1?'reserve':'daily',amount:1})):[{id:'last',expense_date:'2026-10-01',category:'Last',amount:1}]})}}}};
 (async()=>{
