@@ -22,7 +22,7 @@ assert.doesNotMatch(cash, /a.status<>'cancelled'/);
 
 assert.match(app, /item.status==='completed'/);
 assert.match(app, /staff-performance-20261031\.js\?v=4/);
-assert.match(phase, /past=own.filter\(function\(item\)\{return item.status==='completed'/);
+assert.match(phase, /salonDb\.rpc\('staff_performance_overview'/);
 assert.match(stats, /return item.status==='completed'/);
 assert.match(screen, /staff_performance_report/);
 assert.match(screen, /drawerEmployeePerformance/);
