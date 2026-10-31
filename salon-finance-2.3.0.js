@@ -138,7 +138,7 @@ function finance230PeriodRecordsHtml(rows){
 function finance230LedgerHtml(rows){return '<div class="finance230-ledger">'+rows.map(function(row){return '<div><span>'+esc(row[0])+'</span><strong class="'+(Number(row[1])<0?'minus':'')+'">'+money(row[1])+'</strong></div>'}).join('')+'</div>'}
 function finance230PeriodSummaryHtml(s){
   return '<h3>'+esc(s.start_date)+' — '+esc(s.end_date)+'</h3>'+finance230LedgerHtml([
-    ['Hizmet cirosu',s.service_turnover],['Ürün cirosu',s.product_turnover],['Toplam ciro',s.gross_turnover],
+    ['Toplam ciro',s.gross_turnover],['Hizmet cirosu',s.service_turnover],['Ürün cirosu',s.product_turnover],
     ['Borca yazılan satışlar',-Number(s.unpaid_debt_amount||0)],['Dönemde tahsil edilen borç',s.debt_collections],['Kasaya giren tutar',s.distributable_revenue],
     ['Günlük giderler',-Number(s.daily_expenses||0)],['Çalışan primleri',-Number(s.commission_total||0)],['Hesaplanan ana fon payı',-Number(s.reserve_contribution||0)]
   ])+'<div class="finance230-result finance230-single-cash"><small>Seçilen dönemde kalan</small><strong>'+money(s.distributable_amount)+'</strong></div>'+
@@ -172,7 +172,7 @@ async function renderFinance230Summary(){
   if(result.error){holder.innerHTML='<div class="security finance230-error">'+esc(result.error.message)+'</div>';return}
   var s=result.data||{},dirty=s.closing_status==='dirty',closed=s.closing_status==='closed';
   var rows=[
-    ['Hizmet cirosu',s.service_turnover],['Ürün cirosu',s.product_turnover],['Toplam ciro',s.gross_turnover],
+    ['Toplam ciro',s.gross_turnover],['Hizmet cirosu',s.service_turnover],['Ürün cirosu',s.product_turnover],
     ['Açık borca yazılan',-Number(s.unpaid_debt_amount||0)],['Bugün tahsil edilen borç',s.debt_collections],['Kasaya giren tutar',s.distributable_revenue],
     ['Günlük giderler',-Number(s.daily_expenses||0)],['Çalışan primleri',-Number(s.commission_total||0)],['Fona ayrılan',-Number(s.reserve_contribution||0)]
   ];
