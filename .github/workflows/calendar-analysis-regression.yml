@@ -22,6 +22,9 @@ on:
       - 'tests/finance-date-records.test.js'
       - 'tests/calendar-preview-race.test.js'
       - 'tests/calendar-startup-priority.test.js'
+      - 'pwa-stability-2.3.20.js'
+      - 'salon-calendar-status.js'
+      - 'tests/calendar-fast-first-paint.test.js'
       - 'tests/calendar-date-boundary.test.js'
       - 'tests/finance-startup-priority.test.js'
       - 'tests/smart-client-visit-summary.test.js'
@@ -42,6 +45,7 @@ jobs:
       - run: node tests/finance-date-records.test.js
       - run: node tests/calendar-preview-race.test.js
       - run: node tests/calendar-startup-priority.test.js
+      - run: node tests/calendar-fast-first-paint.test.js
       - run: node tests/calendar-date-boundary.test.js
       - run: node tests/finance-startup-priority.test.js
       - run: node tests/smart-client-visit-summary.test.js
