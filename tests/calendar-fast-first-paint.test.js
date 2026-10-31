@@ -62,8 +62,8 @@ function fixture(verified) {
   assert.equal(f.context.window.salonCalendarLoadState.status, 'loading');
   assert.equal(f.context.teamCalendarDate, '2026-11-01');
   assert.equal(f.context.teamCalendarMode, 'day');
-  assert.deepEqual(f.context.appts, [], 'No stale or unverified appointments displayed');
-  assert.deepEqual(f.context.staff, [], 'No old employee list displayed');
+  assert.equal(f.context.appts.length, 0, 'No stale or unverified appointments displayed');
+  assert.equal(f.context.staff.length, 0, 'No old employee list displayed');
   assert(f.events.includes('calendar-shell'));
   assert(f.events.includes('page:calendar'));
   assert(f.events.includes('state:AUTHENTICATED'));
