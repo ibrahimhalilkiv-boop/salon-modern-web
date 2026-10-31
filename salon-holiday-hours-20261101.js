@@ -6,7 +6,11 @@
 var saving=false;
 function isManager(){return typeof currentUser!=='undefined'&&currentUser&&currentUser.role==='yonetici'}
 function dayInIstanbul(){
-  return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Istanbul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  var parts=new Intl.DateTimeFormat('en-US',{
+    timeZone:'Europe/Istanbul',year:'numeric',month:'2-digit',day:'2-digit'
+  }).formatToParts(new Date()),values={};
+  parts.forEach(function(part){values[part.type]=part.value});
+  return values.year+'-'+values.month+'-'+values.day;
 }
 function datesBetween(start,end){
   if(!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(start||'')||
