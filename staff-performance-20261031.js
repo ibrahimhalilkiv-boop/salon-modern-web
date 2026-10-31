@@ -54,16 +54,27 @@ function changeMonth(offset){
 
 function install(){
   var drawer=document.querySelector('#drawerLayer .drawer');
-  if(drawer&&!document.getElementById('drawerEmployeePerformance')){
-    var button=document.createElement('button');
-    button.id='drawerEmployeePerformance';
-    button.className='menu-item';
-    button.type='button';
-    button.textContent='▥  Çalışan Performansı';
-    button.onclick=open;
-    var stats=drawer.querySelector('[onclick="drawerPage(\'statistics\')"]');
-    if(stats)stats.insertAdjacentElement('afterend',button);
-    else drawer.appendChild(button);
+  if(drawer){
+    var button=document.getElementById('drawerEmployeePerformance');
+    if(!button){
+      button=document.createElement('button');
+      button.id='drawerEmployeePerformance';
+      button.className='menu-item';
+      button.type='button';
+      button.textContent='▥  Çalışan Performansı';
+      var stats=drawer.querySelector('[onclick*="statistics"]');
+      if(stats)stats.insertAdjacentElement('afterend',button);
+      else drawer.appendChild(button);
+    }
+    // Employees see only their own secure monthly report.
+    // Managers keep the full-team overview and its monthly-details link.
+    button.classList.remove('manager-menu','hidden');
+    button.onclick=function(){
+      if(manager() && typeof window.showPage==='function'){
+        if(typeof window.closeDrawer==='function')window.closeDrawer();
+        window.showPage('employeePerformance');
+      }else open();
+    };
   }
   if(document.getElementById('staffPerformance'))return;
   var page=document.createElement('section');
