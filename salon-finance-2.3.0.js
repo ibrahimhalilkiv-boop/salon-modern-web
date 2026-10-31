@@ -63,6 +63,27 @@ function finance230Tab(tab){
 }
 window.finance230Tab=finance230Tab;
 
+// Load every month of fund expenses instead of a capped recent-movement list.
+// Stable ordering with id as tiebreaker prevents page boundary duplicates.
+async function finance230LoadAllReserveExpenses(){
+  var rows=[],offset=0,pageSize=500;
+  while(true){
+    var result=await salonDb.from('reserve_ledger')
+      .select('id,entry_date,entry_type,amount,note,created_at')
+      .eq('entry_type','main_expense')
+      .order('entry_date',{ascending:false})
+      .order('created_at',{ascending:false})
+      .order('id',{ascending:false})
+      .range(offset,offset+pageSize-1);
+    if(result.error)return result;
+    var page=result.data||[];
+    rows.push.apply(rows,page);
+    if(page.length<pageSize)break;
+    offset+=pageSize;
+  }
+  return {data:rows,error:null};
+}
+
 async function loadFinance230(force){
   if(!manager())return;if(financeState.loading)return;if(financeState.loaded&&!force&&financeState.reserveSummary?.as_of===today()){renderAll();return}
   financeState.loading=true;document.getElementById('finance230Loading')?.classList.remove('hidden');
@@ -73,7 +94,7 @@ async function loadFinance230(force){
       salonDb.from('inventory_movements').select('id,product_id,movement_type,quantity_delta,movement_at,note,voided_at,reversal_of').order('movement_at',{ascending:false}).limit(100),
       salonDb.from('finance_reserve_rules').select('id,daily_amount,effective_from,created_at').order('effective_from',{ascending:false}),
       salonDb.from('daily_cash_closings').select('*').order('business_date',{ascending:false}).limit(40),
-      salonDb.from('reserve_ledger').select('id,entry_date,entry_type,amount,note,created_at').eq('entry_type','main_expense').order('entry_date',{ascending:false}).order('created_at',{ascending:false}).limit(50),
+      finance230LoadAllReserveExpenses(),
       salonDb.rpc('get_current_reserve_balance'),
       salonDb.from('clients').select('id,full_name,phone,active').eq('active',true).order('full_name')
     ]);
@@ -256,11 +277,37 @@ function movementRow(m){var p=financeState.products.find(function(x){return x.id
 function voidFinance230Usage(id){if(finance230Busy)return;var m=financeState.movements.find(function(x){return x.id===id}),p=m&&financeState.products.find(function(x){return x.id===m.product_id});if(!m)return;openFinance230Action('Kullanım iptalini onaylayın','<div class="notice"><strong>'+esc(p?.name||'Ürün')+'</strong><br>Stoğa '+Math.abs(Number(m.quantity_delta))+' adet geri eklenecek. Geçmiş hareket kaydı korunacak.</div><button type="button" class="save finance230-danger" onclick="commitFinance230UsageVoid(\''+id+'\')">Onayla ve stoğa geri ekle</button>','products')}window.voidFinance230Usage=voidFinance230Usage;
 async function commitFinance230UsageVoid(id){if(finance230Busy)return;var button=document.querySelector('#finance230ProductActionForm .save'),old=button?.textContent;finance230Busy=true;if(button){button.disabled=true;button.textContent='İptal ediliyor…'}try{var result=await salonDb.rpc('void_inventory_usage',{p_movement_id:id});if(result.error)throw result.error;var verify=await salonDb.from('inventory_movements').select('id,voided_at').eq('id',id).maybeSingle();if(verify.error)throw verify.error;if(!verify.data?.voided_at)throw new Error('Kullanım iptali veritabanında doğrulanamadı.');financeState.loaded=false;await loadFinance230(true);openFinance230Products();toast('Kullanım iptal edildi','Ürün stoğa geri eklendi.')}catch(error){toast('Kullanım iptal edilemedi',errText(error))}finally{finance230Busy=false;if(button){button.disabled=false;button.textContent=old||'Onayla ve stoğa geri ekle'}}}window.commitFinance230UsageVoid=commitFinance230UsageVoid;
 
+function finance230ExpensesByMonthHtml(expenses){
+  if(!expenses.length)return '<div class="empty">Henüz fondan gider kaydı yok.</div>';
+  var groups=new Map();
+  expenses.forEach(function(row){
+    var month=String(row.entry_date||'').slice(0,7);
+    if(!/^\\d{4}-\\d{2}$/.test(month))return;
+    if(!groups.has(month))groups.set(month,{rows:[],total:0});
+    var group=groups.get(month);
+    group.rows.push(row);
+    group.total+=Number(row.amount||0);
+  });
+  return Array.from(groups.keys()).sort().reverse().map(function(month){
+    var group=groups.get(month);
+    var name=new Intl.DateTimeFormat('tr-TR',{year:'numeric',month:'long',timeZone:'UTC'})
+      .format(new Date(month+'-01T12:00:00Z'));
+    name=name.charAt(0).toLocaleUpperCase('tr-TR')+name.slice(1);
+    var rows=group.rows.map(function(row){
+      return '<div class="finance230-row"><span><strong>Fondan ödenen gider</strong><small>'+
+        esc(row.entry_date)+(row.note?' · '+esc(row.note):'')+
+        '</small></span><b class="'+(Number(row.amount)<0?'minus':'')+'">'+money(row.amount)+'</b></div>';
+    }).join('');
+    return '<div class="section finance230-expense-month"><h3>'+esc(name)+'</h3><small>'+
+      group.rows.length+' gider · Toplam '+money(Math.abs(group.total))+'</small></div>'+rows;
+  }).join('');
+}
+
 function renderReserve(){
   var holder=document.getElementById('finance230Reserve');if(!holder)return;var latest=financeState.rules[0],summary=financeState.reserveSummary;if(!summary){holder.innerHTML='<div class="finance230-card">Fon bakiyesi yükleniyor…</div>';return}var balance=Number(summary.current_balance||0);
   var expenses=financeState.ledger.filter(function(row){return row.entry_type==='main_expense'});
-  var history=expenses.slice(0,20).map(function(row){return '<div class="finance230-row"><span><strong>Fondan ödenen gider</strong><small>'+esc(row.entry_date)+(row.note?' · '+esc(row.note):'')+'</small></span><b class="'+(Number(row.amount)<0?'minus':'')+'">'+money(row.amount)+'</b></div>'}).join('')||'<div class="empty">Henüz fondan gider kaydı yok.</div>';
-  holder.innerHTML='<div class="finance230-fund finance230-balance"><span>Devredenler dahil toplam fon · '+esc(summary.as_of)+'</span><strong>'+money(balance)+'</strong></div><div class="finance230-card"><h3>Fonun aylık dökümü</h3>'+finance230LedgerHtml([['Önceki aylardan devreden',summary.opening_balance],['Bu ay fona eklenen',summary.contributions],['Bu ay fondan ödenen',summary.main_expenses],['Bu ay açılış / düzeltme',summary.adjustments],['Bu ay net değişim',summary.current_month_movement],['Güncel toplam fon',summary.current_balance]])+'<p class="hint">Her ayın kalan fonu sonraki aya otomatik devreder. Henüz tarihi gelmeyen hareketler bugünkü bakiyeden düşülmez. Günlük fon katkıları toplam bakiyeye dahil edilir, ancak alttaki gider listesinde gösterilmez.</p></div><div class="finance230-card"><div class="section"><h2>Günlük fon ayarı</h2><small>Geçmiş kapanışları değiştirmez</small></div><form onsubmit="saveFinance230Rule(event)"><div class="row"><label class="field">Günlük ayrılacak tutar<input id="f230RuleAmount" type="number" min="0" step="0.01" required value="'+esc(latest?.daily_amount||0)+'"></label><label class="field">Yürürlük tarihi<input id="f230RuleDate" type="date" required value="'+today()+'"></label></div><button class="save">Yeni fon ayarını kaydet</button></form></div><div class="finance230-card"><div class="section"><h2>Açılış / düzeltme</h2><small>Artı veya eksi tutar</small></div><form onsubmit="saveFinance230Adjustment(event)"><div class="row"><label class="field">Tarih<input id="f230AdjustmentDate" type="date" required value="'+today()+'"></label><label class="field">Tutar<input id="f230AdjustmentAmount" type="number" step="0.01" required placeholder="Örn. 5000 veya -500"></label></div><label class="field">Açıklama<input id="f230AdjustmentNote" required maxlength="160"></label><label class="finance230-check"><input id="f230AdjustmentOpening" type="checkbox"> Açılış bakiyesi</label><button class="save">Fon hareketini kaydet</button></form></div><div class="section"><h2>Fondan ödenen giderler</h2><small>'+Math.min(expenses.length,20)+' gider</small></div><div class="finance230-list">'+history+'</div><div class="section"><h2>Fon kuralları</h2></div><div class="finance230-list">'+(financeState.rules.map(function(r){return '<div class="finance230-row"><span><strong>'+money(r.daily_amount)+'</strong><small>'+esc(r.effective_from)+' tarihinden itibaren</small></span></div>'}).join('')||'<div class="empty">Fon kuralı henüz belirlenmedi.</div>')+'</div>';
+  var history=finance230ExpensesByMonthHtml(expenses);
+  holder.innerHTML='<div class="finance230-fund finance230-balance"><span>Devredenler dahil toplam fon · '+esc(summary.as_of)+'</span><strong>'+money(balance)+'</strong></div><div class="finance230-card"><h3>Fonun aylık dökümü</h3>'+finance230LedgerHtml([['Önceki aylardan devreden',summary.opening_balance],['Bu ay fona eklenen',summary.contributions],['Bu ay fondan ödenen',summary.main_expenses],['Bu ay açılış / düzeltme',summary.adjustments],['Bu ay net değişim',summary.current_month_movement],['Güncel toplam fon',summary.current_balance]])+'<p class="hint">Her ayın kalan fonu sonraki aya otomatik devreder. Henüz tarihi gelmeyen hareketler bugünkü bakiyeden düşülmez. Günlük fon katkıları toplam bakiyeye dahil edilir, ancak alttaki gider listesinde gösterilmez.</p></div><div class="finance230-card"><div class="section"><h2>Günlük fon ayarı</h2><small>Geçmiş kapanışları değiştirmez</small></div><form onsubmit="saveFinance230Rule(event)"><div class="row"><label class="field">Günlük ayrılacak tutar<input id="f230RuleAmount" type="number" min="0" step="0.01" required value="'+esc(latest?.daily_amount||0)+'"></label><label class="field">Yürürlük tarihi<input id="f230RuleDate" type="date" required value="'+today()+'"></label></div><button class="save">Yeni fon ayarını kaydet</button></form></div><div class="finance230-card"><div class="section"><h2>Açılış / düzeltme</h2><small>Artı veya eksi tutar</small></div><form onsubmit="saveFinance230Adjustment(event)"><div class="row"><label class="field">Tarih<input id="f230AdjustmentDate" type="date" required value="'+today()+'"></label><label class="field">Tutar<input id="f230AdjustmentAmount" type="number" step="0.01" required placeholder="Örn. 5000 veya -500"></label></div><label class="field">Açıklama<input id="f230AdjustmentNote" required maxlength="160"></label><label class="finance230-check"><input id="f230AdjustmentOpening" type="checkbox"> Açılış bakiyesi</label><button class="save">Fon hareketini kaydet</button></form></div><div class="section"><h2>Fondan ödenen giderler</h2><small>'+expenses.length+' gider · Tüm aylar</small></div><div class="finance230-list">'+history+'</div><div class="section"><h2>Fon kuralları</h2></div><div class="finance230-list">'+(financeState.rules.map(function(r){return '<div class="finance230-row"><span><strong>'+money(r.daily_amount)+'</strong><small>'+esc(r.effective_from)+' tarihinden itibaren</small></span></div>'}).join('')||'<div class="empty">Fon kuralı henüz belirlenmedi.</div>')+'</div>';
 }
 async function saveFinance230Rule(event){event.preventDefault();if(finance230Busy)return;var amount=Number(document.getElementById('f230RuleAmount')?.value),effectiveFrom=document.getElementById('f230RuleDate')?.value,button=event.submitter||event.target.querySelector('button.save');if(!Number.isFinite(amount)||amount<0||!effectiveFrom){toast('Fon ayarı kaydedilemedi','Tutarı ve yürürlük tarihini kontrol edin.');return}finance230Busy=true;var oldText=button?.textContent;if(button){button.disabled=true;button.textContent='Onay bekleniyor…'}try{var approved=await finance230Confirm('Günlük fon ayarını onaylayın',[['Yürürlük tarihi',effectiveFrom],['Her gün ayrılacak',money(amount)]]);if(!approved)return;if(button)button.textContent='Kaydediliyor…';var result=await salonDb.rpc('save_finance_reserve_rule',{p_daily_amount:amount,p_effective_from:effectiveFrom});if(result.error)throw result.error;var verify=await salonDb.from('finance_reserve_rules').select('id,daily_amount,effective_from').eq('effective_from',effectiveFrom).maybeSingle();if(verify.error)throw verify.error;if(!verify.data)throw new Error('Kayıt veritabanında bulunamadı.');financeState.loaded=false;await loadFinance230(true);toast('Fon ayarı kaydedildi',effectiveFrom+' tarihinden itibaren günlük '+money(verify.data.daily_amount)+' ayrılacak.')}catch(error){toast('Fon ayarı kaydedilemedi',errText(error))}finally{finance230Busy=false;if(button){button.disabled=false;button.textContent=oldText||'Yeni fon ayarını kaydet'}}}window.saveFinance230Rule=saveFinance230Rule;
 async function saveFinance230Adjustment(event){event.preventDefault();if(finance230Busy)return;var form=event.target,amount=Number(document.getElementById('f230AdjustmentAmount')?.value),opening=!!document.getElementById('f230AdjustmentOpening')?.checked,date=document.getElementById('f230AdjustmentDate')?.value,note=(document.getElementById('f230AdjustmentNote')?.value||'').trim(),button=event.submitter||form.querySelector('button.save');if(!Number.isFinite(amount)||amount===0||!date||!note){toast('Fon hareketi kaydedilemedi','Tarih, sıfırdan farklı tutar ve açıklama gereklidir.');return}finance230Busy=true;var oldText=button?.textContent;if(button){button.disabled=true;button.textContent='Onay bekleniyor…'}try{var approved=await finance230Confirm('Fon hareketini onaylayın',[['İşlem',opening?'Açılış bakiyesi':'Fon düzeltmesi'],['Tarih',date],['Tutar',money(amount)],['Açıklama',note]]);if(!approved)return;if(button)button.textContent='Kaydediliyor…';var result=await salonDb.rpc('add_reserve_adjustment',{p_entry_date:date,p_amount:amount,p_note:note,p_opening:opening});if(result.error)throw result.error;var verify=await salonDb.from('reserve_ledger').select('id,amount,entry_date,entry_type,note').eq('id',result.data).maybeSingle();if(verify.error)throw verify.error;if(!verify.data)throw new Error('Kayıt veritabanında bulunamadı.');form.reset();financeState.loaded=false;await loadFinance230(true);toast('Fon güncellendi','Yeni fon bakiyesi ekranda güncellendi.')}catch(error){toast('Fon hareketi kaydedilemedi',errText(error))}finally{finance230Busy=false;if(button){button.disabled=false;button.textContent=oldText||'Fon hareketini kaydet'}}}window.saveFinance230Adjustment=saveFinance230Adjustment;
