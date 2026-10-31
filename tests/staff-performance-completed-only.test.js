@@ -26,7 +26,7 @@ assert.match(phase, /past=own.filter\(function\(item\)\{return item.status==='co
 assert.match(stats, /return item.status==='completed'/);
 assert.match(screen, /staff_performance_report/);
 assert.match(screen, /drawerEmployeePerformance/);
-assert.match(screen, /report\.data\.employees\.some/);
+assert.match(screen, /response\.data\.employees\.some/);
 assert.match(finance, /salonDb\.rpc\('calculate_cash_period_summary'/);
 assert.match(sw, /staff-performance-20261031\.js\?v=2/);
 assert.match(sw, /salon-modern-shell-pwa-v188/);
