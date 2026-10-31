@@ -210,18 +210,82 @@
       if (requestId !== authRequest) return;
       if (!(await loadProfile(verifiedUser, requestId))) return;
       trace('profile-complete', { requestId: requestId, role: currentUser && currentUser.role });
-      await window.reloadRemoteData();
-      trace('reloadRemoteData-complete', { requestId: requestId });
-      if (requestId !== authRequest) return;
-      window.subscribeSalon();
-      trace('realtime-subscribe-requested', { requestId: requestId });
-      window.enterApp();
-      var savedPage = sessionStorage.getItem(LAST_PAGE_KEY) || 'home';
-      window.showPage(document.getElementById(savedPage) ? savedPage : 'home');
+
+      // Show the authenticated calendar shell immediately. Never wait for the
+      // whole appointment history, client list or finance summaries to finish.
+      // No records are displayed until the day query confirms their contents.
+      var userId = currentUser.id;
+      window.salonRemoteMode = true;
+      window.salonHistoryState = 'loading';
+      window.salonCalendarPreviewMonth = null;
+      window.salonCalendarPendingMonth = null;
+      window.salonFastCalendarBoot = true;
+      if (typeof appts !== 'undefined') appts = [];
+      if (typeof staff !== 'undefined') staff = [];
+      if (typeof remoteProfiles !== 'undefined') remoteProfiles = [];
+      if (typeof remoteServices !== 'undefined') remoteServices = [];
+      if (typeof remoteClients !== 'undefined') remoteClients = [];
+      if (typeof teamCalendarMode !== 'undefined') teamCalendarMode = 'day';
+      if (typeof teamCalendarMember !== 'undefined') teamCalendarMember = undefined;
+      if (typeof teamCalendarDate !== 'undefined' && typeof salonCalendarToday === 'function')
+        teamCalendarDate = salonCalendarToday();
+      window.salonCalendarLoadState = { status: 'loading', date: typeof selectedTeamDate === 'function' ? selectedTeamDate() : '' };
+
+      // Showing the calendar must not trigger a competing second data reload.
+      window.salonSuppressCalendarReload = true;
+      try {
+        window.enterApp();
+        window.showPage('calendar');
+      } finally {
+        window.salonSuppressCalendarReload = false;
+      }
       hideConnectionProblem();
       setState(AUTH.AUTHENTICATED);
-      trace('authenticated', { requestId: requestId, page: savedPage });
-      window.showAppToast?.('Canlı bağlantı açık', 'Randevu ve bildirimler anlık eşitlenir.');
+      trace('calendar-shell-visible', { requestId: requestId });
+
+      var subscribed = false;
+      function subscribeAfterPreview() {
+        if (subscribed || requestId !== authRequest || !currentUser || currentUser.id !== userId) return;
+        subscribed = true;
+        try {
+          window.subscribeSalon();
+          trace('realtime-subscribe-requested', { requestId: requestId });
+        } catch (error) {
+          subscribed = false;
+          console.warn('[Salon auth] realtime subscription deferred', error && error.message);
+        }
+      }
+      window.salonOnCalendarPreview = function () {
+        if (requestId !== authRequest || !currentUser || currentUser.id !== userId) return;
+        window.salonFastCalendarBoot = false;
+        window.salonOnCalendarPreview = null;
+        subscribeAfterPreview();
+        trace('calendar-preview-visible', { requestId: requestId });
+      };
+
+      // Yield to the browser so the calendar skeleton can paint before starting
+      // potentially multi-page history and auxiliary database requests.
+      setTimeout(function () {
+        if (requestId !== authRequest || !currentUser || currentUser.id !== userId) return;
+        Promise.resolve().then(function () { return window.reloadRemoteData(); })
+          .then(function () {
+            if (requestId !== authRequest || !currentUser || currentUser.id !== userId) return;
+            trace('reloadRemoteData-complete', { requestId: requestId });
+            window.showAppToast?.('Canlı bağlantı açık', 'Randevu ve bildirimler anlık eşitlenir.');
+          })
+          .catch(function (error) {
+            if (requestId !== authRequest || !currentUser || currentUser.id !== userId) return;
+            trace('background-data-error', { requestId: requestId, message: String(error && error.message || '') });
+            // The calendar data loader already reports failed day/month/history
+            // requests. Do not hide a verified session on a background error.
+            console.warn('[Salon auth] background data load failed', error && error.message);
+          })
+          .finally(function () {
+            if (requestId !== authRequest || !currentUser || currentUser.id !== userId) return;
+            window.salonOnCalendarPreview = null;
+            subscribeAfterPreview();
+          });
+      }, 0);
     } catch (error) {
       if (requestId !== authRequest) return;
       trace('loadRemoteSession-error', { requestId: requestId, message: String(error && error.message || ''), temporary: isTemporary(error), verifiedSession: verifiedSession });
