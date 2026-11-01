@@ -63,23 +63,16 @@ function minuteLabel(minutes: number) {
 
 const CUSTOMER_CONTACT_MESSAGE = 'Online randevu oluşturma işleminiz için lütfen Salon Modern ile iletişime geçiniz.'
 const CUSTOMER_CHANGE_CUTOFF_MESSAGE = 'Randevunuza 2 saatten az kaldığı için online değişiklik veya iptal yapılamamaktadır. Lütfen Salon Modern ile iletişime geçiniz.'
-const NEW_CUSTOMER_EMPLOYEES = new Set([
-  'd2bc11fe-e0dd-4609-bd26-f691ef049e32', // Cengiz
-  '5fdd9b99-9669-4e36-9183-1380d61ea5bb', // Talip
-])
-
 function normalizedCustomerName(value: unknown) {
   const name = clean(value, 120).normalize('NFKC').replace(/\s+/g, ' ').trim()
   return name.split(' ').length >= 2 ? name.toLocaleLowerCase('tr-TR') : ''
 }
 
-async function bookingEmployees(customerPhone: string, customerName: string) {
-  const [registered, profiles] = await Promise.all([
-    db.rpc('online_booking_customer_registered', { p_phone: customerPhone, p_name: customerName }),
-    db.from('profiles').select('id,full_name').eq('active', true).neq('username', 'salon.modern').order('full_name'),
-  ])
-  if (registered.error || profiles.error) throw registered.error || profiles.error
-  return (profiles.data || []).filter((profile) => registered.data === true || NEW_CUSTOMER_EMPLOYEES.has(profile.id))
+async function bookingEmployees() {
+  const profiles = await db.from('profiles').select('id,full_name').eq('active', true)
+    .neq('username', 'salon.modern').order('full_name')
+  if (profiles.error) throw profiles.error
+  return profiles.data || []
 }
 
 async function bookingIdentity(req: Request) {
@@ -90,8 +83,16 @@ async function bookingIdentity(req: Request) {
   const normalizedName = normalizedCustomerName(body.name)
   if (!customerPhone || !normalizedName)
     return reply(req, { error: 'Ad soyad ve telefon numaranızı kontrol edin.' }, 400)
-  const employees = await bookingEmployees(customerPhone, String(body.name || ''))
-  return reply(req, { employees })
+  const serviceId = clean(body.serviceId, 80)
+  if (!validUuid(serviceId) || !(await onlineServices()).some((item) => item.id === serviceId))
+    return reply(req, { error: 'Geçerli bir hizmet seçin.' }, 400)
+  const employees = await bookingEmployees()
+  const recommendation = await db.rpc('online_booking_recommended_employee', {
+    p_phone: customerPhone, p_name: String(body.name || ''),
+    p_employee_ids: employees.map((item) => item.id),
+  })
+  if (recommendation.error) throw recommendation.error
+  return reply(req, { employees, recommendedEmployeeId: recommendation.data || null })
 }
 
 async function bookingSchedule(date: string) {
@@ -190,7 +191,7 @@ async function createRequest(req: Request) {
     return reply(req, { error: 'Ad ve soyadınızı girin.' }, 400)
   // Do not trust the client-side employee list: apply the same eligibility
   // restrictions to every submitted booking request.
-  const employees = await bookingEmployees(customerPhone, customerName)
+  const employees = await bookingEmployees()
   if (!employeeId || !employees.some((item) => item.id === employeeId))
     return reply(req, { error: 'Bu müşteri için uygun çalışan seçin.' }, 403)
   const startAt = slotIso(requestedDate, time)

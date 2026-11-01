@@ -352,7 +352,6 @@ window.confirmSalonAssistantAction=async function(){
   var result=await salonDb.from('appointments').update({scheduled_at:remoteSchedule(date,time),updated_by:currentUser.id}).eq('id',item.id).select('id,scheduled_at');
   if(result.error||!result.data?.length){showAppToast('Randevu güncellenemedi',result.error?.message||'Yetkiniz olmayabilir.');return}
   smartPendingAction=null;await reloadRemoteData();renderCalendar();document.getElementById('salonAssistantResult').innerHTML='<div class="security">Randevu '+safe(time)+' saatine güncellendi. İşlemi yapan kullanıcı denetim kaydına yazıldı.</div>';
-  var client=smartClientById(item.clientId),phone=item.phone||client?.phone||'';if(phone){var url=whatsappAppointmentUpdateUrl(item.customer,phone,date,time,item.staff,appointmentRevenue(item),item.operation);setTimeout(function(){window.open(url,'_blank','noopener')},20)}
 };
 
 var previousShowPageSmart=showPage;

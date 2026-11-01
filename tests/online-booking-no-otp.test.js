@@ -12,7 +12,7 @@ assert.match(backend, /can_create_online_booking/);
 assert.match(backend, /create_pending_online_booking/);
 assert.match(html, /id="continueCustomerButton"/);
 assert.match(browser, /action=booking-identity/);
-assert.match(sw, /booking\.js\?v=182/);
+assert.match(sw, /booking\.js\?v=183/);
 assert.ok(!backend.includes('phone-request-code'));
 assert.ok(!backend.includes('phone-verify-code'));
 assert.ok(!browser.includes('requestCodeButton'));

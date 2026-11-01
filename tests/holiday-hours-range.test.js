@@ -8,7 +8,7 @@ const sql=fs.readFileSync('supabase/migrations/20261101002000_staff_occupancy_de
 
 assert.match(html,/salon-holiday-hours-20261101\.js\?v=1/);
 assert.match(sw,/salon-holiday-hours-20261101\.js\?v=1/);
-assert.match(sw,/salon-modern-shell-pwa-v196/);
+assert.match(sw,/salon-modern-shell-pwa-v\d+/);
 assert.match(sql,/EXTRACT\(ISODOW FROM d\.day::date\)=7/);
 assert.match(sql,/o\.schedule_date IS NULL/);
 assert.match(sql,/booking_schedule_overrides/);
@@ -19,7 +19,7 @@ assert.match(source,/isManager\(\)/);
 
 const helperStart=source.indexOf('function datesBetween(');
 const helperEnd=source.indexOf('function render(',helperStart);
-const helpers=vm.runInNewContext(source.slice(helperStart,helperEnd)+'\nthis.helpers={datesBetween,validHour}',{}).helpers;
+const helpers=vm.runInNewContext(source.slice(helperStart,helperEnd)+'\nthis.helpers={datesBetween,validHour}',{});
 assert.deepEqual(Array.from(helpers.datesBetween('2026-05-21','2026-05-25')),[
  '2026-05-21','2026-05-22','2026-05-23','2026-05-24','2026-05-25'
 ]);

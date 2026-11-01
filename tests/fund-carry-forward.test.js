@@ -31,7 +31,8 @@ const context = vm.createContext({
   money: amount => new Intl.NumberFormat('tr-TR').format(Number(amount || 0)),
   esc: value => String(value),
   today: () => '2026-10-31',
-  finance230LedgerHtml: rows => rows.map(row => row[0] + ' ' + new Intl.NumberFormat('tr-TR').format(Number(row[1] || 0))).join(' | ')
+  finance230LedgerHtml: rows => rows.map(row => row[0] + ' ' + new Intl.NumberFormat('tr-TR').format(Number(row[1] || 0))).join(' | '),
+  finance230ExpensesByMonthHtml: () => ''
 });
 vm.runInContext(source.slice(start,end), context);
 context.renderReserve();
