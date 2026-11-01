@@ -12,7 +12,8 @@ assert.doesNotMatch(booking.match(/async function approve\(id\)[^\n]*/)[0],/wind
 assert.doesNotMatch(movement.match(/async function moveConfirmed\(id,date,time,staffName\)[\s\S]*?\n  function requestMove/)[0],/window\.location|window\.open/);
 assert.doesNotMatch(assistant.match(/window\.confirmSalonAssistantAction=async function\(\)[^\n]*/)[0],/window\.open|whatsappAppointmentUpdateUrl/);
 assert.doesNotMatch(cancellation,/try\{window\.open\(url|prepareCancelWhatsApp/);
-assert.match(cancellation,/showCancelWhatsAppStatus\(id\)/);
+assert.doesNotMatch(cancellation,/showCancelWhatsAppStatus|appointmentCancelWhatsApp/);
+assert.match(cancellation,/WhatsApp mesajı gönderilmeyecek/);
 assert.match(thankYou,/function openWhatsapp\(row\)/,'Manager thank-you draft remains available');
 assert.match(html,/function openReturnWhatsApp\(clientId\)/,'Customer-specific manual chat remains available');
 console.log('PASS create, approve, move, cancel and assistant do not auto-open WhatsApp; thank-you and customer chat remain');
