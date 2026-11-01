@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const html = fs.readFileSync('randevu/index.html', 'utf8');
 const browser = fs.readFileSync('randevu/booking.js', 'utf8');
 const edge = fs.readFileSync('supabase/functions/customer-booking-request/index.ts', 'utf8');
-const sql = fs.readFileSync('supabase/migrations/20261101120000_booking_recommendation_and_manual_whatsapp_guard.sql', 'utf8');
+const sql = fs.readFileSync('supabase/migrations/20261101090803_booking_recommendation_and_manual_whatsapp_guard.sql', 'utf8');
 const identity = html.indexOf('data-step="1"');
 const service = html.indexOf('data-step="2"');
 const employee = html.indexOf('data-step="3"');
