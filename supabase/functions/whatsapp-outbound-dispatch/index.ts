@@ -137,7 +137,7 @@ async function processReturnDelivery(db: any, delivery: any) {
   const phone = normalizeTrPhone(client.phone);
   const values = { "{musteri_adi}": client.full_name };
   const allowed = META_TEMPLATE_TOKENS.customer_return_reminder;
-  const rendered = renderMessageTemplate(template.content, values, allowed);
+  const rendered = renderMessageTemplate(template.content, values, allowed as any);
   const currentHash = await sha256(template.content);
   if (!phone || !rendered.ok || !Array.isArray(mapping.placeholder_order)
       || JSON.stringify(mapping.placeholder_order) !== JSON.stringify(allowed)
@@ -163,7 +163,7 @@ async function processReturnDelivery(db: any, delivery: any) {
 
   const payload = metaTemplatePayload({
     to: phone, name: mapping.meta_template_name, languageCode: mapping.language_code,
-    parameterTokens: allowed, values,
+    parameterTokens: allowed as any, values,
   });
   const result = await postMetaMessage(payload);
   if (result.ok) return db.from("whatsapp_message_logs")
@@ -183,6 +183,13 @@ async function processReturnDelivery(db: any, delivery: any) {
 }
 
 async function processDelivery(db: any, delivery: any) {
+  // Appointment cancellation/update remains in the app, but customer WhatsApp
+  // notifications for these events are disabled by business policy.
+  // Second guard for stale/pre-existing queued records.
+  if (delivery.template_key === "appointment_update" || delivery.template_key === "appointment_cancelled")
+    return db.from("whatsapp_message_logs")
+      .update({ status: "skipped_event_invalid", last_error: "appointment_whatsapp_notification_disabled", updated_at: new Date().toISOString() })
+      .eq("id", delivery.id).eq("status", "sending");
   if (delivery.template_key === "appointment_thank_you") return db.from("whatsapp_message_logs")
     .update({ status: "skipped_event_invalid", last_error: "automatic_thank_you_disabled", updated_at: new Date().toISOString() })
     .eq("id", delivery.id).eq("status", "sending");
@@ -190,6 +197,14 @@ async function processDelivery(db: any, delivery: any) {
   const appointmentResult = await db.from("appointments").select("id,client_id,client_name,client_phone,service_name,amount,employee_id,scheduled_at,status,reminder_eligible,reminder_target_at,completed_at").eq("id", delivery.appointment_id).maybeSingle();
   const appointment = appointmentResult.data;
   if (appointmentResult.error || !appointment) return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: appointmentResult.error?.message ?? "appointment_not_found", updated_at: new Date().toISOString() }).eq("id", delivery.id);
+  // Never send a new appointment confirmation for a time that has already passed.
+  // This also covers messages queued before the scheduling policy was updated.
+  if (delivery.template_key === "appointment_confirmation" && (
+    !Number.isFinite(Date.parse(appointment.scheduled_at)) ||
+    Date.parse(appointment.scheduled_at) <= Date.now()
+  )) return db.from("whatsapp_message_logs")
+    .update({ status: "skipped_event_invalid", last_error: "appointment_time_already_passed", updated_at: new Date().toISOString() })
+    .eq("id", delivery.id).eq("status", "sending");
   if (delivery.template_key !== "appointment_cancelled" && appointment.status === "cancelled") return db.from("whatsapp_message_logs").update({ status: "skipped_event_invalid", last_error: "appointment_cancelled", updated_at: new Date().toISOString() }).eq("id", delivery.id);
   if (delivery.template_key === "appointment_reminder" && (
     appointment.status !== "confirmed" || !appointment.reminder_eligible || !appointment.reminder_target_at ||
@@ -234,9 +249,9 @@ async function processDelivery(db: any, delivery: any) {
   const currentApproval = tryCurrent ? await ycloudTemplateApproved(
     currentName, "tr", currentTokens.length, ycloudExpectedMessage(currentKey, values),
     currentTokens, values, Deno.env, fetch,
-    currentKey === "appointment_reminder"
+    (currentKey === "appointment_reminder"
       ? [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["📍 Yol Tarifi", "Yol Tarifi"] }]
-      : [],
+      : []) as any,
   ) : null;
   const legacy = legacyConfigured && !currentApproval?.ok;
   if (!legacy && (templateResult.error || !templateResult.data?.content?.trim())) return db.from("whatsapp_message_logs").update({ status: templateResult.data ? "skipped_template_invalid" : "skipped_template_missing", last_error: templateResult.error?.message ?? "template_missing", updated_at: new Date().toISOString() }).eq("id", delivery.id);
@@ -267,7 +282,7 @@ async function processDelivery(db: any, delivery: any) {
     const expectedButtons = !legacy && delivery.template_key === "appointment_reminder"
       ? [{ type: "URL", url: YCLOUD_REMINDER_URL, texts: ["📍 Yol Tarifi", "Yol Tarifi"] }]
       : [];
-    const approval = currentApproval?.ok && !legacy ? currentApproval : await ycloudTemplateApproved(mapping.meta_template_name, mapping.language_code, parameterTokens.length, expectedMessage, parameterTokens, values, Deno.env, fetch, expectedButtons);
+    const approval = currentApproval?.ok && !legacy ? currentApproval : await ycloudTemplateApproved(mapping.meta_template_name, mapping.language_code, parameterTokens.length, expectedMessage, parameterTokens, values, Deno.env, fetch, expectedButtons as any);
     if (!approval.ok && approval.retryable && Number(delivery.attempt_count) < 3) return db.from("whatsapp_message_logs").update({ status: "queued", next_attempt_at: new Date(Date.now() + 60_000 * Math.pow(2, Math.max(0, Number(delivery.attempt_count) - 1))).toISOString(), last_error: approval.reason, updated_at: new Date().toISOString() }).eq("id", delivery.id).eq("status", "sending");
     if (!approval.ok) return db.from("whatsapp_message_logs").update({ status: approval.retryable ? "failed" : "awaiting_meta_approval", last_error: approval.reason, updated_at: new Date().toISOString() }).eq("id", delivery.id);
     const payload = ycloudTemplatePayload({ from: approval.from, to: phone, name: mapping.meta_template_name, languageCode: mapping.language_code, parameterTokens, values, externalId: delivery.idempotency_key });
@@ -301,7 +316,7 @@ async function diagnoseYCloudTemplates() {
         : [];
       const check = await ycloudTemplateApproved(
         name, "tr", tokens.length, ycloudExpectedMessage(key, values),
-        tokens, values, Deno.env, fetch, expectedButtons,
+        tokens, values, Deno.env, fetch, expectedButtons as any,
       );
       return [key, { name, ready: check.ok, reason: check.ok ? null : check.reason }] as const;
     }),
@@ -321,6 +336,67 @@ Deno.serve(async (request) => {
   try { requestBody = await request.json(); } catch { requestBody = {}; }
   if (requestBody?.mode === "diagnose") return json(await diagnoseMeta(String(requestBody?.expected_phone ?? "")));
   if (requestBody?.mode === "diagnose_ycloud_templates") return json(await diagnoseYCloudTemplates());
+  if (requestBody?.mode === "monitor_ycloud_balance") {
+    // Admin-only, read-only provider call; never dispatches customer messages.
+    const apiKey = Deno.env.get("YCLOUD_API_KEY") ?? "";
+    const url = Deno.env.get("SUPABASE_URL") ?? "";
+    const key = getAdminKey();
+    if (!apiKey || !url || !key) return json({ ok: false, error: "balance_monitor_not_configured" }, 503);
+    try {
+      const response = await fetch("https://api.ycloud.com/v2/balance", {
+        method: "GET", headers: { "X-API-Key": apiKey, accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      const balance = await response.json().catch(() => null);
+      if (!response.ok || typeof balance?.amount !== "number" || balance?.currency !== "USD")
+        return json({ ok: false, error: "balance_monitor_provider_unavailable", http_status: response.status }, 503);
+      const amount = balance.amount;
+      const lowBalance = amount < 2;
+      if (!lowBalance) return json({ ok: true, low_balance: false });
+      const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+      const title = "YCloud WhatsApp bakiyesi düşük";
+      const since = new Date(Date.now() - 20 * 60 * 60_000).toISOString();
+      const [managers, previous] = await Promise.all([
+        db.from("profiles").select("id").eq("active", true).eq("role", "manager"),
+        db.from("notifications").select("recipient_id").eq("kind", "system").eq("title", title).gte("created_at", since),
+      ]);
+      if (managers.error || previous.error) return json({ ok: false, error: "balance_monitor_database_unavailable" }, 503);
+      const notified = new Set((previous.data ?? []).map((entry: any) => entry.recipient_id));
+      const pending = (managers.data ?? []).filter((manager: any) => !notified.has(manager.id))
+        .map((manager: any) => ({
+          recipient_id: manager.id, kind: "system", title,
+          body: `YCloud bakiyesi ${amount.toFixed(4)} USD. Randevu WhatsApp mesajları gönderilemeyebilir. YCloud hesabına bakiye yükleyin.`,
+        }));
+      if (pending.length) {
+        const inserted = await db.from("notifications").insert(pending);
+        if (inserted.error) return json({ ok: false, error: "balance_monitor_notification_failed" }, 500);
+      }
+      return json({ ok: true, low_balance: true, manager_notifications: pending.length });
+    } catch {
+      return json({ ok: false, error: "balance_monitor_unavailable" }, 503);
+    }
+  }
+  if (requestBody?.mode === "diagnose_ycloud_account") {
+    // Read-only account diagnostic. Never sends a WhatsApp message.
+    const apiKey = Deno.env.get("YCLOUD_API_KEY") ?? "";
+    if (!apiKey) return json({ ok: false, error: "ycloud_key_missing" }, 503);
+    try {
+      const balanceResponse = await fetch("https://api.ycloud.com/v2/balance", {
+        method: "GET", headers: { "X-API-Key": apiKey, accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      const body = await balanceResponse.json().catch(() => null);
+      const code = String(body?.error?.code ?? body?.code ?? "unknown").slice(0, 80).replace(/[^A-Za-z0-9_-]/g, "");
+      return json({
+        ok: balanceResponse.ok, provider: "ycloud", balance_http_status: balanceResponse.status,
+        balance: balanceResponse.ok && typeof body?.amount === "number"
+          ? { amount: body.amount, currency: String(body.currency ?? "") } : null,
+        error_code: balanceResponse.ok ? null : code,
+      });
+    } catch {
+      return json({ ok: false, provider: "ycloud", error: "balance_diagnostic_unavailable" }, 503);
+    }
+  }
   const provider = (Deno.env.get("WHATSAPP_PROVIDER") ?? "meta").toLowerCase();
   if (provider !== "meta" && provider !== "ycloud") return json({ ok: false, error: "unknown_whatsapp_provider" }, 503);
   if (provider === "ycloud" && !["legacy", "current"].includes(Deno.env.get("WHATSAPP_TEMPLATE_VERSION") ?? "")) return json({ ok: false, error: "unknown_whatsapp_template_version" }, 503);

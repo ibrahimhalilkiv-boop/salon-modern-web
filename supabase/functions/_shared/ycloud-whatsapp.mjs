@@ -117,7 +117,16 @@ export async function postYCloudMessage(payload, env = Deno.env, fetcher = fetch
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-    if (!response.ok) return { ok: false, kind: response.status === 429 ? "retryable" : response.status >= 500 ? "unknown" : "rejected", httpStatus: response.status };
+    if (!response.ok) {
+      // Preserve the machine-readable YCloud code, never response text or customer data.
+      const failure = await response.json().catch(() => null);
+      const rawCode = String(failure?.error?.code ?? failure?.code ?? "");
+      const code = /^[A-Z][A-Z0-9_]{1,79}$/.test(rawCode) ? rawCode : null;
+      return {
+        ok: false, kind: response.status === 429 ? "retryable" : response.status >= 500 ? "unknown" : "rejected",
+        httpStatus: response.status, error: code ? `ycloud_${code}` : `ycloud_${response.status}`,
+      };
+    }
     const body = await response.json().catch(() => null);
     if (!body?.id || body?.wabaId !== config.wabaId || body?.from !== config.from || body?.externalId !== payload.externalId || body?.status === "failed") {
       return { ok: false, kind: "unknown", error: "ycloud_response_unverifiable" };
