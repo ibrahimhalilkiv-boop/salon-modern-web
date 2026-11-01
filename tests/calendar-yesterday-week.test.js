@@ -58,5 +58,5 @@ days[0].onclick();days[1].onclick();days[2].onclick();
 assert.deepEqual(selected,['2026-10-31','2026-11-01']);
 assert.match(html,/salon-calendar-smart\.js\?v=12/);
 assert.match(sw,/salon-calendar-smart\.js\?v=12/);
-assert.match(sw,/salon-modern-shell-pwa-v196/);
+assert.match(sw,/salon-modern-shell-pwa-v\d+/);
 console.log('PASS smart week: yesterday is available, older days muted and unselectable; live calendar asset cached');

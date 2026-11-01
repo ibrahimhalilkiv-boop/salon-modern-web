@@ -17,14 +17,14 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     await page.route('https://oxuwwjsakhcqimjsfris.supabase.co/**', route => {
       const action = new URL(route.request().url()).searchParams.get('action');
       if (action === 'catalogue') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ services: [{ id: 's1', name: 'Saç sakal ağda maske yıkama ve uzun hizmet adı', price: 1000 }], employees: [] }) });
-      if (action === 'booking-identity') { const registered = JSON.parse(route.request().postData()).name === 'Kayıtlı Müşteri'; return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ employees: registered ? [{ id: 'c1', full_name: 'Cengiz' }, { id: 'h1', full_name: 'Halil' }, { id: 'm1', full_name: 'Mehmet' }, { id: 't1', full_name: 'Talip' }] : [{ id: 'c1', full_name: 'Cengiz' }, { id: 't1', full_name: 'Talip' }] }) }); }
+      if (action === 'booking-identity') { const body = JSON.parse(route.request().postData()); assert.equal(body.serviceId, 's1'); const registered = body.name === 'Kayıtlı Müşteri'; return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ employees: [{ id: 'c1', full_name: 'Cengiz' }, { id: 'h1', full_name: 'Halil' }, { id: 'm1', full_name: 'Mehmet' }, { id: 't1', full_name: 'Talip' }], recommendedEmployeeId: registered ? 'h1' : null }) }); }
       assert.equal(route.request().method(), 'GET', 'The test must not create a real appointment');
       assert.equal(action, 'availability');
       availabilityCalls++;
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ allSlots: [{ time: '10:00', available: availabilityCalls !== 1, status: availabilityCalls === 1 ? 'busy' : 'available' }], slots: availabilityCalls === 1 ? [] : [{ time: '10:00' }] }) });
     });
     await page.goto('https://fixture.test/randevu/');
-    await page.locator('#services button').waitFor();
+    await page.locator('#services button').waitFor({ state: 'attached' });
     const price = await page.locator('#services strong').evaluate(node => {
       const box = node.getBoundingClientRect();
       const button = node.closest('button').getBoundingClientRect();
@@ -33,16 +33,16 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     assert.equal(price.text, '₺ 1.000');
     assert(price.height < 35, 'Price should fit on one line on a 320px screen');
     assert(price.buttonRight - price.right < 25, 'Price should remain right-aligned');
-    await page.locator('#services button').click();
-    assert(await page.locator('.step[data-step="2"]').isVisible());
-    assert.equal(await page.locator('#nextButton').isVisible(), false);
+    assert(await page.locator('.step[data-step="1"]').isVisible());
     await page.locator('#customerName').fill('Örnek Müşteri');
     await page.locator('#customerPhone').fill('0555 111 22 33');
     await page.locator('#continueCustomerButton').click();
+    assert(await page.locator('.step[data-step="2"]').isVisible());
+    await page.locator('#services button').click();
     await page.locator('.step[data-step="3"]').waitFor({ state: 'visible' });
     assert(await page.locator('.step[data-step="3"]').isVisible());
     assert.equal(codeRequests, 0, 'No verification code should be requested');
-    assert.deepEqual(await page.locator('#employees button').allInnerTexts(), ['Cengiz', 'Talip']);
+    assert.deepEqual(await page.locator('#employees button').allInnerTexts(), ['Cengiz', 'Halil', 'Mehmet', 'Talip']);
     await page.locator('#employees button').first().click();
     assert(await page.locator('.step[data-step="4"]').isVisible());
     assert.equal(await page.locator('#nextButton').isVisible(), false);
@@ -65,10 +65,17 @@ const { chromium } = require(path.join(process.argv[2], 'playwright'));
     assert.equal(await page.locator('#bookingDate').inputValue(), '', 'Changing employee must require a fresh availability check');
     await page.locator('#backButton').click();
     await page.locator('#backButton').click();
+    await page.locator('#backButton').click();
     await page.locator('#customerName').fill('Kayıtlı Müşteri');
     await page.locator('#continueCustomerButton').click();
+    await page.locator('#services button').click();
     await page.locator('.step[data-step="3"]').waitFor({ state: 'visible' });
-    assert.deepEqual(await page.locator('#employees button').allInnerTexts(), ['Cengiz', 'Halil', 'Mehmet', 'Talip']);
+    assert.match(await page.locator('#employees button.selected').innerText(), /Halil.*Önerilen çalışan/s);
+    await page.locator('#nextButton').click();
+    assert(await page.locator('.step[data-step="4"]').isVisible(), 'Öneri tek dokunuşla kabul edilebilmeli');
+    await page.locator('#backButton').click();
+    await page.locator('#employees button').first().click();
+    assert(await page.locator('.step[data-step="4"]').isVisible(), 'Önerilen çalışan değiştirilebilir olmalı');
     assert.equal(codeRequests, 0, 'No verification code should be requested');
     console.log('PASS online booking form: mobile price, code-free customer details, staff routing, empty slots, back and employee reselection');
   } finally { await browser.close(); }
