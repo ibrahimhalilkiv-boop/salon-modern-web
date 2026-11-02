@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const { chromium } = require(path.join(process.argv[2], 'playwright'));
 
 const listSource = fs.readFileSync('salon-return-daily.js', 'utf8');
+const smartSource = fs.readFileSync('smart-customer-analysis-1.7.0.js', 'utf8');
+const smartBridge = smartSource.slice(smartSource.indexOf('function smartWhatsappButton('), smartSource.indexOf('function smartGreeting('));
 const pushSource = fs.readFileSync('salon-web-push.js', 'utf8');
 const routeSource = pushSource.slice(pushSource.indexOf('async function openNotification(data){'), pushSource.indexOf('function clearNotificationUrl()'));
 
@@ -24,6 +26,8 @@ const routeSource = pushSource.slice(pushSource.indexOf('async function openNoti
         document.querySelectorAll('.page').forEach(item => item.classList.remove('active'));
         document.getElementById(id).classList.add('active');
       };
+      window.jsAttr = value => JSON.stringify(value);
+      window.safe = value => String(value);
       window.salonDb = {
         rpc: async name => name === 'salon_return_due_clients'
           ? { data: [{ client_id: 'fixture-client', client_name: 'Örnek Müşteri', phone: '905000000001', last_visit: '2026-10-01', average_days: 14, elapsed_days: 19, state: 'due', has_consent: true }] }
@@ -31,18 +35,28 @@ const routeSource = pushSource.slice(pushSource.indexOf('async function openNoti
         from(table) {
           return { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: table === 'booking_settings'
             ? { whatsapp_return_auto_enabled: window.returnAutoEnabled }
-            : { content: 'Merhaba {musteri_adi}' } }) };
+            : { content: 'Merhaba {musteri_adi},\n\nDüzenli bakım alışkanlığınıza göre tıraş zamanınız gelmiştir. Yeni randevu planlamak için https://app.salonmodern.com.tr/randevu/ bağlantısını kullanabilirsiniz. Bizimle de iletişime geçebilirsiniz.\n\nSalon Modern' } }) };
         }
       };
     });
     await page.evaluate(listSource);
+    await page.addScriptTag({ content: smartBridge });
     await page.addScriptTag({ content: routeSource + '\nwindow.fixtureOpenNotification = openNotification;' });
     await page.evaluate(() => fixtureOpenNotification({ kind: 'customer_return_due', notificationId: 'fixture-note' }));
     assert.equal(await page.locator('#salonReturnDue.active').count(), 1, 'Digest click opens the dedicated customer list');
     assert.match(await page.locator('#returnDueList').innerText(), /Örnek Müşteri/);
     assert.equal(await page.evaluate(() => waDrafts.length), 0, 'Opening a notification does not send WhatsApp');
+    assert.match(await page.evaluate(() => smartWhatsappButton('fixture-client', 'Listeyi aç')), /Listeyi aç/);
+    await page.evaluate(() => openSmartCustomerWhatsApp('fixture-client'));
+    assert.equal(await page.evaluate(() => waDrafts.length), 0, 'Smart analysis opens the verified list before a WhatsApp draft');
+    assert.equal(await page.evaluate(() => { currentUser.role = 'personel'; return smartWhatsappButton('fixture-client'); }), '', 'Staff do not receive a marketing shortcut');
+    await page.evaluate(() => { currentUser.role = 'yonetici'; });
     await page.locator('[data-return-action="whatsapp"]').click();
     assert.equal(await page.evaluate(() => waDrafts.length), 1, 'Only owner action opens a manual WhatsApp draft');
+    const draft = await page.evaluate(() => new URL(waDrafts[0][0]).searchParams.get('text'));
+    assert.match(draft, /Düzenli bakım alışkanlığınıza göre tıraş zamanınız gelmiştir/);
+    assert.match(draft, /https:\/\/app\.salonmodern\.com\.tr\/randevu\//);
+    assert.match(draft, /Bizimle de iletişime geçebilirsiniz/);
     assert.equal(await page.evaluate(() => dbWrites.length), 0, 'Opening a draft does not mark a message sent');
     await page.evaluate(() => { window.returnAutoEnabled = true; });
     await page.evaluate(() => SalonReturnDaily.refresh());

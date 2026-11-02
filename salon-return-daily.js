@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var items = [], template = '', busy = false, autoEnabled = false;
+  var items = [], template = '', loadPromise = null, autoEnabled = true;
   var pageId = 'salonReturnDue';
 
   function isOwner() {
@@ -28,7 +28,7 @@
       '<div class="content">' +
       '<button class="back" type="button" id="returnDueBack">‹ Akıllı Müşteri Analizi</button>' +
       '<h1 class="page-title">Tıraş süresi dolan müşteriler</h1>' +
-      '<p class="return-due-help">Tıraş zamanı gelen ve gelecekte randevusu bulunmayan müşteriler. WhatsApp mesajları yalnızca sizin dokunmanızla hazırlanır, otomatik gönderilmez.</p>' +
+      '<p class="return-due-help">Tamamlanan ziyaretlerine göre tıraş zamanı gelen ve gelecekte randevusu bulunmayan müşteriler.</p>' +
       '<div id="returnDueList"><div class="empty">Liste yükleniyor…</div></div>' +
       '<button type="button" class="fab" id="returnDueRefresh">Listeyi yenile</button>' +
       '</div>';
@@ -64,6 +64,8 @@
   function render() {
     var target = document.getElementById('returnDueList');
     if (!target) return;
+    var help = document.querySelector('.return-due-help');
+    if (help) help.textContent = autoEnabled ? 'Meta onaylı otomatik geri çağırma açık; manuel WhatsApp işlemleri kapalı.' : 'WhatsApp taslakları yalnızca sizin dokunmanızla hazırlanır; otomatik gönderilmez.';
     if (!isOwner()) {
       target.innerHTML = '<div class="empty">Bu liste yalnızca hesabınız için yetkilendirilmiş yöneticiye açıktır.</div>';
       return;
@@ -71,7 +73,7 @@
     var label = { risk: 'Kaybedilme Riski', overdue: 'Gecikti', due: 'Zamanı Geldi' };
     target.innerHTML =
       '<div class="return-due-note"><strong>' + items.length + ' müşteri</strong> · En az 3 farklı ziyaret esas alınır. ' +
-      (autoEnabled ? 'Otomatik geri çağırma açık; manuel WhatsApp işlemleri kapalı.' : 'Eski randevuların bir kısmı tamamlandı olarak işaretlenmediği için listeyi kontrol edin. İleti iznini doğrulamadan mesaj göndermeyin.') + '</div>' +
+      (autoEnabled ? 'Otomatik geri çağırma açık; manuel WhatsApp işlemleri kapalı.' : 'Yalnızca tamamlanan ziyaretler esas alınır. İleti iznini doğrulamadan mesaj göndermeyin.') + '</div>' +
       (items.length ? items.map(function (item) {
         return '<article class="return-due-item">' +
           '<div class="return-due-head"><strong>' + escapeHtml(item.client_name) + '</strong><span class="return-due-status">' + escapeHtml(label[item.state] || 'Zamanı Geldi') + '</span></div>' +
@@ -84,29 +86,34 @@
           '</div>') + '</article>';
       }).join('') : '<div class="empty">Şu anda hatırlatılacak müşteri yok.</div>');
   }
-  async function load() {
-    if (busy) return;
-    mount();
-    if (!isOwner()) { render(); return; }
-    busy = true;
-    var list = document.getElementById('returnDueList');
-    if (list) list.innerHTML = '<div class="empty">Liste güncelleniyor…</div>';
-    try {
-      var results = await Promise.all([
-        salonDb.rpc('salon_return_due_clients'),
-        salonDb.from('message_templates').select('content').eq('template_key', 'customer_return_reminder').maybeSingle(),
-        salonDb.from('booking_settings').select('whatsapp_return_auto_enabled').eq('id', true).maybeSingle()
-      ]);
-      if (results[0].error) throw results[0].error;
-      items = results[0].data || [];
-      if (results[1].error) throw results[1].error;
-      if (results[2].error || !results[2].data) throw results[2].error || new Error('Geri çağırma modu alınamadı.');
-      template = results[1].data && results[1].data.content || '';
-      autoEnabled = results[2].data.whatsapp_return_auto_enabled === true;
-      render();
-    } catch (error) {
-      if (list) list.innerHTML = '<div class="empty">Müşteri listesi yüklenemedi. ' + escapeHtml(error.message || 'Bağlantıyı kontrol edin.') + '</div>';
-    } finally { busy = false; }
+  function load() {
+    if (loadPromise) return loadPromise;
+    loadPromise = (async function () {
+      mount();
+      if (!isOwner()) { items = []; template = ''; autoEnabled = true; render(); return false; }
+      var list = document.getElementById('returnDueList');
+      if (list) list.innerHTML = '<div class="empty">Liste güncelleniyor…</div>';
+      try {
+        var results = await Promise.all([
+          salonDb.rpc('salon_return_due_clients'),
+          salonDb.from('message_templates').select('content').eq('template_key', 'customer_return_reminder').maybeSingle(),
+          salonDb.from('booking_settings').select('whatsapp_return_auto_enabled').eq('id', true).maybeSingle()
+        ]);
+        if (results[0].error) throw results[0].error;
+        items = results[0].data || [];
+        if (results[1].error) throw results[1].error;
+        if (results[2].error || !results[2].data) throw results[2].error || new Error('Geri çağırma modu alınamadı.');
+        template = results[1].data && results[1].data.content || '';
+        autoEnabled = results[2].data.whatsapp_return_auto_enabled === true;
+        render();
+        return true;
+      } catch (error) {
+        items = []; template = ''; autoEnabled = true;
+        if (list) list.innerHTML = '<div class="empty">Müşteri listesi yüklenemedi. ' + escapeHtml(error.message || 'Bağlantıyı kontrol edin.') + '</div>';
+        return false;
+      }
+    })().finally(function () { loadPromise = null; });
+    return loadPromise;
   }
   function openWhatsApp(item) {
     if (!isOwner() || autoEnabled || !item.phone || !/^905[0-9]{9}$/.test(item.phone)) return;
@@ -141,6 +148,19 @@
     showPage(pageId);
     await load();
   }
+  async function openClient(clientId) {
+    if (!isOwner()) return;
+    mount();
+    showPage(pageId);
+    if (!await load()) return;
+    var item = items.find(function (row) { return String(row.client_id) === String(clientId); });
+    if (!item) {
+      if (typeof showAppToast === 'function') showAppToast('Mesaj önerilmiyor', 'Müşterinin güncel uygunluğunu ve mevcut randevusunu kontrol edin.');
+      return;
+    }
+    var button = Array.from(document.querySelectorAll('#returnDueList [data-client]')).find(function (node) { return node.dataset.client === String(clientId); });
+    if (button) button.closest('.return-due-item').scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
   function analysisShortcut() {
     if (!isOwner()) return;
     var root = document.getElementById('smartAnalysis');
@@ -159,6 +179,6 @@
     if (id === 'smartAnalysis') analysisShortcut();
     return result;
   };
-  window.SalonReturnDaily = { open: open, refresh: load };
+  window.SalonReturnDaily = { open: open, openClient: openClient, refresh: load };
   analysisShortcut();
 })();

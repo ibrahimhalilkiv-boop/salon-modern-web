@@ -6,6 +6,8 @@ window.salonSelectClientForAppointment=function(id){smartSelectedClientId=id};
 var smartPendingAction=null;
 var smartVisitSummaries=new Map(),smartSummaryState='loading',smartSummaryGeneration=0;
 function smartToday(){return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Istanbul'})}
+function smartDay(offset){var date=new Date(smartToday()+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+(offset||0));return date.toISOString().slice(0,10)}
+function smartIstanbulMinutes(){var parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Istanbul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()),hour=Number(parts.find(function(part){return part.type==='hour'})?.value||0),minute=Number(parts.find(function(part){return part.type==='minute'})?.value||0);return hour*60+minute}
 function smartSummaryNotice(){return smartSummaryState==='error'?'Müşteri analizi yüklenemedi. Bağlantıyı kontrol edip sayfayı yenileyin.':'Müşteri analizi yükleniyor…'}
 async function smartRefreshSummaries(){
   if(!currentUser)return;
@@ -57,8 +59,8 @@ function smartPastVisits(client){
   var today=smartToday(),seen={};
   return smartClientAppointments(client.id).filter(function(item){
     var day=appointmentDate(item),status=String(item.status||'confirmed');
-    if(day>today||!['completed','confirmed'].includes(status)||seen[day])return false;
-    if(status==='confirmed'&&Date.parse(item.scheduledAt||remoteSchedule(day,item.time))>=Date.now())return false;
+    if(day>today||status!=='completed'||seen[day])return false;
+    if(Date.parse(item.scheduledAt||remoteSchedule(day,item.time))>=Date.now())return false;
     seen[day]=true;return true;
   }).sort(function(a,b){return appointmentDate(a).localeCompare(appointmentDate(b))});
 }
@@ -86,7 +88,13 @@ function smartAnalyses(){
 }
 function smartActionableAnalyses(includeApproaching){
   var allowed=includeApproaching?['approaching','due','overdue','risk']:['due','overdue','risk'];
-  return smartAnalyses().filter(function(item){return allowed.includes(item.status)});
+  var futureIds=new Set(),futurePhones=new Set(),now=Date.now();
+  appts.forEach(function(item){
+    if(item.status!=='confirmed'||Date.parse(item.scheduledAt||remoteSchedule(appointmentDate(item),item.time))<now)return;
+    if(item.clientId)futureIds.add(String(item.clientId));
+    var phone=normalizeCustomerPhone(item.phone||item.clientPhone||'');if(phone)futurePhones.add(phone);
+  });
+  return smartAnalyses().filter(function(item){var phone=normalizeCustomerPhone(item.client.phone||'');return allowed.includes(item.status)&&!futureIds.has(String(item.client.id))&&(!phone||!futurePhones.has(phone))});
 }
 
 var previousRemoteAppointment=remoteAppointment;
@@ -236,7 +244,7 @@ function smartVisibleProfiles(){
   return remoteProfiles.filter(function(profile){return profile.active});
 }
 function smartFreeSlots(date){
-  var now=new Date(),today=localDate(0),minimum=date===today?Math.max(480,Math.ceil((now.getHours()*60+now.getMinutes())/30)*30):480;
+  var today=smartDay(0),minimum=date===today?Math.max(480,Math.ceil(smartIstanbulMinutes()/30)*30):480;
   return smartVisibleProfiles().flatMap(function(profile){
     var free=[];
     for(var minute=480;minute<1440;minute+=30){
@@ -258,15 +266,15 @@ function smartGapSuggestions(date){
   }).filter(function(item){return item.candidates.length}).slice(0,6);
 }
 function smartStatusBadge(item){var status=SMART_STATUS[item.status];return '<span class="smart-status '+status.className+'">'+safe(status.label)+'</span>'}
-function smartWhatsappButton(clientId,label){return '<button type="button" class="smart-whatsapp" onclick="event.stopPropagation();openSmartCustomerWhatsApp('+jsAttr(clientId)+')">'+safe(label||'WhatsApp')+'</button>'}
-window.openSmartCustomerWhatsApp=function(clientId){openReturnWhatsApp(clientId)};
+function smartWhatsappButton(clientId,label){if(currentUser?.role!=='yonetici'||currentUser?.username!=='halil.kiv')return '';return '<button type="button" class="smart-whatsapp" onclick="event.stopPropagation();openSmartCustomerWhatsApp('+jsAttr(clientId)+')">'+safe(label||'Geri çağırma listesi')+'</button>'}
+window.openSmartCustomerWhatsApp=function(clientId){if(window.SalonReturnDaily?.openClient)window.SalonReturnDaily.openClient(clientId);else showAppToast('Liste açılamadı','Geri çağırma listesi yüklenmedi. Sayfayı yenileyin.')};
 
 function smartAttentionCards(items,limit){
-  return items.slice(0,limit||20).map(function(item){return '<div class="smart-customer-card"><div class="item-main"><strong>'+safe(item.client.full_name)+'</strong><small>'+safe(item.client.phone||'Telefon yok')+' · Son geliş: '+safe(item.last?friendlyDate(item.last):'—')+'<br>'+(item.enough?'Ortalama '+item.average+' gün · '+item.elapsed+' gündür gelmedi':'Henüz yeterli veri yok')+'</small></div>'+smartStatusBadge(item)+smartWhatsappButton(item.client.id,'WhatsApp')+'</div>'}).join('');
+  return items.slice(0,limit||20).map(function(item){return '<div class="smart-customer-card"><div class="item-main"><strong>'+safe(item.client.full_name)+'</strong><small>'+safe(item.client.phone||'Telefon yok')+' · Son geliş: '+safe(item.last?friendlyDate(item.last):'—')+'<br>'+(item.enough?'Ortalama '+item.average+' gün · '+item.elapsed+' gündür gelmedi':'Henüz yeterli veri yok')+'</small></div>'+smartStatusBadge(item)+smartWhatsappButton(item.client.id,'Listeyi aç')+'</div>'}).join('');
 }
-function smartGreeting(){var hour=new Date().getHours();return hour<12?'Günaydın':hour<18?'İyi günler':'İyi akşamlar'}
+function smartGreeting(){var hour=Math.floor(smartIstanbulMinutes()/60);return hour<12?'Günaydın':hour<18?'İyi günler':'İyi akşamlar'}
 function smartSummaryText(){
-  var today=localDate(0),todayAppointments=appts.filter(function(item){return appointmentDate(item)===today&&item.status!=='cancelled'}),gaps=smartFreeSlots(today),analyses=smartActionableAnalyses(false),risk=analyses.filter(function(item){return item.status==='risk'}).length,suggestions=smartSummaryState==='ready'?smartGapSuggestions(today):[];
+  var today=smartDay(0),todayAppointments=appts.filter(function(item){return appointmentDate(item)===today&&item.status!=='cancelled'}),gaps=smartFreeSlots(today),analyses=smartActionableAnalyses(false),risk=analyses.filter(function(item){return item.status==='risk'}).length,suggestions=smartSummaryState==='ready'?smartGapSuggestions(today):[];
   var prefix=smartGreeting()+((currentUser&&currentUser.role!=='yonetici')?' '+currentUser.name.split(' ')[0]:'')+'. ';
   var count=prefix+'Bugün '+todayAppointments.length+' randevu'+(currentUser&&currentUser.role!=='yonetici'?'n var':' var')+'. ';
   var gap=gaps.length?gaps[0].employeeName+' için '+smartClock(gaps[0].start)+'–'+smartClock(gaps[0].end)+' arasında boşluk bulunuyor. ':'Bugün uygun boşluk görünmüyor. ';
@@ -274,12 +282,12 @@ function smartSummaryText(){
   return count+gap+analyses.length+' müşterinin gelme zamanı geldi veya geçti. '+risk+' müşteri kaybedilme riski taşıyor. Boşluğu doldurabilecek '+suggestions.reduce(function(sum,item){return sum+item.candidates.length},0)+' müşteri bulundu.';
 }
 function renderSmartDailyPanels(){
-  var target=document.getElementById('calendarContent');if(!target||!currentUser||teamCalendarMode==='month'||selectedTeamDate()!==localDate(0))return;
+  var target=document.getElementById('calendarContent');if(!target||!currentUser||teamCalendarMode==='month'||selectedTeamDate()!==smartDay(0))return;
   target.querySelectorAll('.smart-daily-block').forEach(function(node){node.remove()});
-  var attention=smartActionableAnalyses(false),suggestions=smartSummaryState==='ready'?smartGapSuggestions(localDate(0)):[];
+  var attention=smartActionableAnalyses(false),suggestions=smartSummaryState==='ready'?smartGapSuggestions(smartDay(0)):[];
   var summary=document.createElement('section');summary.className='smart-daily-block smart-summary';summary.innerHTML='<div class="smart-title"><div><small>GÜNLÜK SALON ÖZETİ</small><h2>'+safe(smartGreeting())+'</h2></div><button type="button" onclick="showPage(\'salonAssistant\')">MORİ ›</button></div><p>'+safe(smartSummaryText())+'</p>';
   var attentionBlock=document.createElement('section');attentionBlock.className='smart-daily-block';attentionBlock.innerHTML='<div class="smart-title"><div><small>AKILLI MÜŞTERİ ANALİZİ</small><h2>Bugün ilgilenilecek müşteriler</h2></div><button type="button" onclick="showPage(\'smartAnalysis\')">Tümünü gör ›</button></div><div class="smart-scroll">'+(smartSummaryState!=='ready'?'<div class="empty">'+safe(smartSummaryNotice())+'</div>':smartAttentionCards(attention,8)||'<div class="empty">Bugün için öncelikli müşteri yok.</div>')+'</div>';
-  var gapBlock=document.createElement('section');gapBlock.className='smart-daily-block';gapBlock.innerHTML='<div class="smart-title"><div><small>BOŞ SAAT ANALİZİ</small><h2>Boşluğu doldurabilecek müşteriler</h2></div></div>'+(suggestions.map(function(group){return '<div class="smart-gap"><strong>'+safe(group.slot.employeeName)+' · '+smartClock(group.slot.start)+'–'+smartClock(group.slot.end)+'</strong>'+group.candidates.map(function(item){return '<span>'+safe(item.client.full_name)+' · '+safe(item.label)+smartWhatsappButton(item.client.id,'Mesaj')+'</span>'}).join('')+'</div>'}).join('')||'<div class="empty">Uygun boşluk veya müşteri önerisi yok.</div>');
+  var gapBlock=document.createElement('section');gapBlock.className='smart-daily-block';gapBlock.innerHTML='<div class="smart-title"><div><small>BOŞ SAAT ANALİZİ</small><h2>Boşluğu doldurabilecek müşteriler</h2></div></div>'+(suggestions.map(function(group){return '<div class="smart-gap"><strong>'+safe(group.slot.employeeName)+' · '+smartClock(group.slot.start)+'–'+smartClock(group.slot.end)+'</strong>'+group.candidates.map(function(item){return '<span>'+safe(item.client.full_name)+' · '+safe(item.label)+smartWhatsappButton(item.client.id,'Listeyi aç')+'</span>'}).join('')+'</div>'}).join('')||'<div class="empty">Uygun boşluk veya müşteri önerisi yok.</div>');
   var anchor=target.querySelector('.calendar-date-nav')||target.firstChild;target.insertBefore(gapBlock,anchor);target.insertBefore(attentionBlock,gapBlock);target.insertBefore(summary,attentionBlock);
 }
 
@@ -305,7 +313,7 @@ renderCustomerReturnAlerts=function(){
   var area=document.getElementById('customerReturnAlerts');if(!area||currentUser?.role!=='yonetici')return;
   if(smartSummaryState!=='ready'){area.innerHTML='<div class="empty">'+safe(smartSummaryNotice())+'</div>';return}
   var due=smartActionableAnalyses(false);
-  area.innerHTML='<div class="section"><h2>Akıllı Müşteri Analizi</h2><span class="role">'+due.length+' müşteri</span></div><div class="notice">Analiz kendi başına WhatsApp açmaz ve mesaj göndermez. Mesaj yalnızca aşağıdaki düğmeye basıldığında hazırlanır.</div>'+(smartAttentionCards(due,50)||'<div class="empty">Şu anda ilgilenilecek müşteri yok.</div>');
+  area.innerHTML='<div class="section"><h2>Akıllı Müşteri Analizi</h2><span class="role">'+due.length+' müşteri</span></div><div class="notice">Analiz kendi başına WhatsApp açmaz ve mesaj göndermez. Listeyi aç düğmesi güncel uygunluğu doğrulanan geri çağırma listesine götürür.</div>'+(smartAttentionCards(due,50)||'<div class="empty">Şu anda ilgilenilecek müşteri yok.</div>');
 };
 
 function assistantNormalize(value){return customerNameKey(String(value||'').replace(/[’']/g,'').replace(/[?.!,]/g,' '))}
@@ -317,7 +325,7 @@ function assistantClientHistory(term,limit,latestOnly){
   return matches.map(function(client){var items=smartPastVisits(client).slice().reverse().slice(0,limit);return '<div class="assistant-client"><h3>'+safe(client.full_name)+'</h3>'+(latestOnly?(items[0]?'<p>Son geliş: <strong>'+safe(friendlyDate(appointmentDate(items[0])))+' · '+safe(items[0].time)+'</strong></p>':'<div class="empty">Ziyaret kaydı yok.</div>'):assistantAppointmentRows(items))+'</div>'}).join('');
 }
 function assistantReadResult(command){
-  var normalized=assistantNormalize(command),today=localDate(0),tomorrow=localDate(1),match;
+  var normalized=assistantNormalize(command),today=smartDay(0),tomorrow=smartDay(1),match;
   match=command.match(/^(.+?)\s+en\s+son\s+ne\s+zaman\s+geldi/i);if(match)return assistantClientHistory(match[1],1,true);
   match=command.match(/^(.+?)\s+son\s+(\d+)\s+ziyaretini\s+göster/i);if(match)return assistantClientHistory(assistantOwnerName(match[1]),Math.min(20,Number(match[2])||5),false);
   match=command.match(/(\d+)\s+gündür\s+gelmeyenleri/i);if(match){var days=Number(match[1]);return smartAttentionCards(smartAnalyses().filter(function(item){return item.elapsed!==null&&item.elapsed>=days}),100)||'<div class="empty">Bu ölçüte uyan müşteri yok.</div>'}
@@ -327,7 +335,7 @@ function assistantReadResult(command){
   if(normalized.includes('bugunkurandevularim'))return assistantAppointmentRows(appts.filter(function(item){return appointmentDate(item)===today&&item.status!=='cancelled'}));
   if(normalized.includes('yarinkirandevularim'))return assistantAppointmentRows(appts.filter(function(item){return appointmentDate(item)===tomorrow&&item.status!=='cancelled'}));
   if(normalized.includes('yarinbossaatlerim')||normalized==='bossaatler'){var gapDate=normalized.includes('yarin')?tomorrow:today,gaps=smartFreeSlots(gapDate);return gaps.map(function(gap){return '<div class="assistant-row"><strong>'+safe(gap.employeeName)+'</strong><small>'+smartClock(gap.start)+'–'+smartClock(gap.end)+'</small></div>'}).join('')||'<div class="empty">Boş saat yok.</div>'}
-  if(normalized.includes('buayencokgelenmusteriler')){var month=today.slice(0,7),counts={};appts.filter(function(item){return appointmentDate(item).startsWith(month)&&item.clientId&&item.status!=='cancelled'}).forEach(function(item){counts[item.clientId]=(counts[item.clientId]||0)+1});return Object.keys(counts).sort(function(a,b){return counts[b]-counts[a]}).slice(0,10).map(function(id){var client=smartClientById(id);return '<div class="assistant-row"><strong>'+safe(client?.full_name||'Müşteri')+'</strong><small>'+counts[id]+' ziyaret</small></div>'}).join('')||'<div class="empty">Bu ay ziyaret kaydı yok.</div>'}
+  if(normalized.includes('buayencokgelenmusteriler')){var month=today.slice(0,7),counts={};appts.filter(function(item){return appointmentDate(item).startsWith(month)&&item.clientId&&item.status==='completed'&&Date.parse(item.scheduledAt||remoteSchedule(appointmentDate(item),item.time))<Date.now()}).forEach(function(item){counts[item.clientId]=(counts[item.clientId]||0)+1});return Object.keys(counts).sort(function(a,b){return counts[b]-counts[a]}).slice(0,10).map(function(id){var client=smartClientById(id);return '<div class="assistant-row"><strong>'+safe(client?.full_name||'Müşteri')+'</strong><small>'+counts[id]+' ziyaret</small></div>'}).join('')||'<div class="empty">Bu ay ziyaret kaydı yok.</div>'}
   if(normalized.includes('bugunmesajatmamgerekenmusteriler'))return smartAttentionCards(smartActionableAnalyses(false),100)||'<div class="empty">Bugün mesaj önerilen müşteri yok.</div>';
   return null;
 }
