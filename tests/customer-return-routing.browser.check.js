@@ -20,6 +20,8 @@ const routeSource = pushSource.slice(pushSource.indexOf('async function openNoti
       window.returnAutoEnabled = false;
       window.waDrafts = [];
       window.dbWrites = [];
+      window.handledClientIds = new Set();
+      window.fixtureHasConsent = true;
       window.open = (...args) => { waDrafts.push(args); return null; };
       window.confirm = () => true;
       window.showPage = id => {
@@ -30,12 +32,12 @@ const routeSource = pushSource.slice(pushSource.indexOf('async function openNoti
       window.safe = value => String(value);
       window.salonDb = {
         rpc: async name => name === 'salon_return_due_clients'
-          ? { data: [{ client_id: 'fixture-client', client_name: 'Örnek Müşteri', phone: '905000000001', last_visit: '2026-10-01', average_days: 14, elapsed_days: 19, state: 'due', has_consent: true }] }
-          : (dbWrites.push(name), { data: true }),
+          ? { data: handledClientIds.has('fixture-client') ? [] : [{ client_id: 'fixture-client', client_name: 'Örnek Müşteri', phone: '905000000001', last_visit: '2026-10-01', average_days: 14, elapsed_days: 19, state: 'due', has_consent: fixtureHasConsent }] }
+          : (dbWrites.push(name), handledClientIds.add('fixture-client'), { data: true }),
         from(table) {
           return { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: table === 'booking_settings'
             ? { whatsapp_return_auto_enabled: window.returnAutoEnabled }
-            : { content: 'Merhaba {musteri_adi},\n\nDüzenli bakım alışkanlığınıza göre tıraş zamanınız gelmiştir. Yeni randevu planlamak için https://app.salonmodern.com.tr/randevu/ bağlantısını kullanabilirsiniz. Bizimle de iletişime geçebilirsiniz.\n\nSalon Modern' } }) };
+            : { content: 'Merhaba {musteri_adi},\n\nDüzenli bakım alışkanlığınıza göre tıraş zamanınız gelmiştir. Yeni randevu planlamak için aşağıdaki bağlantıyı kullanabilirsiniz. Bizimle de iletişime geçebilirsiniz.\n\nhttps://app.salonmodern.com.tr/randevu/\n\nSalon Modern' } }) };
         }
       };
     });
@@ -51,17 +53,25 @@ const routeSource = pushSource.slice(pushSource.indexOf('async function openNoti
     assert.equal(await page.evaluate(() => waDrafts.length), 0, 'Smart analysis opens the verified list before a WhatsApp draft');
     assert.equal(await page.evaluate(() => { currentUser.role = 'personel'; return smartWhatsappButton('fixture-client'); }), '', 'Staff do not receive a marketing shortcut');
     await page.evaluate(() => { currentUser.role = 'yonetici'; });
+    await page.evaluate(() => { fixtureHasConsent = false; window.confirm = () => false; return SalonReturnDaily.refresh(); });
     await page.locator('[data-return-action="whatsapp"]').click();
+    assert.equal(await page.evaluate(() => waDrafts.length), 0, 'Declined consent confirmation does not open a draft');
+    assert.equal(await page.evaluate(() => dbWrites.length), 0, 'Declined consent confirmation does not mark contact handled');
+    await page.evaluate(() => { fixtureHasConsent = true; window.confirm = () => true; return SalonReturnDaily.refresh(); });
+    await page.evaluate(() => { const button = document.querySelector('[data-return-action="whatsapp"]'); button.click(); button.click(); });
     assert.equal(await page.evaluate(() => waDrafts.length), 1, 'Only owner action opens a manual WhatsApp draft');
     const draft = await page.evaluate(() => new URL(waDrafts[0][0]).searchParams.get('text'));
     assert.match(draft, /Düzenli bakım alışkanlığınıza göre tıraş zamanınız gelmiştir/);
-    assert.match(draft, /https:\/\/app\.salonmodern\.com\.tr\/randevu\//);
+    assert.match(draft, /\n\nhttps:\/\/app\.salonmodern\.com\.tr\/randevu\/\n\nSalon Modern$/);
     assert.match(draft, /Bizimle de iletişime geçebilirsiniz/);
-    assert.equal(await page.evaluate(() => dbWrites.length), 0, 'Opening a draft does not mark a message sent');
+    await page.waitForFunction(() => dbWrites.length === 1 && document.querySelectorAll('.return-due-item').length === 0);
+    assert.deepEqual(await page.evaluate(() => dbWrites), ['salon_mark_return_contact'], 'Opening a draft records one handled contact');
+    await page.evaluate(() => SalonReturnDaily.refresh());
+    assert.equal(await page.locator('.return-due-item').count(), 0, 'Handled customer stays out of the verified list');
     await page.evaluate(() => { window.returnAutoEnabled = true; });
     await page.evaluate(() => SalonReturnDaily.refresh());
     assert.equal(await page.locator('[data-return-action]').count(), 0, 'Manual controls close when automatic mode is enabled');
     assert.equal(await page.evaluate(() => waDrafts.length), 1);
-    console.log('PASS return digest click, correct owner list, manual-only WhatsApp, automatic-mode handover');
+    console.log('PASS return digest click, standalone booking link, draft marks handled once, automatic-mode handover');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

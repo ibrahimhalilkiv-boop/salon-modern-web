@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  var items = [], template = '', loadPromise = null, autoEnabled = true;
+  var items = [], template = '', loadPromise = null, autoEnabled = true, pendingContacts = new Set();
   var pageId = 'salonReturnDue';
 
   function isOwner() {
@@ -41,8 +41,7 @@
       if (!button || !area.contains(button)) return;
       var client = items.find(function (item) { return item.client_id === button.dataset.client; });
       if (!client) return;
-      if (button.dataset.returnAction === 'whatsapp') openWhatsApp(client);
-      if (button.dataset.returnAction === 'handled') markHandled(client);
+      if (button.dataset.returnAction === 'whatsapp') openWhatsApp(client, button);
     });
     if (!document.getElementById('salonReturnDueStyle')) {
       var style = document.createElement('style'); style.id = 'salonReturnDueStyle';
@@ -55,7 +54,6 @@
         '.return-due-controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}' +
         '.return-due-controls button{flex:1;min-width:105px;border:0;border-radius:10px;padding:10px;font-weight:700;cursor:pointer}' +
         '.return-due-controls .send{background:#1f7a5b;color:white}' +
-        '.return-due-controls .handled{background:#ede9e1;color:#39413c}' +
         '.return-due-note{font-size:12px;color:var(--muted);line-height:1.5;padding:12px;border-radius:10px;background:#f4ecdf}';
       document.head.appendChild(style);
     }
@@ -65,7 +63,7 @@
     var target = document.getElementById('returnDueList');
     if (!target) return;
     var help = document.querySelector('.return-due-help');
-    if (help) help.textContent = autoEnabled ? 'Meta onaylı otomatik geri çağırma açık; manuel WhatsApp işlemleri kapalı.' : 'WhatsApp taslakları yalnızca sizin dokunmanızla hazırlanır; otomatik gönderilmez.';
+    if (help) help.textContent = autoEnabled ? 'Meta onaylı otomatik geri çağırma açık; manuel WhatsApp işlemleri kapalı.' : 'WhatsApp taslağı açılınca gönderildi kabul edilir ve müşteri listeden çıkarılır. Mesajı WhatsApp içinde siz gönderirsiniz.';
     if (!isOwner()) {
       target.innerHTML = '<div class="empty">Bu liste yalnızca hesabınız için yetkilendirilmiş yöneticiye açıktır.</div>';
       return;
@@ -81,8 +79,7 @@
           '<br>Ortalama ' + Number(item.average_days) + ' günde bir · ' + Number(item.elapsed_days) + ' gündür gelmedi' +
           '<br>' + (item.has_consent ? 'WhatsApp pazarlama izni kayıtlı' : 'WhatsApp iletişim izni sistemde kayıtlı değil') + '</small>' +
           (autoEnabled ? '' : '<div class="return-due-controls">' +
-            '<button class="send" type="button" data-return-action="whatsapp" data-client="' + escapeHtml(item.client_id) + '">WhatsApp’ta hazırla</button>' +
-            '<button class="handled" type="button" data-return-action="handled" data-client="' + escapeHtml(item.client_id) + '">Mesajı gönderdim</button>' +
+            '<button class="send" type="button" data-return-action="whatsapp" data-client="' + escapeHtml(item.client_id) + '">WhatsApp’ta hazırla ve listeden çıkar</button>' +
           '</div>') + '</article>';
       }).join('') : '<div class="empty">Şu anda hatırlatılacak müşteri yok.</div>');
   }
@@ -115,8 +112,8 @@
     })().finally(function () { loadPromise = null; });
     return loadPromise;
   }
-  function openWhatsApp(item) {
-    if (!isOwner() || autoEnabled || !item.phone || !/^905[0-9]{9}$/.test(item.phone)) return;
+  async function openWhatsApp(item, button) {
+    if (!isOwner() || autoEnabled || pendingContacts.has(item.client_id) || !item.phone || !/^905[0-9]{9}$/.test(item.phone)) return;
     if (!item.has_consent && !window.confirm('Bu müşterinin WhatsApp üzerinden geri çağırma mesajı almayı kabul ettiğini teyit ediyor musunuz? Kayıtlı pazarlama izni bulunmuyor.')) return;
     var message = String(template || '').trim();
     if (!message) { alert('Müşteri hatırlatma şablonu yüklenemedi. Listeyi yenileyin.'); return; }
@@ -127,20 +124,19 @@
     Object.keys(replacements).forEach(function (token) {
       message = message.split(token).join(replacements[token]);
     });
-    window.open('https://wa.me/' + item.phone + '?text=' + encodeURIComponent(message), '_blank', 'noopener');
-  }
-  async function markHandled(item) {
-    if (!isOwner() || autoEnabled || !window.confirm(item.client_name + ' için WhatsApp mesajını gerçekten gönderdiniz mi?')) return;
+    pendingContacts.add(item.client_id);
+    button.disabled = true;
     try {
+      window.open('https://wa.me/' + item.phone + '?text=' + encodeURIComponent(message), '_blank', 'noopener');
       var response = await salonDb.rpc('salon_mark_return_contact', {
         p_client_id: item.client_id, p_last_visit: item.last_visit
       });
       if (response.error) throw response.error;
       await load();
-      if (typeof showAppToast === 'function') showAppToast(response.data ? 'İşaretlendi' : 'Zaten işaretlenmiş', response.data ? 'Müşteri yeni ziyaretine kadar geri çağırma listesinden çıkarıldı.' : 'Bu ziyaret için ikinci bir kayıt açılmadı.');
+      if (typeof showAppToast === 'function') showAppToast(response.data ? 'Listeden çıkarıldı' : 'Liste güncellendi', response.data ? 'WhatsApp taslağı gönderildi kabul edilerek kaydedildi.' : 'Müşterinin uygunluğu değişti veya kayıt zaten işaretli.');
     } catch (error) {
-      if (typeof showAppToast === 'function') showAppToast('İşaretlenemedi', error.message || 'Tekrar deneyin.');
-    }
+      if (typeof showAppToast === 'function') showAppToast('Liste güncellenemedi', error.message || 'Tekrar deneyin.');
+    } finally { pendingContacts.delete(item.client_id); if (button.isConnected) button.disabled = false; }
   }
   async function open() {
     if (!isOwner()) return;

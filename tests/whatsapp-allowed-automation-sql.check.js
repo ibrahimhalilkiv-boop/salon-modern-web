@@ -27,7 +27,7 @@ const { PGlite } = require(process.argv[2] ? path.resolve(process.argv[2]) : '@e
              ('customer_return_reminder','return',null,'pending');
       create table public.whatsapp_message_logs (id serial primary key,template_key text);
       insert into public.whatsapp_message_logs(template_key) values ('appointment_cancelled');
-      create table public.message_templates(template_key text primary key,content text);
+      create table public.message_templates(template_key text primary key,content text,updated_at timestamptz default now());
       insert into public.message_templates values ('appointment_confirmation','old'),('customer_return_reminder','old');
       create function private.mark_meta_template_pending() returns trigger language plpgsql as $$
       begin return new; end $$;
@@ -44,6 +44,10 @@ const { PGlite } = require(process.argv[2] ? path.resolve(process.argv[2]) : '@e
     assert.deepEqual(maps.filter(row => row.approval_status === 'approved').map(row => row.template_key), ['appointment_confirmation', 'appointment_reminder']);
     assert(maps.filter(row => row.approval_status === 'unconfigured').every(row => row.meta_template_name === null && row.approved_content_hash === null));
     await db.exec("update public.message_templates set content='new' where template_key='customer_return_reminder'");
+    assert.equal((await db.query("select approval_status from public.whatsapp_meta_template_mappings where template_key='customer_return_reminder'")).rows[0].approval_status, 'unconfigured');
+    await db.exec(fs.readFileSync('supabase/migrations/20261102091353_move_return_booking_link_above_signature.sql', 'utf8'));
+    const returnText = (await db.query("select content from public.message_templates where template_key='customer_return_reminder'")).rows[0].content;
+    assert.match(returnText, /\n\nhttps:\/\/app\.salonmodern\.com\.tr\/randevu\/\n\nSalon Modern$/);
     assert.equal((await db.query("select approval_status from public.whatsapp_meta_template_mappings where template_key='customer_return_reminder'")).rows[0].approval_status, 'unconfigured');
     await db.exec("update public.message_templates set content='new' where template_key='appointment_confirmation'");
     assert.equal((await db.query("select approval_status from public.whatsapp_meta_template_mappings where template_key='appointment_confirmation'")).rows[0].approval_status, 'pending');
