@@ -188,7 +188,7 @@ function smartLoadActiveClients(force){
     for(;;){
       var result;
       if(currentUser.role==='yonetici'){
-        var query=salonDb.from('clients').select('id,full_name,phone,note,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by,deleted_at,deleted_by').eq('active',true).order('id').limit(pageSize);
+        var query=salonDb.from('clients').select('id,full_name,phone,note,last_service_id,last_employee_id,last_appointment_at,active,created_by,updated_by,deleted_at,deleted_by,online_booking_blocked,online_booking_blocked_at').eq('active',true).order('id').limit(pageSize);
         if(cursor)query=query.gt('id',cursor);
         result=await query;
       }else result=await salonDb.rpc('staff_owned_clients',{p_after:cursor,p_limit:pageSize});

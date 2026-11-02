@@ -61,7 +61,7 @@ function minuteLabel(minutes: number) {
   return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 }
 
-const CUSTOMER_CONTACT_MESSAGE = 'Online randevu oluşturma işleminiz için lütfen Salon Modern ile iletişime geçiniz.'
+const CUSTOMER_CONTACT_MESSAGE = 'Randevu için salonumuzla iletişime geçin.'
 const CUSTOMER_CHANGE_CUTOFF_MESSAGE = 'Randevunuza 2 saatten az kaldığı için online değişiklik veya iptal yapılamamaktadır. Lütfen Salon Modern ile iletişime geçiniz.'
 function normalizedCustomerName(value: unknown) {
   const name = clean(value, 120).normalize('NFKC').replace(/\s+/g, ' ').trim()
@@ -195,6 +195,9 @@ async function createRequest(req: Request) {
   if (!employeeId || !employees.some((item) => item.id === employeeId))
     return reply(req, { error: 'Bu müşteri için uygun çalışan seçin.' }, 403)
   const startAt = slotIso(requestedDate, time)
+  const permission = await db.rpc('can_create_online_booking', { p_phone: customerPhone, p_name: customerName })
+  if (permission.error) throw permission.error
+  if (permission.data !== true) return reply(req, { error: CUSTOMER_CONTACT_MESSAGE }, 403)
   if (submissionToken) {
     const existing = await db.from('online_booking_requests').select('id,public_token,status,client_name,phone_normalized,service_id,employee_id,scheduled_at').eq('public_token', submissionToken).maybeSingle()
     if (existing.error) throw existing.error
@@ -204,9 +207,6 @@ async function createRequest(req: Request) {
       return reply(req, { requestNumber: row.id.slice(0, 8).toUpperCase(), statusToken: row.public_token, status: row.status }, 200)
     }
   }
-  const permission = await db.rpc('can_create_online_booking', { p_phone: customerPhone })
-  if (permission.error) throw permission.error
-  if (permission.data !== true) return reply(req, { error: CUSTOMER_CONTACT_MESSAGE }, 403)
   if (new Date(startAt).getTime() <= Date.now()) return reply(req, { error: 'Geçmiş tarih seçilemez.' }, 400)
   const max = Date.now() + 90 * 86400000
   if (new Date(startAt).getTime() > max) return reply(req, { error: 'En fazla 90 gün sonrası seçilebilir.' }, 400)
@@ -241,6 +241,8 @@ async function createRequest(req: Request) {
     public_token: submissionToken || crypto.randomUUID(),
   } })
   if (inserted.error) {
+    if (inserted.error.code === '42501' && inserted.error.message?.includes('salonumuzla iletişime geçin'))
+      return reply(req, { error: CUSTOMER_CONTACT_MESSAGE }, 403)
     console.error('[customer-booking-request] pending request failed', inserted.error)
     return reply(req, { error: 'Randevu kaydedilemedi. Seçtiğiniz saat dolmuş veya kapanmış olabilir. Müsait saatleri yenileyin.' }, 409)
   }
