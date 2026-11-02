@@ -60,8 +60,7 @@
       }).join('') || '<div class="empty">Kara listede müşteri yok.</div>');
   };
 
-  window.renderCustomerDetail = function () {
-    originalRenderCustomerDetail();
+  function renderBlacklistAction() {
     if (!manager()) return;
     var client = remoteClients.find(function (item) { return String(item.id) === String(selectedCustomerId); });
     var holder = document.getElementById('customerDetailContent');
@@ -81,7 +80,18 @@
     panel.append(heading, status, button);
     var title = holder.querySelector('.page-title');
     if (title) title.after(panel); else holder.prepend(panel);
+  }
+
+  window.renderCustomerDetail = function () {
+    var result = originalRenderCustomerDetail.apply(this, arguments);
+    if (result && typeof result.then === 'function') {
+      result.then(renderBlacklistAction, function (error) { console.error('[customer-blacklist] detail render failed', error); });
+    } else renderBlacklistAction();
+    return result;
   };
+  document.addEventListener('salon:customer-detail-rendered', function (event) {
+    if (String(event.detail?.clientId) === String(selectedCustomerId)) renderBlacklistAction();
+  });
 
   window.setCustomerOnlineBlacklist = async function (id, blocked) {
     if (!manager()) return;
