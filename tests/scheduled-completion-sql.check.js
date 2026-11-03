@@ -123,6 +123,51 @@ const { PGlite } = require(process.argv[2] ? path.resolve(process.argv[2]) : '@e
     assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 1,
       'A long service completes two hours after the start');
     assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 0);
-    console.log('PASS cutoff, no-show/cancel exclusion, exact two-hour boundary, idempotence, manager override, online assignment, pending gate, 1100+ backfill and no WhatsApp');
+    await db.exec(`alter table appointments
+      add column no_show_at timestamptz, add column no_show_by uuid,
+      add column no_show_reversed_at timestamptz, add column no_show_reversed_by uuid,
+      add column no_show_reversal_reason text;
+      create function private.is_active_salon_user() returns boolean language sql stable as
+        $$select nullif(current_setting('test.uid',true),'') is not null$$;`);
+    await db.exec(fs.readFileSync('supabase/migrations/20261103174153_complete_appointments_at_scheduled_time.sql', 'utf8'));
+    await db.query(`insert into appointments(id,employee_id,client_id,status,scheduled_at) values
+      ($1,$3,$4,'no_show',now()-interval '1 minute'),
+      ($2,$3,$4,'cancelled',now()-interval '1 minute')`, [uuid(43), uuid(44), employee, client]);
+    await db.exec(`create trigger appointments_guard_no_show
+      before insert or update of status,no_show_at,no_show_by,no_show_reversed_at,no_show_reversed_by,no_show_reversal_reason
+      on appointments for each row execute function private.guard_appointment_no_show();`);
+    await db.exec("select set_config('test.manager','false',false)");
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at,duration_minutes) values($1,$2,$3,'confirmed',now()-interval '1 minute',180)", [uuid(40), employee, client]);
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at) values($1,$2,$3,'confirmed',now()+interval '1 minute')", [uuid(41), employee, client]);
+    await db.exec("select set_config('test.uid','',false)");
+    assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 1,
+      'Appointment completes when scheduled time arrives, without a two-hour wait');
+    assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 0,
+      'Repeated cron is idempotent');
+    assert.equal((await db.query('select status from appointments where id=$1', [uuid(41)])).rows[0].status, 'confirmed',
+      'Future appointment remains active');
+    assert.deepEqual((await db.query('select status from appointments where id=any($1::uuid[]) order by id', [[uuid(43),uuid(44)]])).rows.map(row=>row.status), ['no_show','cancelled']);
+    const auto = (await db.query('select status,auto_completed_at,completed_by from appointments where id=$1', [uuid(40)])).rows[0];
+    assert.equal(auto.status, 'completed');
+    assert.ok(auto.auto_completed_at);
+    assert.equal(auto.completed_by, null);
+    await db.query("select set_config('test.uid',$1,false)", [uuid(99)]);
+    await assert.rejects(db.query('select public.mark_appointment_no_show($1)', [uuid(40)]), /yetkiniz yok/,
+      'Another employee cannot mark this appointment no-show');
+    await db.query("select set_config('test.uid',$1,false)", [employee]);
+    await assert.rejects(db.query("update appointments set auto_completed_at=now() where id=$1", [uuid(41)]), /elle değiştirilemez/,
+      'Staff cannot forge an automatic completion marker');
+    assert.equal((await db.query('select public.mark_appointment_no_show($1) result', [uuid(40)])).rows[0].result.status, 'no_show');
+    await db.exec("select set_config('test.manager','true',false)");
+    await db.query("update appointments set status='confirmed',no_show_reversal_reason='Yanlış işaretlendi' where id=$1", [uuid(40)]);
+    assert.equal((await db.query('select auto_completion_suppressed from appointments where id=$1', [uuid(40)])).rows[0].auto_completion_suppressed, true);
+    assert.equal((await db.query('select private.auto_complete_due_appointments() n')).rows[0].n, 0,
+      'Manager no-show correction is not immediately re-completed');
+    await db.exec("select set_config('test.manager','false',false)");
+    await db.query("insert into appointments(id,employee_id,client_id,status,scheduled_at) values($1,$2,$3,'confirmed',now()-interval '1 minute')", [uuid(42), employee, client]);
+    await db.query("update appointments set status='completed' where id=$1", [uuid(42)]);
+    await assert.rejects(db.query('select public.mark_appointment_no_show($1)', [uuid(42)]), /aktif veya otomatik tamamlanan/,
+      'Manual completion cannot be rewritten as no-show');
+    console.log('PASS scheduled completion at due time, future/no-show exclusions, idempotence, owner-only no-show correction, manager override and existing gates');
   } finally { await db.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

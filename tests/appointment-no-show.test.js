@@ -7,7 +7,7 @@ const actor={id:'staff-1',role:'personel'};
 const context={
   currentUser:actor,appts:[],console,Date,
   document:{querySelector:()=>null,getElementById:()=>null},
-  window:{remoteSchedule:(date,time)=>`${date}T${time}:00+03:00`,salonDb:{rpc:async(name,args)=>{calls.push([name,args]);return {data:{status:name==='mark_appointment_no_show'?'no_show':'confirmed'}}}},reloadRemoteData:async()=>{calls.push(['reload'])},showAppToast:()=>{},closeAppointmentModal:()=>{}},
+  window:{remoteSchedule:(date,time)=>`${date}T${time}:00+03:00`,remoteAppointment:row=>({id:row.id,status:row.status,employeeId:row.employee_id,scheduledAt:row.scheduled_at}),salonDb:{rpc:async(name,args)=>{calls.push([name,args]);return {data:{status:name==='mark_appointment_no_show'?'no_show':'confirmed'}}}},reloadRemoteData:async()=>{calls.push(['reload'])},showAppToast:()=>{},closeAppointmentModal:()=>{}},
   confirm:()=>true,prompt:()=> 'Yanlışlıkla işaretlendi',
 };
 vm.createContext(context);
@@ -20,6 +20,10 @@ assert.equal(api.canMark(own),true);
 assert.equal(api.canMark({...own,scheduledAt:future}),false);
 assert.equal(api.canMark({...own,employeeId:'staff-2'}),false);
 assert.equal(api.canMark({...own,status:'completed'}),false);
+assert.equal(api.canMark({...own,status:'completed',autoCompletedAt:past,completedBy:null}),true);
+assert.equal(api.canMark(context.window.remoteAppointment({id:'a1',employee_id:'staff-1',scheduled_at:past,status:'completed',auto_completed_at:past,completed_by:null})),true);
+assert.equal(api.canMark({...own,status:'completed',autoCompletedAt:past,completedBy:'manager-1'}),false);
+assert.equal(api.canMark({...own,status:'completed',autoCompletedAt:past,completedBy:null,employeeId:'staff-2'}),false);
 assert.equal(api.canMark({...own,status:'cancelled'}),false);
 assert.equal(api.canMark({...own,status:'no_show'}),false);
 assert.equal(api.canUndo({...own,status:'no_show'}),false);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salon-modern-shell-pwa-v207';
+const CACHE_NAME = 'salon-modern-shell-pwa-v208';
 const PUSH_RECEIPT_CACHE = 'salon-modern-push-receipts-v1';
 const shownNotifications = new Set();
 let notificationDisplayQueue = Promise.resolve();
@@ -22,9 +22,9 @@ const APP_SHELL = [
   './salon-modern-ai.js?v=143',
   './salon-modern-ai.css?v=143',
   './salon-finance-2.3.0.js?v=106',
-  './appointment-list-management-2.4.4.js?v=180',
+  './appointment-list-management-2.4.4.js?v=181',
   './appointment-list-management.css?v=1',
-  './appointment-no-show-2.4.7.js?v=1',
+  './appointment-no-show-2.4.7.js?v=2',
   './salon-ui-2.3.12.js',
   './salon-performance-2.3.14.js?v=181',
   './staff-performance-20261031.js?v=4',

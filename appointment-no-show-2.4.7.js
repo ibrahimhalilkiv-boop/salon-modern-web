@@ -5,7 +5,7 @@
   function manager(){return user()?.role==='yonetici'}
   function owned(item){return !!user()&&!!item&&(manager()||String(item.employeeId)===String(user().id))}
   function scheduled(item){return Date.parse(item?.scheduledAt||window.remoteSchedule(item.date,item.time))}
-  function canMark(item){return owned(item)&&item.status==='confirmed'&&Number.isFinite(scheduled(item))&&scheduled(item)<=Date.now()}
+  function canMark(item){return owned(item)&&(item.status==='confirmed'||(item.status==='completed'&&!!item.autoCompletedAt&&!item.completedBy))&&Number.isFinite(scheduled(item))&&scheduled(item)<=Date.now()}
   function canUndo(item){return manager()&&item?.status==='no_show'}
   function current(){var id=typeof editingAppointmentId==='undefined'?null:editingAppointmentId;return id&&Array.isArray(appts)?appts.find(function(item){return String(item.id)===String(id)}):null}
   function toast(title,message){window.showAppToast?.(title,message)}
@@ -39,6 +39,8 @@
   }
   var modal=document.getElementById('appointmentModal');if(modal)new MutationObserver(sync).observe(modal,{attributes:true,attributeFilter:['class']});
   var priorOpen=window.openAppointmentModal;if(priorOpen)window.openAppointmentModal=function(){var result=priorOpen.apply(this,arguments);setTimeout(sync,0);return result};
+  var priorRemoteAppointment=window.remoteAppointment;
+  if(priorRemoteAppointment)window.remoteAppointment=function(row){var item=priorRemoteAppointment(row);item.autoCompletedAt=row?.auto_completed_at||null;item.completedBy=row?.completed_by||null;return item};
   var priorCalendar=window.renderCalendar;if(priorCalendar)window.renderCalendar=function(){
     var result=priorCalendar.apply(this,arguments);
     document.querySelectorAll('#calendarContent [data-appointment-id]').forEach(function(card){
