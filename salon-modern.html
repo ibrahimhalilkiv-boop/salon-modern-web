@@ -1008,6 +1008,9 @@ function installV151Shell(){
 function customerNameKey(value){
   return String(value||'').trim().toLocaleLowerCase('tr').replace(/[ç]/g,'c').replace(/[ğ]/g,'g').replace(/[ıi]/g,'i').replace(/[ö]/g,'o').replace(/[ş]/g,'s').replace(/[ü]/g,'u').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
 }
+function customerTitleName(value){
+  return String(value||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('tr-TR').replace(/(^|[ -])(\p{L})/gu,function(_,separator,letter){return separator+letter.toLocaleUpperCase('tr-TR')});
+}
 function uniqueRemoteClients(){
   var seen={};
   return remoteClients.filter(function(client){var key=String(client.id||'');if(!key||seen[key])return false;seen[key]=true;return true});
@@ -1109,7 +1112,8 @@ async function confirmDeleteCustomer(){var id=pendingCustomerDeleteId;if(!id)ret
 async function saveNewCustomer(event){
   event.preventDefault();
   if(currentUser?.role!=='yonetici')return;
-  var name=document.getElementById('newCustomerName').value.trim(),phone=normalizeCustomerPhone(document.getElementById('newCustomerPhone').value);
+  var name=customerTitleName(document.getElementById('newCustomerName').value),phone=normalizeCustomerPhone(document.getElementById('newCustomerPhone').value);
+  document.getElementById('newCustomerName').value=name;
   if(!name){showAppToast('Ad gerekli','Müşterinin adını yazın.');return}
   if(phone&&phone.length!==11){showAppToast('Numarayı kontrol edin','Telefon numarası 05XX XXX XX XX biçiminde olmalıdır.');return}
   var existing=clientForName(name);
@@ -1123,15 +1127,18 @@ async function saveCustomerPhone(){
   if(currentUser?.role!=='yonetici'){showAppToast('Yetki gerekli','Müşteri bilgilerini yalnızca yöneticiler güncelleyebilir.');return}
   var client=remoteClients.find(function(item){return String(item.id)===String(selectedCustomerId)}),nameInput=document.getElementById('customerNameEdit'),input=document.getElementById('customerPhoneEdit');
   if(!client||!nameInput||!input)return;
-  var name=nameInput.value.trim(),phone=normalizeCustomerPhone(input.value);
+  var name=customerTitleName(nameInput.value),phone=normalizeCustomerPhone(input.value);
+  nameInput.value=name;
   if(!name){showAppToast('Ad gerekli','Müşterinin adını yazın.');return}
   if(phone&&phone.length!==11){showAppToast('Numarayı kontrol edin','Telefon numarası 05XX XXX XX XX biçiminde olmalıdır.');return}
   var duplicate=remoteClients.find(function(item){return String(item.id)!==String(client.id)&&customerNameKey(item.full_name)===customerNameKey(name)});
   if(duplicate){showAppToast('Bu isim zaten kayıtlı','Farklı bir müşteri adı yazın.');return}
   var result=await salonDb.from('clients').update({full_name:name,phone:phone||null}).eq('id',client.id).select('id,full_name,phone');
   if(result.error){showAppToast('Müşteri güncellenemedi',result.error.message||'Tekrar deneyin.');return}
-  var appointmentResult=await salonDb.from('appointments').update({client_name:name,client_phone:phone||null}).eq('client_id',client.id);
-  var debtResult=await salonDb.from('customer_debts').update({client_name:name}).eq('client_id',client.id);
+  if(!result.data?.length){showAppToast('Müşteri güncellenemedi','Kayıt bulunamadı veya yetkiniz yok.');return}
+  var savedName=result.data[0].full_name;
+  var appointmentResult=await salonDb.from('appointments').update({client_name:savedName,client_phone:phone||null}).eq('client_id',client.id);
+  var debtResult=await salonDb.from('customer_debts').update({client_name:savedName}).eq('client_id',client.id);
   await reloadRemoteData();
   await loadV151Supplement();
   selectedCustomerId=client.id;
@@ -1250,7 +1257,7 @@ saveAppointment=async function(event){
   var scheduleChanged=!original||appointmentDate(original)!==date||original.time!==time||String(original.employeeId)!==String(employee.id)||Number(original.duration)!==duration;
   if(scheduleChanged){for(var i=0;i<dates.length;i++){if(closedSlotFor(dates[i],time,duration,employee.id)){showAppToast('Kapalı saat',friendlyDate(dates[i])+' tarihindeki saat kapalı.');return}var conflicts=appointmentOverlaps(dates[i],time,duration,employee.id,originalId);if(conflicts.length){showAppToast('Bu saat dolu',appointmentOverlapText(conflicts));return false}}}
   try{
-    var clientId=await ensureRemoteClient(customer,phone),recurrenceGroup=interval?salonUuidV4():null,rows=dates.map(function(day){var row={client_id:clientId,client_name:customer,client_phone:phone||null,service_id:service.id,service_name:service.name,amount:amount,employee_id:employee.id,scheduled_at:remoteSchedule(day,time),duration_minutes:duration,note:original?.note||''};if(!originalId){row.created_by=currentUser.id;row.tariff_price_snapshot=Number(service.price);if(recurrenceGroup){row.recurrence_group_id=recurrenceGroup;row.recurrence_interval_weeks=interval}}return row});if(isManager&&original){var correctedStatus=document.getElementById('appointmentStatus')?.value;if(!['confirmed','completed','cancelled','no_show'].includes(correctedStatus)){showAppToast('Geçersiz durum','Randevu durumunu seçin.');return}rows[0].status=correctedStatus;if(original.status==='no_show'&&correctedStatus!=='no_show')rows[0].no_show_reversal_reason='Yönetici durum düzeltmesi'}var result=originalId?await salonDb.from('appointments').update(rows[0]).eq('id',originalId).select('id,scheduled_at,created_by'):await salonDb.from('appointments').insert(rows).select('id,scheduled_at,created_by');
+    var clientId=await ensureRemoteClient(customer,phone),registeredClient=remoteClients.find(function(item){return String(item.id)===String(clientId)});customer=registeredClient?.full_name||customerTitleName(customer);var recurrenceGroup=interval?salonUuidV4():null,rows=dates.map(function(day){var row={client_id:clientId,client_name:customer,client_phone:phone||null,service_id:service.id,service_name:service.name,amount:amount,employee_id:employee.id,scheduled_at:remoteSchedule(day,time),duration_minutes:duration,note:original?.note||''};if(!originalId){row.created_by=currentUser.id;row.tariff_price_snapshot=Number(service.price);if(recurrenceGroup){row.recurrence_group_id=recurrenceGroup;row.recurrence_interval_weeks=interval}}return row});if(isManager&&original){var correctedStatus=document.getElementById('appointmentStatus')?.value;if(!['confirmed','completed','cancelled','no_show'].includes(correctedStatus)){showAppToast('Geçersiz durum','Randevu durumunu seçin.');return}rows[0].status=correctedStatus;if(original.status==='no_show'&&correctedStatus!=='no_show')rows[0].no_show_reversal_reason='Yönetici durum düzeltmesi'}var result=originalId?await salonDb.from('appointments').update(rows[0]).eq('id',originalId).select('id,scheduled_at,created_by'):await salonDb.from('appointments').insert(rows).select('id,scheduled_at,created_by');
     if(result.error)throw result.error;
     if(onDebt&&!existingDebt){
       var debtRows=(result.data||[]).map(function(saved,index){return {appointment_id:saved.id,client_id:clientId,client_name:customer,amount:amount,debt_date:dates[index],status:'open'}});
@@ -1418,6 +1425,7 @@ var salonMessageTemplate={template_key:'customer_return_reminder',title:'Müşte
 var remoteDebtPayments=[];
 function normalizedClientPhone(value){return normalizeCustomerPhone(value)}
 ensureRemoteClient=async function(name,phone){
+  name=customerTitleName(name);
   var normalized=normalizedClientPhone(phone),existing=clientForName(name);
   if(existing){
     if(currentUser?.role==='yonetici'&&normalized&&!normalizedClientPhone(existing.phone)){var updated=await salonDb.from('clients').update({phone:normalized}).eq('id',existing.id).select('id,full_name,phone').single();if(updated.error)throw updated.error;existing.phone=normalized}
