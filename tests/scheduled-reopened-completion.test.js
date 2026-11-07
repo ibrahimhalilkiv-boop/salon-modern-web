@@ -1,0 +1,14 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const sql = fs.readFileSync('supabase/migrations/20261107194500_complete_reopened_appointments_at_slot.sql','utf8');
+const normalize = s => s.replace(/\s+/g,' ').toLowerCase();
+const body = normalize(sql.slice(sql.indexOf('AS $function$'),sql.indexOf('$function$;')));
+assert.match(body,/a\.status\s*=\s*'confirmed'/,'only confirmed appointments auto-complete');
+assert.match(body,/a\.scheduled_at\s*>=\s*cfg\.activated_at/,'historical cutoff must remain');
+assert.match(body,/a\.scheduled_at\s*<=\s*now\(\)/,'future appointments must not complete early');
+assert.doesNotMatch(body,/auto_completion_suppressed/,'reopened appointments must not get stuck');
+assert.match(body,/set status\s*=\s*'completed'/,'updates actual appointment status for reporting');
+assert.match(body,/for update of a skip locked/,'concurrent cron runs must not double-process');
+assert.match(body,/coalesce\(a\.auto_completed_at, now\(\)\)/,'retain original auto completion timestamp');
+assert.match(sql,/REVOKE ALL ON FUNCTION private\.auto_complete_due_appointments\(\) FROM PUBLIC, anon, authenticated;/);
+console.log('PASS scheduled completion includes reopened due records without touching no-show, cancellation or future dates');
