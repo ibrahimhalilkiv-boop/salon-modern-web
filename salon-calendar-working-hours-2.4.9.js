@@ -3,7 +3,7 @@
 // Keep manager and employee calendars on the same date-specific working-hour range.
 // This changes only the visible grid, not appointment validation or permissions.
 var normal={default_open_time:'09:00',default_close_time:'19:00'};
-var dayOverride=null,overrideDate='',lastFetch=0,requestId=0,inFlight=false;
+var dayOverride=null,overrideDate='',lastFetch=0,lastFetchedDate='',fetchingDate='',requestId=0;
 var FIRST=8*60,LAST=24*60;
 
 function actor(){return typeof currentUser==='undefined'?null:currentUser}
@@ -60,21 +60,32 @@ function rangeFor(date){
   return {start:start,end:end};
 }
 function apply(){
-  if(!actor()||typeof teamCalendarMode!=='undefined'&&teamCalendarMode!=='day'&&teamCalendarMode!=null)return;
+  if(!actor()||(typeof teamCalendarMode!=='undefined'&&teamCalendarMode!=='day'&&teamCalendarMode!=null))return;
   var grid=document.querySelector('#calendarContent .duration-hour-grid');
-  if(!grid)return;
+  if(!grid||!grid.getBoundingClientRect)return;
   var range=rangeFor(selectedDate()),from=(range.start-FIRST)/15,to=(range.end-FIRST)/15;
   var slots=Math.max(1,to-from),before=Math.max(0,from),after=Math.max(0,64-to);
-  var height=window.visualViewport&&window.visualViewport.height||window.innerHeight||750;
-  var rowHeight=Math.max(11,Math.min(19,Math.floor((height-165)/slots)));
+  // Fit the active hours to the *remaining* viewport, not to a capped pixel
+  // height per slot. A 9–20 day and an extended holiday day fill alike.
+  var viewport=window.visualViewport;
+  var viewportBottom=viewport?viewport.offsetTop+viewport.height:window.innerHeight;
+  var gridTop=grid.getBoundingClientRect().top;
+  if(!Number.isFinite(viewportBottom)||!Number.isFinite(gridTop))return;
+  var available=Math.max(80,Math.floor(viewportBottom-gridTop-5));
   var rows=['auto'];
   if(before)rows.push('repeat('+before+',0px)');
-  rows.push('repeat('+slots+','+rowHeight+'px)');
+  rows.push('repeat('+slots+',minmax(0,1fr))');
   if(after)rows.push('repeat('+after+',0px)');
   rows.push('20px');
   grid.dataset.workingHours='1';
   grid.style.setProperty('grid-template-rows',rows.join(' '),'important');
-  grid.style.setProperty('height','auto','important');
+  grid.style.setProperty('height',available+'px','important');
+  grid.style.setProperty('min-height','0px','important');
+  grid.style.setProperty('max-height','none','important');
+  var heading=grid.querySelector(':scope > .team-head');
+  var headingHeight=heading&&heading.getBoundingClientRect?heading.getBoundingClientRect().height:35;
+  var rowHeight=Math.max(0,(available-headingHeight-20)/slots);
+  grid.dataset.density=rowHeight<13?'tight':'normal';
   grid.querySelectorAll('.duration-time:not(.duration-end)').forEach(function(node){
     var value=minute(node.textContent.replace('.',':'));
     node.style.display=Number.isFinite(value)&&value>=range.start&&value<range.end?'':'none';
@@ -100,8 +111,10 @@ function apply(){
 function refresh(){
   if(!actor()||!window.salonDb)return;
   var date=selectedDate(),now=Date.now();
-  if(!date||inFlight||now-lastFetch<6000)return;
-  lastFetch=now;inFlight=true;
+  // A new date must fetch its own hours immediately, even when dates are
+  // switched rapidly. Re-rendering the same day must not cause fetch loops.
+  if(!date||fetchingDate===date||(lastFetchedDate===date&&now-lastFetch<6000))return;
+  fetchingDate=date;lastFetchedDate=date;lastFetch=now;
   var id=++requestId,userId=String(actor().id);
   Promise.all([
     salonDb.from('booking_settings').select('default_open_time,default_close_time').eq('id',true).maybeSingle(),
@@ -112,7 +125,7 @@ function refresh(){
     if(!results[1].error){overrideDate=date;dayOverride=results[1].data||null}
     if(selectedDate()===date&&typeof window.renderCalendar==='function')window.renderCalendar();
   }).catch(function(error){console.warn('Takvim çalışma saatleri yüklenemedi:',error.message||error)})
-    .finally(function(){inFlight=false});
+    .finally(function(){if(id===requestId)fetchingDate=''});
 }
 var style=document.createElement('style');
 style.textContent='#calendar .team-calendar.duration-hour-grid.single[data-working-hours="1"]{min-width:0!important;width:100%!important}'+
