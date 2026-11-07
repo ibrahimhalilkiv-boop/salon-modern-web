@@ -50,6 +50,7 @@ jobs:
       - run: node tests/calendar-fast-first-paint.test.js
       - run: node tests/calendar-date-boundary.test.js
       - run: node tests/calendar-working-hours-viewport.test.js
+      - run: node tests/scheduled-reopened-completion.test.js
       - run: node tests/finance-startup-priority.test.js
       - run: node tests/smart-client-visit-summary.test.js
       - run: node tests/client-load-race.test.js
