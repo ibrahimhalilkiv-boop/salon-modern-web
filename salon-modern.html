@@ -708,7 +708,7 @@ renderCalendar=function(){
     if(fullHour)html+='<div class="duration-time" style="grid-column:1;grid-row:'+row+' / span 4">'+time.replace(':','.')+'</div>';
     columns.forEach(function(member,columnIndex){
       var profile=profileForEmployeeName(member[0]),closed=closedSlotFor(date,time,15,profile&&profile.id),halfHour=time.slice(3)==='00'||time.slice(3)==='30';if(!halfHour)return;var canOpen=!closed;
-      html+='<div class="duration-cell '+(fullHour?'hour-start':'')+'" data-calendar-time="'+time+'" data-calendar-staff="'+safe(member[0])+'" style="grid-column:'+(columnIndex+2)+';grid-row:'+row+' / span 1"'+(canOpen?' ondragover="allowTimeDrop(event)" ondragleave="leaveTimeDrop(event)" ondrop="dropInTeamCalendar(event,'+jsAttr(time)+','+jsAttr(member[0])+')" onclick="openSlotChoice('+jsAttr(time)+','+jsAttr(member[0])+')"':'')+'></div>';
+      html+='<div class="duration-cell '+(fullHour?'hour-start':'')+'" data-calendar-time="'+time+'" data-calendar-staff="'+safe(member[0])+'" style="grid-column:'+(columnIndex+2)+';grid-row:'+row+' / span 2"'+(canOpen?' ondragover="allowTimeDrop(event)" ondragleave="leaveTimeDrop(event)" ondrop="dropInTeamCalendar(event,'+jsAttr(time)+','+jsAttr(member[0])+')" onclick="openSlotChoice('+jsAttr(time)+','+jsAttr(member[0])+')"':'')+'></div>';
     });
   });
   html+='<div class="duration-time duration-end" style="grid-column:1;grid-row:'+(slots.length+2)+'">24.00</div>';
