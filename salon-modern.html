@@ -51,7 +51,7 @@ html[data-auth-state="INITIALIZING"] #salonStartupSplash{display:flex;}
 .team-calendar .team-head{color:#111!important;font-size:12px!important;font-weight:850!important;letter-spacing:-.1px}
 .calendar-date-nav .calendar-date-title{color:#111!important;font-size:17px!important;font-weight:850!important;line-height:1.25}
 .calendar-date-nav .calendar-date-title .role{display:inline-block;margin-top:3px;color:#744e1e!important;background:#f0e3cf!important;font-size:12px!important;font-weight:800!important;padding:3px 7px}
-</style><meta name="theme-color" content="#f7f6f1"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="salon-launch-v2-512.png"><link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="salon-modern-ai.css?v=143"><link rel="stylesheet" href="appointment-list-management.css?v=1"><link rel="stylesheet" href="salon-calendar-smart.css?v=7"></head>
+</style><meta name="theme-color" content="#f7f6f1"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="salon-launch-v2-512.png"><link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="salon-modern-ai.css?v=143"><link rel="stylesheet" href="appointment-list-management.css?v=1"><link rel="stylesheet" href="salon-calendar-smart.css?v=8"></head>
 <body><div id="salonStartupSplash" role="status" aria-label="Salon Modern açılıyor"><img src="salon-launch-v2-512.png" width="512" height="512" alt="Salon Modern" decoding="sync" fetchpriority="high"></div><section class="auth" id="auth"><div class="auth-brand">Salon <span>Modern</span></div><p>Salon yönetim alanına güvenli erişim.</p><form class="login-card" id="loginForm" onsubmit="login(event)" autocomplete="off"><h1>Hoş geldiniz</h1><small>Kullanıcı adı ve şifrenizle giriş yapın</small><label class="field">Kullanıcı adı<input id="loginUsername" autocomplete="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-1p-ignore required placeholder="Kullanıcı adınız"></label><label class="field">Şifre<input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Şifreniz"></label><div class="notice" id="loginError">Kullanıcı adı veya şifre hatalı.</div><button class="save">Güvenli giriş yap</button><div class="security">Şifreler cihazınızda PBKDF2 + SHA-256 ile özetlenerek saklanır.</div></form><form class="login-card hidden" id="setupForm" onsubmit="setupAdmin(event)"><h1>İlk kurulum</h1><small>Dört hesabın ilk şifresini belirleyin. Her çalışan girişten sonra şifresini değiştirebilir.</small><label class="field">İlk ortak şifre<input id="setupPassword" type="password" minlength="8" required placeholder="En az 8 karakter"></label><button class="save">4 hesabı oluştur</button><div class="security">Hesaplar: halil.kiv, mehmet.safakoglu, cengiz.bavkir ve talip.kose</div></form></section><main class="app hidden" id="app">
 <section id="home" class="page active"><div class="content" role="status"><h1>Salon Modern</h1><p>Salon bilgileri yükleniyor…</p></div><div hidden aria-hidden="true" id="legacyHomeBindings"><span id="welcomeName"></span><span id="todayText"></span><span id="nextTitle"></span><div id="summaryCard"></div><div id="next"></div><div class="actions"><button class="action"></button><button class="action"></button><button class="action"></button><button class="action"></button></div></div></section>
 <section id="finance" class="page"><div class="content"><button class="back" onclick="showPage('home')">‹ Ana sayfa</button><h1 class="page-title">Muhasebe</h1><div class="total"><small>Ağustos net bakiyesi</small><strong>₺ 32.120</strong><small>Gelir ₺84.650 · Gider ₺52.530</small></div><button class="fab" onclick="openModal('Gelir / gider ekle')">＋ Yeni kayıt ekle</button><div class="section"><h2>Son işlemler</h2><button class="link">Filtrele</button></div><div id="transactions"></div></div></section>
@@ -402,13 +402,13 @@ renderCalendar=function(){
   html+='<div class="team-head" style="grid-column:1;grid-row:1">Saat</div>';
   columns.forEach(function(member,index){html+='<button type="button" class="team-head" style="grid-column:'+(index+2)+';grid-row:1" onclick="selectTeamMember('+jsAttr(member[0])+')">'+safe(member[0].split(' ')[0])+'</button>'});
   slots.forEach(function(time,rowIndex){
-    var row=rowIndex+2,fullHour=time.slice(3)==='00',appointmentStart=true;
+    var row=rowIndex+2,fullHour=time.slice(3)==='00',appointmentStart=time.slice(3)==='00'||time.slice(3)==='30';
     if(fullHour)html+='<div class="duration-time" style="grid-column:1;grid-row:'+row+' / span 4">'+time.replace(':','.')+'</div>';
     columns.forEach(function(member,columnIndex){
       var profile=profileForEmployeeName(member[0]);
       var closed=closedSlotFor(date,time,15,profile&&profile.id);
       if(!appointmentStart)return;var canOpen=!closed;
-      html+='<div class="duration-cell '+(fullHour?'hour-start':'')+'" data-calendar-time="'+time+'" data-calendar-staff="'+safe(member[0])+'" style="grid-column:'+(columnIndex+2)+';grid-row:'+row+' / span 1"'+(canOpen?' ondragover="allowTimeDrop(event)" ondragleave="leaveTimeDrop(event)" ondrop="dropInTeamCalendar(event,'+jsAttr(time)+','+jsAttr(member[0])+')" onclick="openSlotChoice('+jsAttr(time)+','+jsAttr(member[0])+')"':'')+'></div>';
+      html+='<div class="duration-cell '+(fullHour?'hour-start':'')+'" data-calendar-time="'+time+'" data-calendar-staff="'+safe(member[0])+'" style="grid-column:'+(columnIndex+2)+';grid-row:'+row+' / span 2"'+(canOpen?' ondragover="allowTimeDrop(event)" ondragleave="leaveTimeDrop(event)" ondrop="dropInTeamCalendar(event,'+jsAttr(time)+','+jsAttr(member[0])+')" onclick="openSlotChoice('+jsAttr(time)+','+jsAttr(member[0])+')"':'')+'></div>';
     });
   });
   html+='<div class="duration-time duration-end" style="grid-column:1;grid-row:'+(slots.length+2)+'">24.00</div>';
@@ -428,7 +428,7 @@ renderCalendar=function(){
     var units=Math.max(1,Math.min(slots.length-startIndex,Math.ceil((new Date(slot.ends_at).getTime()-new Date(slot.starts_at).getTime())/900000)));
     html+='<button type="button" class="team-event duration-event duration-closed-event" style="grid-column:'+(personIndex+2)+';grid-row:'+(startIndex+2)+' / span '+units+'" onclick="event.stopPropagation();openClosedSlotModal('+jsAttr(slot.id)+')"><strong>Kapalı</strong></button>';
   });
-  target.innerHTML=html+'</div></div><div class="calendar-hint">Takvimde her 15 dakikada bir randevu baslangici secilebilir. 19.00 ve 19.30 yonetim randevularina aciktir; online son baslangic 19.00\'dir.</div>';
+  target.innerHTML=html+'</div></div><div class="calendar-hint">Takvim 30 dakikalik baslangiclarla kullanilir. 19.00 ve 19.30 yonetim randevularina aciktir; online son baslangic 19.00\'dir.</div>';
   if(date===localDate(0)){
     var now=new Date(),minutes=now.getHours()*60+now.getMinutes();
     if(minutes>=480&&minutes<1440){
@@ -707,7 +707,7 @@ renderCalendar=function(){
     var row=rowIndex+2,fullHour=time.slice(3)==='00';
     if(fullHour)html+='<div class="duration-time" style="grid-column:1;grid-row:'+row+' / span 4">'+time.replace(':','.')+'</div>';
     columns.forEach(function(member,columnIndex){
-      var profile=profileForEmployeeName(member[0]),closed=closedSlotFor(date,time,15,profile&&profile.id);var canOpen=!closed;
+      var profile=profileForEmployeeName(member[0]),closed=closedSlotFor(date,time,15,profile&&profile.id),halfHour=time.slice(3)==='00'||time.slice(3)==='30';if(!halfHour)return;var canOpen=!closed;
       html+='<div class="duration-cell '+(fullHour?'hour-start':'')+'" data-calendar-time="'+time+'" data-calendar-staff="'+safe(member[0])+'" style="grid-column:'+(columnIndex+2)+';grid-row:'+row+' / span 1"'+(canOpen?' ondragover="allowTimeDrop(event)" ondragleave="leaveTimeDrop(event)" ondrop="dropInTeamCalendar(event,'+jsAttr(time)+','+jsAttr(member[0])+')" onclick="openSlotChoice('+jsAttr(time)+','+jsAttr(member[0])+')"':'')+'></div>';
     });
   });
@@ -726,7 +726,7 @@ renderCalendar=function(){
     var units=Math.max(1,Math.min(slots.length-startIndex,Math.ceil((new Date(slot.ends_at).getTime()-new Date(slot.starts_at).getTime())/900000)));
     html+='<button type="button" class="team-event duration-event duration-closed-event" style="grid-column:'+(personIndex+2)+';grid-row:'+(startIndex+2)+' / span '+units+'" '+(isManager?'onclick="event.stopPropagation();openClosedSlotModal('+jsAttr(slot.id)+')"':'disabled')+'><strong>Kapalı</strong></button>';
   });
-  target.innerHTML=html+'</div></div><div class="calendar-hint">Takvim 08.00–24.00 arasını gösterir. İşlem süresi, randevunun kapladığı alanı otomatik belirler.</div>';
+  target.innerHTML=html+'</div></div><div class="calendar-hint">Takvim 08.00–24.00 arasında 30 dakikalık başlangıçlarla kullanılır. İşlem süresi, randevunun kapladığı alanı otomatik belirler.</div>';
   if(date===localDate(0)){
     var now=new Date(),minutes=now.getHours()*60+now.getMinutes();
     if(minutes>=480&&minutes<1440){var step=Math.floor((minutes-480)/15),offset=((minutes-480)%15)/15*24,line=document.createElement('div');line.className='current-time-line';line.style.cssText='grid-column:2 / -1;grid-row:'+(step+2)+';align-self:start;transform:translateY('+offset+'px);border-top:2px solid #d1594f;z-index:30;pointer-events:none';target.querySelector('.duration-hour-grid').appendChild(line);}
