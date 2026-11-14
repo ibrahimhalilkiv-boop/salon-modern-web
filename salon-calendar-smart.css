@@ -67,7 +67,3 @@
 .service-color-legend{display:flex;align-items:center;gap:7px;min-width:0;font-size:12px;font-weight:600;color:#24313b}
 .service-color-swatch{display:inline-block;flex:0 0 21px;height:18px;background:var(--service-bg);border-left:4px solid var(--service-color);border-radius:5px}
 @media(max-width:640px){#smartColorList{grid-template-columns:repeat(2,minmax(0,1fr))}.service-color-legend{font-size:11px}}
-
-/* Quarter-hour cells can be selected individually in the team calendar. */
-#calendar .team-calendar.duration-hour-grid>.duration-cell:not(.duration-end-cell){border-bottom:1px solid #e7e3db!important;cursor:pointer}
-#calendar .team-calendar.duration-hour-grid>.duration-cell.hour-start{border-bottom:1px solid #c4bcb0!important}
